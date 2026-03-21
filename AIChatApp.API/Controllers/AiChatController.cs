@@ -6,15 +6,22 @@ namespace AIChatApp.API.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    public class ChatController : ControllerBase
+    public class AiChatController : ControllerBase
     {
         private readonly ApiChatService _chatService;
-        private readonly ILogger<ChatController> _logger;
+        private readonly ILogger<AiChatController> _logger;
 
-        public ChatController(ILogger<ChatController> logger, ApiChatService chatService)
+        public AiChatController(ILogger<AiChatController> logger, ApiChatService chatService)
         {
             _logger = logger;
             _chatService = chatService;
+        }
+
+        [HttpGet("init")]
+        public IActionResult Initialize()
+        {
+            // Can call this when project just start up to extract llama model packages
+            return Ok();
         }
 
         [HttpPost("ask")]
@@ -24,15 +31,15 @@ namespace AIChatApp.API.Controllers
                 || string.IsNullOrWhiteSpace(request.Prompt)
                 || string.IsNullOrWhiteSpace(request.User)
                 || string.IsNullOrWhiteSpace(request.ChatId))
-                return BadRequest("Sorry unable to catch that properly.");
+                return BadRequest("Sorry unable to catch that properly. Please try again later.");
 
-            _logger.LogInformation($"User: {request.ChatId}, Question: {request.Prompt}");
+            _logger.LogInformation($"ChatId: {request.ChatId}, User: {request.User}, Question: {request.Prompt}");
 
             using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
             var response = await _chatService.GetAIResponseForAPI(cts.Token, request);
 
-            stopwatch.Stop(); // ADD RESPONSE TIME WHEN SAVING TO DATABASE
+            stopwatch.Stop();
 
             _logger.LogInformation($"User: {request.ChatId}, Answer: {response}");
             _logger.LogInformation($"User: {request.ChatId}, Response time: {stopwatch.Elapsed.TotalSeconds:F2} seconds");
@@ -42,17 +49,6 @@ namespace AIChatApp.API.Controllers
                 Prompt = request.Prompt,
                 Response = response
             });
-        }
-
-        [HttpGet("history/{chatId}")]
-        public async Task<IActionResult> GetChatHistory(string chatId)
-        {
-            if (string.IsNullOrWhiteSpace(chatId))
-                return BadRequest("ChatId is required.");
-
-            var messages = await _chatService.GetChatHistoryAsync(chatId);
-
-            return Ok(messages);
         }
     }
 }

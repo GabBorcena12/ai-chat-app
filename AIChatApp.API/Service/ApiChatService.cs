@@ -4,12 +4,8 @@ using AIChatApp.Core.Data;
 using LLama;
 using LLama.Common;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
-using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
-using static System.Runtime.InteropServices.JavaScript.JSType;
-
 namespace AIChatApp.API.Service
 {
     public class ApiChatService
@@ -17,14 +13,16 @@ namespace AIChatApp.API.Service
         private readonly AppDbContext _dbContext;
         private readonly InteractiveExecutor _executor;
         private readonly ChatPaths _paths;
+        private readonly ILogger<ApiChatService> _logger;
         private readonly string _assistantName;
         private readonly string _apiSystemContext;
         private readonly string _messageUnableToGenerateResponse = "Sorry unable to generate response. Please try again.";
         
-        public ApiChatService(InteractiveExecutor executor, AppDbContext dbContext)
+        public ApiChatService(InteractiveExecutor executor, AppDbContext dbContext, ILogger<ApiChatService>  logger)
         {
             _dbContext = dbContext;
             _executor = executor;
+            _logger = logger;
             _assistantName = "AI Assistant";
 
             // Initialize paths and load context/knowledge
@@ -44,26 +42,33 @@ namespace AIChatApp.API.Service
 
             // Load history from DB
             var history = await BuildConversation(request.ChatId, maxMessages: 20);
-            var finalPrompt = "System Context: " + _apiSystemContext + "\n Chat History: " + history + "\n Prompt: " + request.Prompt;
+            var finalPrompt = new StringBuilder();
+            finalPrompt.AppendLine($"System: {_apiSystemContext}");
+            finalPrompt.AppendLine();
+
+            finalPrompt.AppendLine(history);
+
+            finalPrompt.AppendLine($"User: {request.Prompt}");
+            finalPrompt.AppendLine($"{_assistantName}:");
 
             var inferenceParams = new InferenceParams
             {
                 MaxTokens = 150,
-                AntiPrompts = new List<string> { $"{request.User}:", $"{_assistantName}:", $"Anjey's Pet Supply:" }
+                AntiPrompts = new List<string> { $"{request.User}:", $"{_assistantName}:", $"User:", $": " }
             };
 
             var buffer = new StringBuilder();
 
-            // Removed Task.Run + Wait
-            await foreach (var token in _executor.InferAsync(finalPrompt, inferenceParams, cancellationToken))
+            await foreach (var token in _executor.InferAsync(finalPrompt.ToString(), inferenceParams, cancellationToken))
             {
                 buffer.Append(token);
             }
 
-            Console.WriteLine($"Prompt Context : {finalPrompt}");
+            _logger.LogInformation($"Prompt Context : {finalPrompt}");
 
             var rawResponse = buffer.ToString();
-            Console.WriteLine($"Raw Response: {rawResponse}");
+            _logger.LogInformation($"Raw Response: {rawResponse}");
+
             if (!string.IsNullOrWhiteSpace(rawResponse))
             {
                 // clean raw response
@@ -78,26 +83,6 @@ namespace AIChatApp.API.Service
                 clean = _messageUnableToGenerateResponse;
             }
             return clean;
-        }
-
-        public async Task<List<ChatMessage>> GetChatHistoryAsync(string chatId, int maxMessages = 1000)
-        {
-            if (string.IsNullOrWhiteSpace(chatId))
-                return new List<ChatMessage>();
-
-            var messages = await _dbContext.ChatMessagesTbl
-                .Where(x => x.ChatId == chatId)
-                .OrderByDescending(x => x.CreatedAt)
-                .Take(maxMessages)
-                .OrderByDescending(x => x.CreatedAt)
-                .Select(x => new ChatMessage
-                {
-                    User = x.Role,
-                    Content = x.Content
-                })
-                .ToListAsync();
-
-            return messages;
         }
 
         private async Task SaveMessage(string chatId, string role, string content)
