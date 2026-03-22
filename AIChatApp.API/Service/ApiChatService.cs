@@ -54,7 +54,7 @@ namespace AIChatApp.API.Service
             var inferenceParams = new InferenceParams
             {
                 MaxTokens = 150,
-                AntiPrompts = new List<string> { $"{request.User}:", $"{_assistantName}:", $"User:", $": " }
+                AntiPrompts = new List<string> { $"{request.User}:", $"{_assistantName}:", $"User:", "Note:", "Limit:", ":" }
             };
 
             var buffer = new StringBuilder();
@@ -71,10 +71,15 @@ namespace AIChatApp.API.Service
 
             if (!string.IsNullOrWhiteSpace(rawResponse))
             {
-                // clean raw response
                 clean = CleanResponse(rawResponse, request.User, _assistantName);
 
-                // Save AI response
+                // for incomplete response : retry once with a fix prompt to complete it
+                if (IsIncomplete(clean))
+                {
+                    _logger.LogWarning("Detected incomplete response. Retrying...");
+                    clean = await RetryAndFixResponse(clean, request.User, cancellationToken);
+                }
+
                 await SaveMessage(request.ChatId, _assistantName, clean);
             }
             else
@@ -125,7 +130,12 @@ namespace AIChatApp.API.Service
             if (string.IsNullOrWhiteSpace(rawResponse))
                 return string.Empty;
 
-            string response = rawResponse;
+            string response = rawResponse
+                .Replace("User:", "")
+                .Replace($"{user}:", "")
+                .Replace($"{_assistantName}:", "")
+                .Replace("Note:", "")
+                .Replace("Limit:", "");
 
             // Remove any leading non-alphanumeric characters (e.g., ", - etc.)
             response = Regex.Replace(response, @"^[^\w\d]+", "");
@@ -146,6 +156,86 @@ namespace AIChatApp.API.Service
             response = response.Trim();
 
             return response;
+        }
+
+
+        private bool IsIncomplete(string response)
+        {
+            if (string.IsNullOrWhiteSpace(response))
+                return true;
+
+            // Does not end with proper punctuation
+            if (!Regex.IsMatch(response.Trim(), @"[.!?]$"))
+                return true;
+
+            // Ends with broken connector words
+            if (Regex.IsMatch(response, @"\b(and|or|with|for|to|of|in)\s*$", RegexOptions.IgnoreCase))
+                return true;
+
+            // Too short → bad
+            if (response.Length < 15)
+                return true;
+
+            // No punctuation → likely cut
+            if (!response.EndsWith(".") && !response.EndsWith("?") && !response.EndsWith("!"))
+                return true;
+
+            // Contains cut-off patterns
+            if (response.Contains("...") || response.EndsWith(",") || response.EndsWith(":"))
+                return true;
+
+            return false;
+        }
+
+        private async Task<string> RetryAndFixResponse(string incompleteResponse, string user, CancellationToken cancellationToken)
+        {
+            var retryPrompt = new StringBuilder();
+
+            retryPrompt.AppendLine(_apiSystemContext);
+            retryPrompt.AppendLine();
+
+            retryPrompt.AppendLine("Fix and complete this response.");
+            retryPrompt.AppendLine("Make it short, clear, and complete.");
+            retryPrompt.AppendLine("Do not include names, labels, or roles.");
+            retryPrompt.AppendLine();
+
+            retryPrompt.AppendLine($"Text: {incompleteResponse}");
+            retryPrompt.AppendLine();
+            retryPrompt.AppendLine("Answer:");
+            _logger.LogInformation($"Retry Prompt: {retryPrompt}");
+            var inferenceParams = new InferenceParams
+            {
+                MaxTokens = 150,
+                AntiPrompts = new List<string>
+                {
+                    "User:",
+                    "Answer:"
+                }
+            };
+
+            var buffer = new StringBuilder();
+
+            await foreach (var token in _executor.InferAsync(retryPrompt.ToString(), inferenceParams, cancellationToken))
+            {
+                buffer.Append(token);
+            }
+
+            var fixedResponse = buffer.ToString();
+
+            if (string.IsNullOrWhiteSpace(fixedResponse))
+            {
+                _logger.LogWarning("Retry returned empty. Using original response.");
+                return incompleteResponse;
+            }
+
+            var cleaned = CleanResponse(fixedResponse);
+            if (string.IsNullOrWhiteSpace(cleaned))
+            {
+                _logger.LogWarning("Cleaned retry is empty. Using original response.");
+                return incompleteResponse;
+            }
+
+            return cleaned;
         }
         #endregion
     }
