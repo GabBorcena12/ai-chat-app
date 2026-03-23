@@ -12,10 +12,16 @@
         public ChatPaths(string modelFileName = "meta-llama-3.1-8b-instruct-q4_k_m.gguf")
         {
             // Resolve solution root (acts like "~")
-            ProjectRoot = Path.GetFullPath(Path.Combine(
-                AppContext.BaseDirectory,
-                "..", "..", "..", ".."
-            ));
+            if (Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true")
+            {
+                // Running inside Docker
+                ProjectRoot = "/app";
+            }
+            else
+            {
+                // Running on host machine
+                ProjectRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+            }
 
             // Use "~" style paths
             SystemContextFile = ResolvePath("~/AIChatApp.Core/Data/system_context.txt");

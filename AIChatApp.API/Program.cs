@@ -100,4 +100,20 @@ app.UseSwaggerUI();
 app.UseHttpsRedirection();
 app.UseAuthorization();
 app.MapControllers();
+
+// Auto-apply migrations
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    try
+    {
+        var db = services.GetRequiredService<AppDbContext>();
+        db.Database.Migrate();
+        Console.WriteLine("✅ API: EF Core Migrations applied for AIChatAppDb.");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"❌ API: Migration failed: {ex.Message}");
+    }
+}
 app.Run();
