@@ -50,11 +50,11 @@ Use endpoints to integrate with other projects
 
 **Get Chat History**
 
-GET http://localhost:5157/api/chat/history/000001
+GET http://{GATEWAY}/api/chat/history/000001
 
 **Send a Message**
 
-POST http://localhost:5157/api/chat/ask
+POST http://{GATEWAY}/api/chat/ask
 
 Request Body:
 
@@ -63,3 +63,5 @@ Request Body:
   "User": "John Doe",
   "Prompt": "Hi, this is a test message."
 }
+
+
