@@ -24,6 +24,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AIChatApp.Core\AIChatApp.Core.csproj" />
+    <ProjectReference Include="..\AIChatApp.Gateway\AIChatApp.Gateway.csproj" />
   </ItemGroup>
 
 </Project>
