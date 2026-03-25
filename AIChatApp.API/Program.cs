@@ -1,7 +1,7 @@
-﻿using AIChatApp.API.Middleware;
-using AIChatApp.API.Service;
+﻿using AIChatApp.API.Service;
 using AIChatApp.Core.Config;
 using AIChatApp.Core.Data;
+using AIChatApp.Gateway.Middleware;
 using LLama;
 using LLama.Common;
 using LLama.Native;
@@ -92,7 +92,10 @@ using (var scope = app.Services.CreateScope())
     db.Database.Migrate();
 }
 // Middleware
-app.UseMiddleware<ApiExceptionMiddleware>();
+app.UseMiddleware<IpWhitelistMiddleware>();
+app.UseMiddleware<ApiKeyMiddleware>();
+app.UseMiddleware<ExceptionHandlingMiddleware>();
+app.UseMiddleware<RequestLoggingMiddleware>();
 
 app.UseCors("OpenCorsPolicy");
 app.UseSwagger();
