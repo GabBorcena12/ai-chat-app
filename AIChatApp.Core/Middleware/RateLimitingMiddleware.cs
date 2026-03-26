@@ -1,6 +1,8 @@
-﻿using System.Collections.Concurrent;
+﻿using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
+using System.Collections.Concurrent;
 
-namespace AIChatApp.Gateway.Middleware
+namespace AIChatApp.Core.Middleware
 {
     public class RateLimitingMiddleware
     {
@@ -14,9 +16,10 @@ namespace AIChatApp.Gateway.Middleware
 
         public RateLimitingMiddleware(RequestDelegate next, IConfiguration config)
         {
-            var windowSeconds = config.GetValue<int>("RateLimiting:WindowSeconds");
             _next = next;
             _limit = config.GetValue<int>("RateLimiting:Limit");
+
+            var windowSeconds = config.GetValue<int>("RateLimiting:WindowSeconds");
             _window = TimeSpan.FromSeconds(windowSeconds);
         }
 

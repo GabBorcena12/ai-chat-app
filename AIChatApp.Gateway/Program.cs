@@ -1,5 +1,5 @@
 
-using AIChatApp.Gateway.Middleware;
+using AIChatApp.Core.Middleware;
 
 namespace AIChatApp.Gateway
 {

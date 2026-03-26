@@ -1,4 +1,7 @@
-﻿namespace AIChatApp.Gateway.Middleware
+﻿using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
+
+namespace AIChatApp.Core.Middleware
 {
     public class ApiKeyMiddleware
     {

@@ -1,7 +1,9 @@
-﻿using System.Net;
+﻿using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging;
+using System.Net;
 using System.Text.Json;
 
-namespace AIChatApp.Gateway.Middleware
+namespace AIChatApp.Core.Middleware
 {
     public class ExceptionHandlingMiddleware
     {
@@ -20,9 +22,9 @@ namespace AIChatApp.Gateway.Middleware
             {
                 await _next(context);
             }
-            catch (OperationCanceledException oce)
+            catch (OperationCanceledException ex)
             {
-                _logger.LogWarning(oce, "Request was canceled or timed out.");
+                _logger.LogWarning(ex.Message, "Request was canceled or timed out.");
 
                 await WriteErrorResponse(
                     context,
@@ -32,7 +34,7 @@ namespace AIChatApp.Gateway.Middleware
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Unhandled exception.");
+                _logger.LogError(ex.Message, "Unhandled exception.");
 
                 await WriteErrorResponse(
                     context,
