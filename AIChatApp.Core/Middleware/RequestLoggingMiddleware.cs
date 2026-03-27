@@ -1,4 +1,7 @@
-﻿namespace AIChatApp.Gateway.Middleware
+﻿using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging;
+
+namespace AIChatApp.Core.Middleware
 {
     public class RequestLoggingMiddleware
     {

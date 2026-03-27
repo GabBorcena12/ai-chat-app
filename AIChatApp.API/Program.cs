@@ -6,7 +6,7 @@ using AIChatApp.API.Services.Prompting;
 using AIChatApp.Core.Agents;
 using AIChatApp.Core.Config;
 using AIChatApp.Core.Data_Context;
-using AIChatApp.Gateway.Middleware;
+using AIChatApp.Core.Middleware;
 using LLama;
 using LLama.Common;
 using LLama.Native;
@@ -133,7 +133,7 @@ using (var scope = app.Services.CreateScope())
     db.Database.Migrate();
 }
 // Middleware
-app.UseMiddleware<IpWhitelistMiddleware>();
+//app.UseMiddleware<IpWhitelistMiddleware>();
 app.UseMiddleware<ApiKeyMiddleware>();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseMiddleware<RequestLoggingMiddleware>();
