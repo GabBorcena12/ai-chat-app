@@ -1,8 +1,9 @@
 ﻿using AIChatApp.API.Model;
-using AIChatApp.Core.Data;
+using AIChatApp.Core.Data_Context;
+using AIChatApp.Core.Data_Context.Entity;
 using Microsoft.EntityFrameworkCore;
 
-namespace AIChatApp.API.Service
+namespace AIChatApp.API.Services.Generic
 {
     public class ChatHistoryService
     {
@@ -31,6 +32,23 @@ namespace AIChatApp.API.Service
                 .ToListAsync();
 
             return messages;
+        }
+
+        public async Task SaveMessage(string chatId, string role, string content)
+        {
+            if (string.IsNullOrWhiteSpace(content))
+                return; // skip empty messages
+
+            var message = new ChatMessageEntity
+            {
+                ChatId = chatId,
+                Role = role,
+                Content = content,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _dbContext.ChatMessagesTbl.Add(message);
+            await _dbContext.SaveChangesAsync();
         }
     }
 }

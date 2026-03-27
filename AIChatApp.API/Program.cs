@@ -1,6 +1,11 @@
-﻿using AIChatApp.API.Service;
+﻿using AIChatApp.API.Services.Generic;
+using AIChatApp.API.Services.LLM;
+using AIChatApp.API.Services.Orchestration;
+using AIChatApp.API.Services.Processing;
+using AIChatApp.API.Services.Prompting;
+using AIChatApp.Core.Agents;
 using AIChatApp.Core.Config;
-using AIChatApp.Core.Data;
+using AIChatApp.Core.Data_Context;
 using AIChatApp.Gateway.Middleware;
 using LLama;
 using LLama.Common;
@@ -13,8 +18,13 @@ var builder = WebApplication.CreateBuilder(args);
 // Register ChatService
 builder.Services.AddControllers();
 
+// Main App DbContext (for chat history and other core data)
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+// Inventory App DbContext (for RAG and other features, separate from chat history)
+builder.Services.AddDbContext<InventoryDbContext>(options =>
+    options.UseSqlServer(builder.Configuration.GetConnectionString("InventoryAppDb")));
 
 // Load or Extract model package once (Singleton)
 builder.Services.AddSingleton<LLamaWeights>(sp =>
@@ -50,8 +60,43 @@ builder.Services.AddScoped<InteractiveExecutor>(sp =>
     var context = sp.GetRequiredService<LLamaContext>();
     return new InteractiveExecutor(context);
 });
+
+// Function Executor factory for retries (Scoped)
+builder.Services.AddScoped<Func<InteractiveExecutor>>(sp => () =>
+{
+    var weights = sp.GetRequiredService<LLamaWeights>();
+    var paths = new ChatPaths();
+
+    var parameters = new ModelParams(paths.ModelFile)
+    {
+        ContextSize = 5000
+    };
+
+    var newContext = weights.CreateContext(parameters);
+        
+    return new InteractiveExecutor(newContext);
+});
+// DI
+// Chat history
 builder.Services.AddScoped<ChatHistoryService>();
+
+// Original API Chat Service (handles the main flow of processing a chat request)
 builder.Services.AddScoped<ApiChatService>();
+
+// LLM Service
+builder.Services.AddScoped<ILLMService, LlamaLLMService>();
+
+// Promp Builder like RAG, system context and memory
+builder.Services.AddScoped<IPromptBuilder, PromptBuilder>();
+
+// Response processor (includes Agent / keyword logic)
+builder.Services.AddScoped<IResponseProcessor, AgentResponseProcessor>();
+
+// Agent tools for product suggestions
+builder.Services.AddScoped<AgentTools>();
+
+// Orchestrator
+builder.Services.AddScoped<ChatOrchestrator>();
 
 // Swagger
 builder.Services.AddEndpointsApiExplorer();
@@ -70,10 +115,6 @@ builder.Services.AddCors(options =>
               .AllowAnyHeader();
     });
 });
-
-// Database configuration
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 // Remove EF Core logs and keep chat app logs (including Info)
 builder.Logging.ClearProviders();

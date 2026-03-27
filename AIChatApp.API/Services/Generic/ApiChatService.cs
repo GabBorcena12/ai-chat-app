@@ -1,12 +1,13 @@
 ﻿using AIChatApp.API.Model;
 using AIChatApp.Core.Config;
-using AIChatApp.Core.Data;
+using AIChatApp.Core.Data_Context;
+using AIChatApp.Core.Data_Context.Entity;
 using LLama;
 using LLama.Common;
 using Microsoft.EntityFrameworkCore;
 using System.Text;
 using System.Text.RegularExpressions;
-namespace AIChatApp.API.Service
+namespace AIChatApp.API.Services.Generic
 {
     public class ApiChatService
     {
@@ -54,7 +55,7 @@ namespace AIChatApp.API.Service
             var inferenceParams = new InferenceParams
             {
                 MaxTokens = 150,
-                AntiPrompts = new List<string> { $"{request.User}:", $"{_assistantName}:", $"User:", "Note:", "Limit:", ":" }
+                AntiPrompts = new List<string> { $"{request.User}:", $"{_assistantName}:", $"User:", "Note:", "Limit:", ":", "\n" }
             };
 
             var buffer = new StringBuilder();

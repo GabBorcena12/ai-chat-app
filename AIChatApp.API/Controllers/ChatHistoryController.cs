@@ -1,4 +1,4 @@
-﻿using AIChatApp.API.Service;
+﻿using AIChatApp.API.Services.Generic;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AIChatApp.API.Controllers

@@ -1,5 +1,7 @@
 ﻿using AIChatApp.API.Model;
-using AIChatApp.API.Service;
+using AIChatApp.API.Services.Generic;
+using AIChatApp.API.Services.LLM;
+using AIChatApp.API.Services.Orchestration;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AIChatApp.API.Controllers
@@ -9,12 +11,19 @@ namespace AIChatApp.API.Controllers
     public class AiChatController : ControllerBase
     {
         private readonly ApiChatService _chatService;
+        private readonly ChatOrchestrator _orchestrator;
+        private readonly ILLMService _llm;
         private readonly ILogger<AiChatController> _logger;
 
-        public AiChatController(ILogger<AiChatController> logger, ApiChatService chatService)
+        public AiChatController(ILogger<AiChatController> logger, 
+            ApiChatService chatService, 
+            ChatOrchestrator orchestrator,
+            ILLMService llm)
         {
             _logger = logger;
             _chatService = chatService;
+            _llm = llm;
+            _orchestrator = orchestrator;
         }
 
         [HttpGet("init")]
@@ -22,6 +31,17 @@ namespace AIChatApp.API.Controllers
         {
             // Can call this when project just start up to extract llama model packages
             return Ok();
+        }
+
+        [HttpPost("ask-stream")]
+        public async Task<IActionResult> AskStream([FromBody] ChatRequest request)
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            var response = await _orchestrator.AskAsync(request, cts.Token);
+            stopwatch.Stop();
+            _logger.LogInformation($"User: {request.ChatId}, Response time: {stopwatch.Elapsed.TotalSeconds:F2} seconds");
+            return Ok(new { Prompt = request.Prompt, Response = response });
         }
 
         [HttpPost("ask")]

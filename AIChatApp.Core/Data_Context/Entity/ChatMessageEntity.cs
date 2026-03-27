@@ -1,4 +1,4 @@
-﻿namespace AIChatApp.Core.Data
+﻿namespace AIChatApp.Core.Data_Context.Entity
 {
     public class ChatMessageEntity
     {
