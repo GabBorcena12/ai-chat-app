@@ -25,6 +25,8 @@ namespace AIChatApp.API.Services.Orchestration
         private readonly Func<InteractiveExecutor> _retryExecutorFactory;
         private string _messageUnableToGenerateResponse;
         private string _assistantName;
+        private readonly IConfiguration _configuration;
+        private List<string> _antiPrompts = new List<string>();
 
         public ChatOrchestrator(
             ILogger<ChatOrchestrator> logger,
@@ -33,7 +35,8 @@ namespace AIChatApp.API.Services.Orchestration
             IPromptBuilder promptBuilder,
             IResponseProcessor processor,
             ChatHistoryService chatHistoryService,
-            Func<InteractiveExecutor> retryExecutorFactory)
+            Func<InteractiveExecutor> retryExecutorFactory, 
+            IConfiguration configuration)
         {
             _retryExecutorFactory = retryExecutorFactory;
             _dbContext = dbContext;
@@ -44,6 +47,8 @@ namespace AIChatApp.API.Services.Orchestration
             _processor = processor;
             _assistantName = "AI Assistant";
             _messageUnableToGenerateResponse = "Sorry unable to generate response. Please try again.";
+            _configuration = configuration;
+            _antiPrompts = _configuration.GetSection("ApiSettings:Services.AntiPrompts").Get<List<string>>() ?? _antiPrompts;
         }
 
         public async Task<string> AskAsync(ChatRequest request, CancellationToken token)
@@ -94,19 +99,11 @@ namespace AIChatApp.API.Services.Orchestration
 
             // 2️. Get LLM stream (or single output)
             var retryBuffer = new StringBuilder();
+            _antiPrompts.Add(request.User);
             var inferenceParams = new InferenceParams
             {
                 MaxTokens = 150,
-                AntiPrompts = new List<string> 
-                { 
-                    $"{request.User}:", 
-                    "AI Assistant:", 
-                    "User:", 
-                    "Note:", 
-                    "Limit:", 
-                    "Answer:",
-                    "\n\n"
-                }
+                AntiPrompts = _antiPrompts
             };
 
             // Fresh executor to avoid any state carryover from previous inference

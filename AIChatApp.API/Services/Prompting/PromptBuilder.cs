@@ -1,5 +1,6 @@
 ﻿using AIChatApp.Core.Config;
 using AIChatApp.Core.Data_Context;
+using AIChatApp.Core.Data_Context.Entity;
 using Azure.Core;
 using Microsoft.EntityFrameworkCore;
 using System.Text;
@@ -11,16 +12,18 @@ namespace AIChatApp.API.Services.Prompting
         private readonly AppDbContext _db;
         private readonly InventoryDbContext _inventorydb;
         private readonly ChatPaths _paths;
+        private IConfiguration _config;
+        private readonly string _keyword;
 
-        public PromptBuilder(AppDbContext db, InventoryDbContext inventorydb)
+        public PromptBuilder(AppDbContext db, InventoryDbContext inventorydb, IConfiguration configuration)
         {
             _db = db;
             _inventorydb = inventorydb;
             _paths = new ChatPaths();
+            _config = configuration;
+            _keyword = _config.GetValue<string>("ApiSettings:Prompting.Keyword") ?? string.Empty;
         }
 
-        // TODO : CREATE A FAQ QUESTION 
-        // TODO : REFACTOR QUERY ON Products Table
         public async Task<string> RebuildPromptWithIncompleteResponseAsync(
             string chatId,
             string user,
@@ -29,15 +32,15 @@ namespace AIChatApp.API.Services.Prompting
         {
             var sb = new StringBuilder();
 
-            // Keep the system instruction only
+            // System Context
             sb.AppendLine($"System: {_paths.LoadApiSystemContext()}");
             sb.AppendLine();
 
-            // Include only last 2-3 messages (instead of 20)
+            // Chat History (Memory) - last 10 messages for context
             var history = await _db.ChatMessagesTbl
                 .Where(x => x.ChatId == chatId)
                 .OrderByDescending(x => x.CreatedAt)
-                .Take(3)
+                .Take(10)
                 .OrderBy(x => x.CreatedAt)
                 .ToListAsync();
 
@@ -46,7 +49,7 @@ namespace AIChatApp.API.Services.Prompting
                 sb.AppendLine($"{msg.Role}: {msg.Content}");
             }
 
-            // Original incomplete message
+            // Instructions to fix the incomplete response
             sb.AppendLine("You must FIX the response below.");
             sb.AppendLine();
             sb.AppendLine("Rules:");
@@ -71,16 +74,12 @@ namespace AIChatApp.API.Services.Prompting
                 .OrderBy(x => x.CreatedAt)
                 .ToListAsync();
 
-            // Relevant Knowledge (RAG)
-            var matches = await _inventorydb.Products
-                .FromSqlRaw("SELECT TOP 5 * FROM Products WHERE ProductName LIKE '%' + {0} + '%'", message)
-                .ToListAsync();
-
             // System Context
             sb.AppendLine($"System: {_paths.LoadApiSystemContext()}");
             sb.AppendLine();
 
-            // RAG
+            // RAG or Relevant Knowledge (Keyword Matching)
+            var matches = await GetKeywordFromMessage(message);
             if (matches.Any())
             {
                 sb.AppendLine("Relevant Knowledge:");
@@ -101,6 +100,31 @@ namespace AIChatApp.API.Services.Prompting
             sb.AppendLine("AI Assistant:");
 
             return sb.ToString();
+        }
+
+        private async Task<List<ProductEntity>> GetKeywordFromMessage(string message)
+        {
+            if(string.IsNullOrEmpty(_keyword))
+                return new List<ProductEntity>();
+
+            var matchedKeywords = _keyword
+                .Where(k => message.Contains(k, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            if (matchedKeywords.Any())
+            {
+                var likeClauses = string.Join(" OR ",
+                    matchedKeywords.Select((k, i) => $"ProductName LIKE '%' + {{{i}}} + '%'"));
+
+                var sql = $"SELECT TOP 5 * FROM Products WHERE {likeClauses}";
+
+                var matches = await _inventorydb.Products
+                    .FromSqlRaw(sql, matchedKeywords.Cast<object>().ToArray())
+                    .ToListAsync();
+
+                return matches;
+            }
+            return new List<ProductEntity>();
         }
     }
 }

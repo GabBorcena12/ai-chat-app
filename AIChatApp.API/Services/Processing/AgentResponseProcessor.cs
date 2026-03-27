@@ -12,8 +12,27 @@ namespace AIChatApp.Core.Agents
         {
             _tools = tools;
         }
+        
+        public string Process(string userMessage, string llmResponse)
+        {
+            if (string.IsNullOrWhiteSpace(userMessage))
+                return llmResponse;
 
-        // Core LLM + Agent processing
+            var msg = userMessage.ToLowerInvariant();
+
+            switch (true)
+            {
+                // TODO : Add more keywords and tools as needed
+                case bool _ when msg.Contains("Chicken"):
+                case bool _ when msg.Contains("Bird"):
+                case bool _ when msg.Contains("Pigeon"):
+                case bool _ when msg.Contains("Rabbit"):
+                    return _tools.SuggestProduct("Integra");
+                default:
+                    return llmResponse;
+            }
+        }
+
         public string Clean(string rawResponse, string user = "User", string assistant = "AI Assistant")
         {
             if (string.IsNullOrWhiteSpace(rawResponse))
@@ -78,25 +97,6 @@ namespace AIChatApp.Core.Agents
                 return true;
 
             return false;
-        }
-
-        // Agent / keyword-based logic
-        public string Process(string userMessage, string llmResponse)
-        {
-            if (string.IsNullOrWhiteSpace(userMessage))
-                return llmResponse;
-
-            var msg = userMessage.ToLowerInvariant();
-
-            switch (true)
-            {
-                case bool _ when msg.Contains("pigeon"):
-                    return _tools.SuggestProduct("Pigeon Flyer");
-
-                // Add more keywords here
-                default:
-                    return llmResponse;
-            }
         }
     }
 }

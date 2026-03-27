@@ -37,7 +37,7 @@ namespace AIChatApp.API.Services.Generic
         public async Task SaveMessage(string chatId, string role, string content)
         {
             if (string.IsNullOrWhiteSpace(content))
-                return; // skip empty messages
+                return;
 
             var message = new ChatMessageEntity
             {

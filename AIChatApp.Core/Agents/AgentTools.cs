@@ -18,7 +18,7 @@ namespace AIChatApp.Core.Agents
             var products = _db.Products
                            .Where(p => p.ProductName.Contains(productName))
                            .OrderBy(p => p.Volume)
-                           .Take(3)
+                           .Take(10)
                            .Select(p => p.ProductName)
                            .ToList();
 

@@ -18,20 +18,19 @@ namespace AIChatApp.API.Services.Generic
         private readonly string _assistantName;
         private readonly string _apiSystemContext;
         private readonly string _messageUnableToGenerateResponse = "Sorry unable to generate response. Please try again.";
-        
+
+        // Do not use this use Orchestrator instead which has retry and response processing. This is a simple version without any processing or retry logic.
         public ApiChatService(InteractiveExecutor executor, AppDbContext dbContext, ILogger<ApiChatService>  logger)
         {
             _dbContext = dbContext;
             _executor = executor;
             _logger = logger;
-            _assistantName = "AI Assistant";
-
-            // Initialize paths and load context/knowledge
             _paths = new ChatPaths();
             _apiSystemContext = _paths.LoadApiSystemContext();
+            _assistantName = "AI Assistant";
         }
 
-        #region API
+        #region Do not use this
         public async Task<string> GetAIResponseForAPI(CancellationToken cancellationToken, ChatRequest request)
         {
             var clean = string.Empty;
@@ -85,7 +84,6 @@ namespace AIChatApp.API.Services.Generic
             }
             else
             {
-                // return generic message if response is empty
                 clean = _messageUnableToGenerateResponse;
             }
             return clean;
@@ -94,7 +92,7 @@ namespace AIChatApp.API.Services.Generic
         private async Task SaveMessage(string chatId, string role, string content)
         {
             if (string.IsNullOrWhiteSpace(content))
-                return; // skip empty messages
+                return;
 
             var message = new ChatMessageEntity
             {
@@ -114,7 +112,7 @@ namespace AIChatApp.API.Services.Generic
                 .Where(x => x.ChatId == chatId && x.Role != _assistantName)
                 .OrderByDescending(x => x.CreatedAt)
                 .Take(maxMessages)
-                .OrderBy(x => x.CreatedAt) // chronological
+                .OrderBy(x => x.CreatedAt)
                 .ToListAsync();
 
             var sb = new StringBuilder();
@@ -204,6 +202,8 @@ namespace AIChatApp.API.Services.Generic
             retryPrompt.AppendLine();
             retryPrompt.AppendLine("Answer:");
             _logger.LogInformation($"Retry Prompt: {retryPrompt}");
+
+            var buffer = new StringBuilder();
             var inferenceParams = new InferenceParams
             {
                 MaxTokens = 150,
@@ -214,15 +214,12 @@ namespace AIChatApp.API.Services.Generic
                 }
             };
 
-            var buffer = new StringBuilder();
-
             await foreach (var token in _executor.InferAsync(retryPrompt.ToString(), inferenceParams, cancellationToken))
             {
                 buffer.Append(token);
             }
 
             var fixedResponse = buffer.ToString();
-
             if (string.IsNullOrWhiteSpace(fixedResponse))
             {
                 _logger.LogWarning("Retry returned empty. Using original response.");
@@ -235,7 +232,6 @@ namespace AIChatApp.API.Services.Generic
                 _logger.LogWarning("Cleaned retry is empty. Using original response.");
                 return incompleteResponse;
             }
-
             return cleaned;
         }
         #endregion

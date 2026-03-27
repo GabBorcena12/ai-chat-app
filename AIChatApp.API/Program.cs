@@ -102,7 +102,7 @@ builder.Services.AddScoped<ChatOrchestrator>();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
-    c.SwaggerDoc("v1", new OpenApiInfo { Title = "GAJI AI API", Version = "v1" });
+    c.SwaggerDoc("v1", new OpenApiInfo { Title = "AI ASSISTANT API", Version = "v1" });
 });
 
 // CORS
@@ -153,11 +153,11 @@ using (var scope = app.Services.CreateScope())
     {
         var db = services.GetRequiredService<AppDbContext>();
         db.Database.Migrate();
-        Console.WriteLine("✅ API: EF Core Migrations applied for AIChatAppDb.");
+        Console.WriteLine("API: EF Core Migrations applied for AIChatAppDb.");
     }
     catch (Exception ex)
     {
-        Console.WriteLine($"❌ API: Migration failed: {ex.Message}");
+        Console.WriteLine($"API: Migration failed: {ex.Message}");
     }
 }
 app.Run();
