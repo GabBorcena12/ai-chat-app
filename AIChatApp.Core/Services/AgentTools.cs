@@ -1,8 +1,8 @@
-﻿using AIChatApp.Core.Agents;
+﻿using AIChatApp.Core.Services;
 using AIChatApp.Core.Data_Context;
 using System.Linq;
 
-namespace AIChatApp.Core.Agents
+namespace AIChatApp.Core.Services
 {
     public class AgentTools
     {

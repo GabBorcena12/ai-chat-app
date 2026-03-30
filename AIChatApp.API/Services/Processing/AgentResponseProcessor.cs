@@ -1,4 +1,5 @@
 ﻿using AIChatApp.API.Services.Processing;
+using AIChatApp.Core.Services;
 using System.Text.RegularExpressions;
 
 namespace AIChatApp.Core.Agents

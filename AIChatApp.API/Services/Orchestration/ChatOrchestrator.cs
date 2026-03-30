@@ -10,6 +10,7 @@ using LLama;
 using LLama.Common;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Identity.Client;
+using System.Diagnostics;
 using System.Text;
 
 namespace AIChatApp.API.Services.Orchestration
@@ -106,6 +107,8 @@ namespace AIChatApp.API.Services.Orchestration
                 AntiPrompts = _antiPrompts
             };
 
+            var sw = Stopwatch.StartNew();
+
             // Fresh executor to avoid any state carryover from previous inference
             // Which could impact retries
             await foreach (var token in _retryExecutorFactory().InferAsync(
@@ -114,6 +117,17 @@ namespace AIChatApp.API.Services.Orchestration
                 cancellationToken))
             {
                 retryBuffer.Append(token);
+            }
+
+            // Log model latency
+            sw.Stop();
+            if (sw.ElapsedMilliseconds > 30000)
+            {
+                _logger.LogWarning($"Model is slow (RetryAndFixResponse): {sw.ElapsedMilliseconds} ms");
+            }
+            else
+            {
+                _logger.LogInformation($"LLM Success | Latency (RetryAndFixResponse): {sw.ElapsedMilliseconds} ms");
             }
 
             // 3. Clean and return Response
