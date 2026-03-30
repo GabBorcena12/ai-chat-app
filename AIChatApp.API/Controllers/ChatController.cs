@@ -2,20 +2,21 @@
 using AIChatApp.API.Services.Generic;
 using AIChatApp.API.Services.LLM;
 using AIChatApp.API.Services.Orchestration;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AIChatApp.API.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
-    public class AiChatController : ControllerBase
+    [Route("api/chat")]
+    public class ChatController : ControllerBase
     {
         private readonly ApiChatService _chatService;
         private readonly ChatOrchestrator _orchestrator;
         private readonly ILLMService _llm;
-        private readonly ILogger<AiChatController> _logger;
+        private readonly ILogger<ChatController> _logger;
 
-        public AiChatController(ILogger<AiChatController> logger, 
+        public ChatController(ILogger<ChatController> logger, 
             ApiChatService chatService, 
             ChatOrchestrator orchestrator,
             ILLMService llm)
@@ -34,6 +35,7 @@ namespace AIChatApp.API.Controllers
         }
 
         [HttpPost("ask-stream")]
+        [Authorize(AuthenticationSchemes = "LocalJwt")]
         public async Task<IActionResult> AskStream([FromBody] ChatRequest request)
         {
             using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));

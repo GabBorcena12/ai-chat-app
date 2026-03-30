@@ -32,8 +32,8 @@ namespace AIChatApp.Core.Middleware
                 var text = await new StreamReader(responseBody).ReadToEndAsync();
                 responseBody.Seek(0, SeekOrigin.Begin);
 
-                _logger.LogInformation("⬅️ Response: {statusCode} {body}",
-                    context.Response.StatusCode, text);
+                //_logger.LogInformation("⬅️ Response: {statusCode} {body}",
+                //    context.Response.StatusCode, text);
 
                 // Copy back to original
                 await responseBody.CopyToAsync(originalBodyStream);

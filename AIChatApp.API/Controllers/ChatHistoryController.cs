@@ -1,4 +1,5 @@
 ﻿using AIChatApp.API.Services.Generic;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AIChatApp.API.Controllers
@@ -18,6 +19,7 @@ namespace AIChatApp.API.Controllers
 
 
         [HttpGet("conversations/{chatId}")]
+        [Authorize(AuthenticationSchemes = "LocalJwt")]
         public async Task<IActionResult> GetConversation(string chatId)
         {
             if (string.IsNullOrWhiteSpace(chatId))
