@@ -144,6 +144,7 @@ builder.Services.AddHttpClient<LLMService>();
 
 // JWT Service
 builder.Services.AddScoped<JWTServices>();
+builder.Services.AddScoped<GoogleAuthenticatorService>();
 
 // Swagger
 builder.Services.AddEndpointsApiExplorer();
