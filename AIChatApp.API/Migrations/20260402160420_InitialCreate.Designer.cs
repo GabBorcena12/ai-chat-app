@@ -12,7 +12,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace AIChatApp.API.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260330032649_InitialCreate")]
+    [Migration("20260402160420_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -78,6 +78,9 @@ namespace AIChatApp.API.Migrations
 
                     b.Property<bool>("TwoFactorEnabled")
                         .HasColumnType("bit");
+
+                    b.Property<string>("TwoFactorSecret")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("UserName")
                         .HasMaxLength(256)

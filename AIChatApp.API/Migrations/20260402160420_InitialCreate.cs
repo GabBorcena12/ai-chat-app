@@ -32,6 +32,7 @@ namespace AIChatApp.API.Migrations
                     Id = table.Column<string>(type: "nvarchar(450)", nullable: false),
                     IsConfirmed = table.Column<bool>(type: "bit", nullable: false),
                     IsDisabled = table.Column<bool>(type: "bit", nullable: false),
+                    TwoFactorSecret = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     UserName = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true),
                     NormalizedUserName = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true),
                     Email = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true),
