@@ -7,5 +7,6 @@ namespace AIChatApp.Core.Data_Context.Entity
         // Custom fields
         public bool IsConfirmed { get; set; } = false;
         public bool IsDisabled { get; set; } = false;
+        public string? TwoFactorSecret { get; set; }
     }
 }
