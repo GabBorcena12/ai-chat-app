@@ -30,5 +30,10 @@ EXPOSE 8081
 ENTRYPOINT ["dotnet", "AIChatApp.Gateway.dll"]
 
 # --- Usage ---
+# Build:
 # docker build -t aichatapp-gateway -f AIChatApp.Gateway/Dockerfile .
-# docker run -d --name aichatapp-gateway --network inventory-network -p 5001:8080 aichatapp-gateway
+#
+# Run:
+# docker run -d --name aichatapp-gateway --network inventory-network -p 5001:8080 `
+#   -e ApiKey.Settings__Keys__0="replace-with-your-api-key" `
+#   aichatapp-gateway

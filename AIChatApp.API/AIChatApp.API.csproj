@@ -6,6 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <DockerDefaultTargetOS>Windows</DockerDefaultTargetOS>
     <DockerfileContext>..\AIChatApp</DockerfileContext>
+    <UserSecretsId>f1f12694-6795-436a-ba8a-bd8317b1d1fb</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
@@ -28,5 +29,7 @@
   <ItemGroup>
     <ProjectReference Include="..\AIChatApp.Core\AIChatApp.Core.csproj" />
   </ItemGroup>
+
+  <ProjectExtensions><VisualStudio><UserProperties appsettings_1development_1json__JsonSchema="https://www.schemastore.org/architectfx.json" /></VisualStudio></ProjectExtensions>
 
 </Project>
