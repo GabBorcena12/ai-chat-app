@@ -27,6 +27,11 @@ Thumbs.db
 # Secrets
 appsettings.Development.json
 *.env
+.env
+.env.docker
+.env.local
+.env.*.local
+.env.*.secret
 
 # Model / large files
 *.bin

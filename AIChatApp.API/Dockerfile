@@ -40,5 +40,18 @@ RUN mkdir -p /app/AIChatApp.Core/Data
 ENTRYPOINT ["dotnet", "AIChatApp.API.dll"]
 
 # --- Usage ---
-#docker build -t aichatapp-api -f AIChatApp.API/Dockerfile .
-#docker run -d --name aichatapp-api --network inventory-network -p 7001:8080 -v "C:/Users/gabri/source/repos/AIChatApp/AIChatApp.Core/Models:/app/Models" aichatapp-api
+# Build:
+# docker build -t aichatapp-api -f AIChatApp.API/Dockerfile .
+#
+# Run:
+# docker run -d --name aichatapp-api --network inventory-network -p 7001:8080 `
+#   -e JwtSettings__SecretKey="replace-with-a-long-random-secret-key" `
+#   -e ApiKey.Settings__Keys__0="replace-with-your-api-key" `
+#   -e ConnectionStrings__DefaultConnection="Server=dummy_server;Database=AIChatAppDb;User Id=sa;Password=Dummy_Passw0rd;TrustServerCertificate=True;" `
+#   -e ConnectionStrings__InventoryAppDb="Server=dummy_server;Database=InventoryDb;User Id=sa;Password=Dummy_Passw0rd;TrustServerCertificate=True;" `
+#   -e EmailSettings__From="your-email@example.com" `
+#   -e EmailSettings__SmtpServer="smtp.gmail.com" `
+#   -e EmailSettings__Username="your-email@example.com" `
+#   -e EmailSettings__AppPassword="replace-with-your-smtp-password" `
+#   -v "C:/Users/gabri/source/repos/AIChatApp/AIChatApp.Core/Models:/app/Models"`
+#   aichatapp-api
