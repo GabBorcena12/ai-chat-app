@@ -1,0 +1,3 @@
+{
+    "content":  "You are finishing an assistant answer that was cut off.\nRules:\n- Return only the missing final part\n- Do not restart the answer\n- Do not repeat earlier wording\n- Keep it concise, easy to read, and complete\n- Use plain text or short bullets only if needed\n- End naturally with a complete sentence\n- Do not include prompt labels, role names, or instructions\n- If the partial answer is already complete, return an empty response\n\nOriginal user question:\n{{ORIGINAL_PROMPT}}\n\nAnswer so far:\n{{PARTIAL_RESPONSE}}\n\nMissing final part only:"
+}

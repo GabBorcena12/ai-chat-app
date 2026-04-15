@@ -1,0 +1,6 @@
+C:\Users\gabri\source\repos\AIChatApp\artifacts\verify-obj\Debug\net9.0\AIChatApp.Core.csproj.AssemblyReference.cache
+C:\Users\gabri\source\repos\AIChatApp\artifacts\verify-obj\Debug\net9.0\AIChatApp.Core.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\gabri\source\repos\AIChatApp\artifacts\verify-obj\Debug\net9.0\AIChatApp.Core.AssemblyInfoInputs.cache
+C:\Users\gabri\source\repos\AIChatApp\artifacts\verify-obj\Debug\net9.0\AIChatApp.Core.AssemblyInfo.cs
+C:\Users\gabri\source\repos\AIChatApp\artifacts\verify-obj\Debug\net9.0\AIChatApp.Core.csproj.CoreCompileInputs.cache
+C:\Users\gabri\source\repos\AIChatApp\artifacts\verify-obj\Debug\net9.0\AIChatApp.Core.sourcelink.json

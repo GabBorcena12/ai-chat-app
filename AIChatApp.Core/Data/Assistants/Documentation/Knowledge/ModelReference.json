@@ -1,0 +1,3 @@
+{
+    "content":  "AIChatApp Model Reference\n\n- The active offline model is configured by LocalModel:FileName in the API configuration.\n- The current default local model is qwen2.5-3b-instruct-q4_k_m.gguf.\n- Model files are expected under AIChatApp.Core/Models.\n- The API loads the configured GGUF model through LLamaSharp at startup.\n- Changing the configured model file changes the local model without requiring a code edit.\n- qwen2.5-3b-instruct-q4_k_m.gguf is the current performance-focused default.\n- meta-llama-3.1-8b-instruct-q4_k_m.gguf is available as a higher-quality but slower option."
+}

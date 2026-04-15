@@ -1,0 +1,299 @@
+{
+    "entries":  [
+                    {
+                        "aliases":  [
+                                        "hi",
+                                        "hello",
+                                        "hey",
+                                        "yo",
+                                        "sup",
+                                        "good morning",
+                                        "good afternoon",
+                                        "good evening"
+                                    ],
+                        "answer":  "Hi! Ask me anything about the AIChatApp project."
+                    },
+                    {
+                        "aliases":  [
+                                        "What is AIChatApp for?",
+                                        "what is this project for",
+                                        "what does this project do"
+                                    ],
+                        "answer":  "AIChatApp is a local .NET solution for authenticated chat, project documentation help, and local LLM-backed responses."
+                    },
+                    {
+                        "aliases":  [
+                                        "How is the solution structured?",
+                                        "how is this solution structured",
+                                        "what is the structure of the solution",
+                                        "what is the solution structure"
+                                    ],
+                        "answer":  "The solution is split into a frontend, an API, a gateway, and shared core infrastructure so responsibilities stay separated."
+                    },
+                    {
+                        "aliases":  [
+                                        "Which project handles the frontend?",
+                                        "what project handles the frontend"
+                                    ],
+                        "answer":  "AIChatApp.Web handles the browser UI, login flow, 2FA management, and chat experience."
+                    },
+                    {
+                        "aliases":  [
+                                        "Which project handles the main backend behavior?",
+                                        "what project handles the main backend behavior"
+                                    ],
+                        "answer":  "AIChatApp.API handles authentication, chat orchestration, history, 2FA, and LLM access."
+                    },
+                    {
+                        "aliases":  [
+                                        "Which project handles request routing?",
+                                        "what project handles request routing"
+                                    ],
+                        "answer":  "AIChatApp.Gateway sits in front of the API and handles proxying, gateway policies, and API key checks."
+                    },
+                    {
+                        "aliases":  [
+                                        "Which project contains shared infrastructure?",
+                                        "what project contains shared infrastructure"
+                                    ],
+                        "answer":  "AIChatApp.Core holds shared entities, DbContexts, middleware, config helpers, and common utilities."
+                    },
+                    {
+                        "aliases":  [
+                                        "How does chat work at a high level?",
+                                        "how does chat work"
+                                    ],
+                        "answer":  "The frontend sends requests through the gateway to the API, and the API builds prompts, runs the model, and returns the answer."
+                    },
+                    {
+                        "aliases":  [
+                                        "How does the chat request flow move from the web app to the model?",
+                                        "how does the chat request flow work",
+                                        "how does the request flow move from the frontend to the model"
+                                    ],
+                        "answer":  "The web app sends the chat request to the gateway, the gateway forwards it to the API, and the API builds the prompt, runs the local model, and sends the answer back to the frontend."
+                    },
+                    {
+                        "aliases":  [
+                                        "How does streaming work?",
+                                        "how does streaming work in this app",
+                                        "how does ask-stream work",
+                                        "what does streaming do in this app"
+                                    ],
+                        "answer":  "Streaming sends partial response chunks as they are generated so the UI can show the answer live instead of waiting for the whole reply."
+                    },
+                    {
+                        "aliases":  [
+                                        "How does continue work?",
+                                        "what does continue do"
+                                    ],
+                        "answer":  "Continue asks the backend to finish a response that appears cut off instead of starting a new answer from scratch."
+                    },
+                    {
+                        "aliases":  [
+                                        "How does authentication work?",
+                                        "how does auth work"
+                                    ],
+                        "answer":  "Users sign in with credentials, receive a JWT, and then use that authenticated session for protected requests."
+                    },
+                    {
+                        "aliases":  [
+                                        "How does 2FA work?",
+                                        "how does google authenticator 2fa work"
+                                    ],
+                        "answer":  "The user links Google Authenticator, verifies a current TOTP code, and then includes that one-time code during future sign-ins."
+                    },
+                    {
+                        "aliases":  [
+                                        "How do I set up 2FA?",
+                                        "how do i enable 2fa",
+                                        "how do i set up google authenticator"
+                                    ],
+                        "answer":  "Sign in, call 2FA setup, scan the returned AuthenticatorUri or SharedKey in Google Authenticator, then verify with the current 6-digit code."
+                    },
+                    {
+                        "aliases":  [
+                                        "How do I disable 2FA?",
+                                        "how do i turn off 2fa"
+                                    ],
+                        "answer":  "Disable 2FA by sending a fresh current authenticator code to the 2FA disable endpoint."
+                    },
+                    {
+                        "aliases":  [
+                                        "How does chat history work?"
+                                    ],
+                        "answer":  "The app keeps conversation context so later messages can build on earlier ones in the same chat."
+                    },
+                    {
+                        "aliases":  [
+                                        "How does Docker fit in?"
+                                    ],
+                        "answer":  "Docker lets the solution components run as containers and communicate over the compose network instead of local process ports."
+                    },
+                    {
+                        "aliases":  [
+                                        "How does SQL Server fit in?"
+                                    ],
+                        "answer":  "SQL Server stores app data such as users, chat history, and related persistent records."
+                    },
+                    {
+                        "aliases":  [
+                                        "Where should secrets go?"
+                                    ],
+                        "answer":  "Use user secrets for local development and environment variables for containerized or deployed environments."
+                    },
+                    {
+                        "aliases":  [
+                                        "What offline llm model do we use?",
+                                        "what local model do we use",
+                                        "what model is configured",
+                                        "what gguf model do we use"
+                                    ],
+                        "answer":  "The offline model is configured through LocalModel:FileName in the API config, and the current default is qwen2.5-3b-instruct-q4_k_m.gguf."
+                    },
+                    {
+                        "aliases":  [
+                                        "Where is the local model configured?",
+                                        "where do i change the model",
+                                        "where is the model file configured"
+                                    ],
+                        "answer":  "The local model is configured in AIChatApp.API appsettings under LocalModel, especially LocalModel:FileName and LocalModel:ContextSize."
+                    },
+                    {
+                        "aliases":  [
+                                        "Where are model files stored?",
+                                        "where should i put the gguf file"
+                                    ],
+                        "answer":  "Place GGUF model files in AIChatApp.Core/Models so the API can load the configured file from there."
+                    },
+                    {
+                        "aliases":  [
+                                        "What does LocalModel:ContextSize do?",
+                                        "what is context size"
+                                    ],
+                        "answer":  "It controls the context window size passed to the local model runtime."
+                    },
+                    {
+                        "aliases":  [
+                                        "Which config controls the assistant profile?",
+                                        "how do i switch the assistant profile"
+                                    ],
+                        "answer":  "AssistantProfile controls which assistant content is active, including ProfileId and AssistantName."
+                    },
+                    {
+                        "aliases":  [
+                                        "Where is the assistant profile selected?",
+                                        "where is the active assistant selected"
+                                    ],
+                        "answer":  "The active assistant profile is selected through AssistantProfile in the API and Web appsettings, especially AssistantProfile:ProfileId."
+                    },
+                    {
+                        "aliases":  [
+                                        "What changes when i switch from Documentation to AnjeysSupplies?",
+                                        "what changes when i switch assistant profiles",
+                                        "what changes when i switch from documentation to anjeyssupplies"
+                                    ],
+                        "answer":  "Switching the assistant profile changes the branding, prompt files, and assistant-specific knowledge, while the shared chat engine, gateway, API, and core infrastructure stay the same."
+                    },
+                    {
+                        "aliases":  [
+                                        "Where is the gateway url configured for the web app?",
+                                        "where does the frontend point to the gateway"
+                                    ],
+                        "answer":  "The Blazor frontend uses Frontend:GatewayBaseUrl in AIChatApp.Web config."
+                    },
+                    {
+                        "aliases":  [
+                                        "Where are gateway headers configured in the web app?",
+                                        "where are x-api-client and x-api-key configured"
+                                    ],
+                        "answer":  "The web app reads Frontend:ApiClientName and Frontend:ApiKey to send the gateway headers."
+                    },
+                    {
+                        "aliases":  [
+                                        "Where is the browser conversation history stored?",
+                                        "where are conversations stored in the browser",
+                                        "where is chat history stored in the browser"
+                                    ],
+                        "answer":  "The browser conversation workspace is stored in localStorage so it can be restored after refresh or reopen."
+                    },
+                    {
+                        "aliases":  [
+                                        "Why can chat be slow?"
+                                    ],
+                        "answer":  "Slow responses usually come from model generation time, large prompts, retries, or timeout and continuation behavior."
+                    },
+                    {
+                        "aliases":  [
+                                        "Why can answers be cut off?"
+                                    ],
+                        "answer":  "Answers can be cut off when token limits, stop conditions, timeouts, or incomplete generation handling end the response early."
+                    },
+                    {
+                        "aliases":  [
+                                        "Why might i get 401 invalid_token after login?",
+                                        "why do i get 401 invalid_token after login",
+                                        "why does chat return 401 invalid_token after login",
+                                        "why am i getting invalid token after login"
+                                    ],
+                        "answer":  "A 401 invalid_token after login usually means the JWT is stale, was issued by a different running instance, or no longer matches the active JWT configuration."
+                    },
+                    {
+                        "aliases":  [
+                                        "What should I check first when something seems wrong?"
+                                    ],
+                        "answer":  "Start with the README, assistant references, relevant config files, and then confirm the current behavior in code."
+                    },
+                    {
+                        "aliases":  [
+                                        "What headers are required through the gateway?"
+                                    ],
+                        "answer":  "Gateway requests need X-Api-Client and X-Api-Key. Protected endpoints also require Authorization: Bearer \u003ctoken\u003e."
+                    },
+                    {
+                        "aliases":  [
+                                        "How does the gateway protect the API?",
+                                        "how does gateway protect the api"
+                                    ],
+                        "answer":  "The gateway protects the API by checking API keys, applying rate limits, and forwarding only approved routes to the backend."
+                    },
+                    {
+                        "aliases":  [
+                                        "What does ask-stream do?"
+                                    ],
+                        "answer":  "ask-stream is the streaming chat endpoint and returns SSE events."
+                    },
+                    {
+                        "aliases":  [
+                                        "What does ask-ai do?"
+                                    ],
+                        "answer":  "ask-ai is the non-streaming chat endpoint and returns a JSON response."
+                    },
+                    {
+                        "aliases":  [
+                                        "What does ask-continue do?"
+                                    ],
+                        "answer":  "ask-continue finishes a response that was cut off."
+                    },
+                    {
+                        "aliases":  [
+                                        "How does ask-continue differ from ask-stream?",
+                                        "what is the difference between ask-continue and ask-stream"
+                                    ],
+                        "answer":  "ask-continue finishes a cut-off answer, while ask-stream is the live streaming chat endpoint that sends response chunks as they are generated."
+                    },
+                    {
+                        "aliases":  [
+                                        "Where are prompt templates stored now?",
+                                        "where are the prompt templates stored now"
+                                    ],
+                        "answer":  "Prompt templates are stored under the active assistant profile in AIChatApp.Core/Data/Assistants/\u003cProfileId\u003e/Prompts."
+                    },
+                    {
+                        "aliases":  [
+                                        "What is the usual local API target behind the gateway?"
+                                    ],
+                        "answer":  "In local development, the gateway commonly forwards to the API running on localhost."
+                    }
+                ]
+}

@@ -1,4 +1,4 @@
-﻿using AIChatApp.API.Services.Generic;
+using AIChatApp.API.Services.Generic;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -16,7 +16,6 @@ namespace AIChatApp.API.Controllers
             _logger = logger;
             _chatService = chatService;
         }
-
 
         [HttpGet("conversations/{chatId}")]
         [Authorize(AuthenticationSchemes = "LocalJwt")]

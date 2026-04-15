@@ -34,6 +34,8 @@ ENTRYPOINT ["dotnet", "AIChatApp.Gateway.dll"]
 # docker build -t aichatapp-gateway -f AIChatApp.Gateway/Dockerfile .
 #
 # Run:
-# docker run -d --name aichatapp-gateway --network inventory-network -p 5001:8080 `
-#   -e ApiKey.Settings__Keys__0="replace-with-your-api-key" `
-#   aichatapp-gateway
+#docker run -d --name aichatapp-web --network inventory-network -p 4000:8080 `
+#  -e Frontend__GatewayBaseUrl=http://aichatapp-gateway:8080/ `
+#  -e Frontend__ApiClientName=GajiTechClient `
+#  -e Frontend__ApiKey=gaji-tech-secret-key-endpoint-0001 `
+#  aichatapp-web

@@ -14,6 +14,9 @@ namespace AIChatApp.Core.Data_Context
         public DbSet<ChatMessageEntity> ChatMessages { get; set; }
 
         public DbSet<ChatMessageEntity> ChatMessagesTbl { get; set; }
+        public DbSet<ChatResponseReportEntity> ChatResponseReports { get; set; }
+        public DbSet<AssistantPromptTemplateEntity> AssistantPromptTemplates { get; set; }
+        public DbSet<AssistantKnowledgeEntryEntity> AssistantKnowledgeEntries { get; set; }
 
         // -- USAGE --
         // cd AIChatApp.API 

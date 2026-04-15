@@ -1,4 +1,6 @@
-﻿using AIChatApp.API.Model;
+using AIChatApp.API.Model;
+using AIChatApp.Core.Config;
+using Microsoft.Extensions.Options;
 using System.Diagnostics;
 using System.Net.Http.Json;
 using System.Text;
@@ -11,11 +13,16 @@ namespace AIChatApp.API.Services.LLM
     {
         private readonly HttpClient _httpClient;
         private readonly ILogger<LLMService> _logger;
+        private readonly LocalModelOptions _localModelOptions;
 
-        public LLMService(HttpClient httpClient, ILogger<LLMService> logger)
+        public LLMService(
+            HttpClient httpClient,
+            ILogger<LLMService> logger,
+            IOptions<LocalModelOptions> localModelOptions)
         {
             _httpClient = httpClient;
             _logger = logger;
+            _localModelOptions = localModelOptions.Value;
         }
 
         public async Task<string> GetLLMResponse(string prompt)
@@ -24,11 +31,10 @@ namespace AIChatApp.API.Services.LLM
 
             try
             {
-                // Example JSON for llama.cpp or ctransformers HTTP server
                 var requestBody = new
                 {
-                    model = "meta-llama-3.1-8b-instruct-q4_k_m.gguf",
-                    prompt = prompt,
+                    model = _localModelOptions.FileName,
+                    prompt,
                     stream = false
                 };
 
@@ -45,7 +51,6 @@ namespace AIChatApp.API.Services.LLM
 
                 sw.Stop();
 
-                // ✅ Log latency
                 if (sw.ElapsedMilliseconds > 4000)
                 {
                     _logger.LogWarning("Model is slow | {Elapsed} ms", sw.ElapsedMilliseconds);

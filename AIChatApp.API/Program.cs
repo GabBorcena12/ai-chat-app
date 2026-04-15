@@ -3,6 +3,7 @@ using AIChatApp.API.Services.LLM;
 using AIChatApp.API.Services.Orchestration;
 using AIChatApp.API.Services.Processing;
 using AIChatApp.API.Services.Prompting;
+using AIChatApp.API.Services.Content;
 using AIChatApp.Core.Services;
 using AIChatApp.Core.Config;
 using AIChatApp.Core.Data_Context;
@@ -23,6 +24,14 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Register ChatService
 builder.Services.AddControllers();
+builder.Services.Configure<AssistantProfileOptions>(builder.Configuration.GetSection(AssistantProfileOptions.SectionName));
+builder.Services.Configure<LocalModelOptions>(builder.Configuration.GetSection(LocalModelOptions.SectionName));
+builder.Services.Configure<BackofficeOptions>(builder.Configuration.GetSection(BackofficeOptions.SectionName));
+builder.Services.AddSingleton(sp =>
+{
+    var modelOptions = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<LocalModelOptions>>().Value;
+    return new ChatPaths(modelOptions.FileName);
+});
 
 // Load JWT settings
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
@@ -68,11 +77,12 @@ builder.Services.AddDbContext<InventoryDbContext>(options =>
 // Load or Extract model package once (Singleton)
 builder.Services.AddSingleton<LLamaWeights>(sp =>
 {
-    var paths = new ChatPaths();
+    var paths = sp.GetRequiredService<ChatPaths>();
+    var modelOptions = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<LocalModelOptions>>().Value;
 
     var parameters = new ModelParams(paths.ModelFile)
     {
-        ContextSize = 5000
+        ContextSize = modelOptions.ContextSize
     };
 
     return LLamaWeights.LoadFromFile(parameters);
@@ -83,11 +93,12 @@ builder.Services.AddSingleton<LLamaWeights>(sp =>
 builder.Services.AddScoped<LLamaContext>(sp =>
 {
     var model = sp.GetRequiredService<LLamaWeights>();
-    var paths = new ChatPaths();
+    var paths = sp.GetRequiredService<ChatPaths>();
+    var modelOptions = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<LocalModelOptions>>().Value;
 
     var parameters = new ModelParams(paths.ModelFile)
     {
-        ContextSize = 5000
+        ContextSize = modelOptions.ContextSize
     };
 
     return model.CreateContext(parameters);
@@ -104,11 +115,12 @@ builder.Services.AddScoped<InteractiveExecutor>(sp =>
 builder.Services.AddScoped<Func<InteractiveExecutor>>(sp => () =>
 {
     var weights = sp.GetRequiredService<LLamaWeights>();
-    var paths = new ChatPaths();
+    var paths = sp.GetRequiredService<ChatPaths>();
+    var modelOptions = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<LocalModelOptions>>().Value;
 
     var parameters = new ModelParams(paths.ModelFile)
     {
-        ContextSize = 5000
+        ContextSize = modelOptions.ContextSize
     };
 
     var newContext = weights.CreateContext(parameters);
@@ -129,6 +141,7 @@ builder.Services.AddScoped<ILLMService, LlamaLLMService>();
 
 // Promp Builder like RAG, system context and memory
 builder.Services.AddScoped<IPromptBuilder, PromptBuilder>();
+builder.Services.AddScoped<IAssistantContentService, AssistantContentService>();
 
 // Response processor (includes Agent / keyword logic)
 builder.Services.AddScoped<IResponseProcessor, AgentResponseProcessor>();
@@ -200,11 +213,6 @@ var app = builder.Build();
 // Silence all llama.cpp logs
 NativeLibraryConfig.All.WithLogCallback((level, message) => { });
 
-using (var scope = app.Services.CreateScope())
-{
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.Migrate();
-}
 // Middleware
 //app.UseMiddleware<IpWhitelistMiddleware>();
 app.UseMiddleware<RequestTimingMiddleware>();
@@ -228,6 +236,7 @@ using (var scope = app.Services.CreateScope())
     {
         var db = services.GetRequiredService<AppDbContext>();
         db.Database.Migrate();
+        await EnsureRolesAndBackofficeSeedAsync(services);
         Console.WriteLine("API: EF Core Migrations applied for AIChatAppDb.");
     }
     catch (Exception ex)
@@ -236,3 +245,80 @@ using (var scope = app.Services.CreateScope())
     }
 }
 app.Run();
+
+static async Task EnsureRolesAndBackofficeSeedAsync(IServiceProvider services)
+{
+    var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
+    var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
+    var assistantContentService = services.GetRequiredService<IAssistantContentService>();
+    var backofficeOptions = services.GetRequiredService<Microsoft.Extensions.Options.IOptions<BackofficeOptions>>().Value;
+    var logger = services.GetRequiredService<ILoggerFactory>().CreateLogger("StartupSeed");
+
+    foreach (var roleName in new[] { "User", "AppUser", "DataValidator", "Admin" })
+    {
+        if (!await roleManager.RoleExistsAsync(roleName))
+        {
+            await roleManager.CreateAsync(new IdentityRole(roleName));
+        }
+    }
+
+    if (backofficeOptions.SeedDefaultAdmin
+        && !string.IsNullOrWhiteSpace(backofficeOptions.DefaultAdminUsername)
+        && !string.IsNullOrWhiteSpace(backofficeOptions.DefaultAdminEmail)
+        && !string.IsNullOrWhiteSpace(backofficeOptions.DefaultAdminPassword))
+    {
+        var defaultAdmin = await userManager.FindByNameAsync(backofficeOptions.DefaultAdminUsername);
+        if (defaultAdmin is null)
+        {
+            defaultAdmin = new ApplicationUser
+            {
+                UserName = backofficeOptions.DefaultAdminUsername.Trim(),
+                Email = backofficeOptions.DefaultAdminEmail.Trim(),
+                EmailConfirmed = true,
+                IsConfirmed = true
+            };
+
+            var createAdminResult = await userManager.CreateAsync(defaultAdmin, backofficeOptions.DefaultAdminPassword);
+            if (!createAdminResult.Succeeded)
+            {
+                logger.LogWarning("Default admin account could not be created: {Errors}", string.Join("; ", createAdminResult.Errors.Select(error => error.Description)));
+            }
+            else
+            {
+                logger.LogInformation("Seeded default admin account {Username}.", defaultAdmin.UserName);
+            }
+        }
+
+        if (defaultAdmin is not null)
+        {
+            defaultAdmin.Email ??= backofficeOptions.DefaultAdminEmail.Trim();
+            defaultAdmin.EmailConfirmed = true;
+            defaultAdmin.IsConfirmed = true;
+            defaultAdmin.IsDisabled = false;
+            await userManager.UpdateAsync(defaultAdmin);
+
+            if (!await userManager.IsInRoleAsync(defaultAdmin, "Admin"))
+            {
+                await userManager.AddToRoleAsync(defaultAdmin, "Admin");
+            }
+        }
+    }
+
+    foreach (var username in backofficeOptions.AdminUsernames.Distinct(StringComparer.OrdinalIgnoreCase))
+    {
+        var user = await userManager.FindByNameAsync(username);
+        if (user is null)
+        {
+            logger.LogWarning("Backoffice admin username {Username} was not found, so Admin role was not assigned.", username);
+            continue;
+        }
+
+        if (!await userManager.IsInRoleAsync(user, "Admin"))
+        {
+            await userManager.AddToRoleAsync(user, "Admin");
+        }
+    }
+
+    await assistantContentService.SeedProfileContentAsync("Documentation");
+    await assistantContentService.SeedProfileContentAsync("AnjeysSupplies");
+}
