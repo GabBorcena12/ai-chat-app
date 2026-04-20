@@ -69,6 +69,8 @@ namespace AichatApp.API.Controllers
             var user = await _userManager.FindByNameAsync(model.Username);
             if (user == null)
                 return Unauthorized("Invalid username or password");
+            if (user.IsDisabled)
+                return Unauthorized("This account is disabled.");
 
             var result = await _signInManager.CheckPasswordSignInAsync(user, model.Password, false);
             if (!result.Succeeded)
@@ -114,7 +116,7 @@ namespace AichatApp.API.Controllers
                 Email = model.Email
             };
 
-            var roleName = "User";
+            var roleName = "AppUser";
             if (!await _roleManager.RoleExistsAsync(roleName))
             {
                 await _roleManager.CreateAsync(new IdentityRole(roleName));
@@ -154,6 +156,21 @@ namespace AichatApp.API.Controllers
             {
                 SharedKey = secret,
                 AuthenticatorUri = authenticatorUri
+            });
+        }
+
+        [HttpGet("2fa/status")]
+        [Authorize(AuthenticationSchemes = "LocalJwt")]
+        public async Task<IActionResult> GetTwoFactorStatus()
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null)
+                return Unauthorized();
+
+            var isEnabled = await _userManager.GetTwoFactorEnabledAsync(user);
+            return Ok(new TwoFactorStatusResponse
+            {
+                IsEnabled = isEnabled
             });
         }
 

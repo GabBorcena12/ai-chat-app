@@ -1,0 +1,1239 @@
+@page "/"
+@rendermode InteractiveServer
+@using AIChatApp.Core.Config
+@using System.Net
+@using System.Text
+@inject AIChatApp.Web.Services.AIChatGatewayClient GatewayClient
+@inject AIChatApp.Web.Services.BrowserStorageService BrowserStorage
+@inject IJSRuntime JS
+@inject ILogger<Home> Logger
+@inject NavigationManager Navigation
+@inject Microsoft.Extensions.Options.IOptions<AssistantProfileOptions> AssistantProfileOptionsAccessor
+
+<PageTitle>@AssistantProfile.PageTitle</PageTitle>
+
+<div class="chat-app">
+    @if (!string.IsNullOrWhiteSpace(CompletionNotice))
+    {
+        <div class="completion-toast" role="status" aria-live="polite">@CompletionNotice</div>
+    }
+
+    <aside class="sidebar">
+        <div class="brand-card">
+                <div class="brand-mark">AI</div>
+                <div>
+                    <div class="eyebrow">@AssistantProfile.SidebarEyebrow</div>
+                    <h2 @onclick="HandleBrandTitleClick" class="brand-title-link">@AssistantProfile.SidebarTitle</h2>
+                </div>
+            </div>
+
+        <button class="primary-action" @onclick="StartNewConversation">
+            <span>+</span>
+            <span>@AssistantProfile.NewChatLabel</span>
+        </button>
+
+        <section class="sidebar-section">
+            <div class="section-title">Conversations</div>
+            <div class="conversation-list">
+                @foreach (var conversation in Conversations)
+                {
+                    <div class="conversation-item @(conversation.Id == ActiveConversation.Id ? "active" : null)">
+                        @if (conversation.IsRenaming)
+                        {
+                            <div class="conversation-editor">
+                                <input class="conversation-title-input"
+                                       @bind="conversation.DraftTitle"
+                                       @bind:event="oninput"
+                                       @onkeydown="args => HandleRenameKeyDown(args, conversation)"
+                                       maxlength="80" />
+                                <div class="conversation-actions">
+                                    <button type="button" class="ghost-button conversation-action" @onclick="() => SaveConversationTitle(conversation)">Save</button>
+                                    <button type="button" class="ghost-button conversation-action" @onclick="() => CancelConversationRename(conversation)">Cancel</button>
+                                </div>
+                            </div>
+                        }
+                        else
+                        {
+                            <button type="button"
+                                    class="conversation-select"
+                                    @onclick="() => SelectConversation(conversation.Id)">
+                                <span class="conversation-title">@conversation.Title</span>
+                                <span class="conversation-count">@conversation.Messages.Count messages</span>
+                            </button>
+                            <div class="conversation-actions">
+                                <button type="button"
+                                        class="ghost-button conversation-rename-button"
+                                        title="Rename conversation"
+                                        @onclick="() => BeginConversationRename(conversation)">
+                                    Rename
+                                </button>
+                                <button type="button"
+                                        class="ghost-button conversation-delete-button"
+                                        title="Delete conversation"
+                                        aria-label="Delete conversation"
+                                        @onclick="() => DeleteConversation(conversation)">
+                                    X
+                                </button>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </section>
+
+        <section class="sidebar-section account-panel">
+                <div class="section-title">Account</div>
+
+            @if (!IsAuthenticated)
+            {
+                <div class="auth-tabs">
+                    <button type="button" class="tab-button @(showRegister ? null : "active")" @onclick="() => showRegister = false">Sign in</button>
+                    <button type="button" class="tab-button @(showRegister ? "active" : null)" @onclick="() => showRegister = true">Register</button>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(AuthMessage))
+                {
+                    <p class="status-note compact-note">@AuthMessage</p>
+                }
+
+                @if (showRegister)
+                {
+                    <EditForm Model="registerModel" OnValidSubmit="RegisterAsync" class="auth-form">
+                        <DataAnnotationsValidator />
+                        <InputText @bind-Value="registerModel.Username" class="text-input" placeholder="Username" />
+                        <ValidationMessage For="@(() => registerModel.Username)" />
+                        <InputText @bind-Value="registerModel.Email" class="text-input" placeholder="Email" />
+                        <ValidationMessage For="@(() => registerModel.Email)" />
+                        <InputText @bind-Value="registerModel.Password" class="text-input" placeholder="Password" type="password" />
+                        <ValidationMessage For="@(() => registerModel.Password)" />
+                        <button type="submit" class="primary-action slim" disabled="@isBusy">Create account</button>
+                    </EditForm>
+                }
+                else
+                {
+                    <EditForm Model="loginModel" OnValidSubmit="LoginAsync" class="auth-form">
+                        <DataAnnotationsValidator />
+                        <InputText @bind-Value="loginModel.Username" class="text-input" placeholder="Username" />
+                        <ValidationMessage For="@(() => loginModel.Username)" />
+                        <InputText @bind-Value="loginModel.Password" class="text-input" placeholder="Password" type="password" />
+                        <ValidationMessage For="@(() => loginModel.Password)" />
+                        <InputText @bind-Value="loginModel.OtpCode" class="text-input" placeholder="OTP code (when 2FA is enabled)" />
+                        <button type="submit" class="primary-action slim" disabled="@isBusy">Sign in</button>
+                    </EditForm>
+                }
+            }
+            else
+            {
+                <div class="account-summary">
+                    <div>
+                        <div class="eyebrow">Signed in as</div>
+                        <strong>@CurrentUsername</strong>
+                    </div>
+                    <button type="button" class="ghost-button" @onclick="LogoutAsync">Sign out</button>
+                </div>
+
+                <div class="action-row">
+                    <button type="button" class="ghost-button" @onclick="OpenBackoffice">Backoffice</button>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(AuthMessage))
+                {
+                    <p class="status-note compact-note">@AuthMessage</p>
+                }
+
+                <div class="two-factor-stack security-card">
+                    <div class="security-header">
+                        <div>
+                            <div class="mini-label">Security</div>
+                            <h3 class="security-title">Google Authenticator</h3>
+                        </div>
+                        <span class="status-pill @SecurityPillClass">@SecurityPillText</span>
+                    </div>
+
+                    @if (isTwoFactorEnabled)
+                    {
+                        <p class="security-copy">Your account is protected with a time-based one-time password. You can replace the device or disable 2FA from here.</p>
+
+                        <div class="action-row">
+                            <button type="button" class="ghost-button" @onclick="SetupTwoFactorAsync" disabled="@isBusy">Set up a new device</button>
+                        </div>
+
+                        <label class="field-label" for="disable-2fa-code">Authenticator code</label>
+                        <input id="disable-2fa-code" @bind="twoFactorCode" @bind:event="oninput" class="text-input" placeholder="Enter a fresh 6-digit code to disable 2FA" inputmode="numeric" />
+
+                        @if (!string.IsNullOrWhiteSpace(TwoFactorStatus))
+                        {
+                            <p class="status-note compact-note">@TwoFactorStatus</p>
+                        }
+
+                        <div class="action-row">
+                            <button type="button" class="ghost-button danger-button" @onclick="DisableTwoFactorAsync" disabled="@isBusy || string.IsNullOrWhiteSpace(twoFactorCode)">Disable 2FA</button>
+                        </div>
+                    }
+                    else if (twoFactorSetup is not null)
+                    {
+                        <div class="two-factor-card">
+                            <div class="mini-label">Step 1</div>
+                            <img class="qr-code" src="@GetQrCodeUrl(twoFactorSetup.AuthenticatorUri)" alt="Google Authenticator QR code" />
+                            <p class="qr-help">Scan this QR code in Google Authenticator, then type the current 6-digit code below to finish setup.</p>
+                        </div>
+
+                        <label class="field-label" for="enable-2fa-code">Authenticator code</label>
+                        <input id="enable-2fa-code" @bind="twoFactorCode" @bind:event="oninput" class="text-input" placeholder="Enter the code from Google Authenticator" inputmode="numeric" />
+
+                        @if (!string.IsNullOrWhiteSpace(TwoFactorStatus))
+                        {
+                            <p class="status-note compact-note">@TwoFactorStatus</p>
+                        }
+
+                        <div class="action-row">
+                            <button type="button" class="primary-action slim" @onclick="VerifyTwoFactorAsync" disabled="@isBusy">@(isBusy ? "Confirming..." : "Confirm setup")</button>
+                            <button type="button" class="ghost-button" @onclick="CancelTwoFactorSetup">Cancel</button>
+                        </div>
+                    }
+                    else
+                    {
+                        <p class="security-copy">Add a second layer of protection to your account with Google Authenticator.</p>
+
+                        @if (!string.IsNullOrWhiteSpace(TwoFactorStatus))
+                        {
+                            <p class="status-note compact-note">@TwoFactorStatus</p>
+                        }
+
+                        <button type="button" class="primary-action slim" @onclick="SetupTwoFactorAsync" disabled="@isBusy">Set up Google Authenticator</button>
+                    }
+                </div>
+            }
+        </section>
+    </aside>
+
+    <main class="chat-stage">
+        <header class="chat-header">
+            <div>
+                <div class="eyebrow">@AssistantProfile.WorkspaceEyebrow</div>
+                <h2>@ActiveConversation.Title</h2>
+            </div>
+            <div class="header-meta">
+                <span>@(IsAuthenticated ? AssistantProfile.HeaderSignedInLabel : AssistantProfile.HeaderAuthRequiredLabel)</span>
+                <span>@(isStreaming ? AssistantProfile.HeaderAnsweringLabel : AssistantProfile.HeaderReadyLabel)</span>
+            </div>
+        </header>
+
+        <section class="message-rail" @ref="messageRailRef">
+            @if (ActiveConversation.Messages.Count == 0)
+            {
+                <div class="empty-state">
+                    <div class="empty-state-card">
+                        <div class="eyebrow">@AssistantProfile.EmptyStateEyebrow</div>
+                        <h3>@AssistantProfile.EmptyStateTitle</h3>
+                        <p>@AssistantProfile.EmptyStateBody</p>
+                    </div>
+                </div>
+            }
+            else
+            {
+                @foreach (var message in ActiveConversation.Messages)
+                {
+                    <article class="message-card @message.Role">
+                        <div class="avatar">@(message.Role == "user" ? "You" : "AI")</div>
+                        <div class="message-body">
+                            <div class="message-role">@(message.Role == "user" ? CurrentUsernameOrFallback : AssistantProfile.AssistantName)</div>
+                            <div class="message-content">@RenderMessageContent(message)</div>
+                            <div class="message-timestamp">@FormatMessageTimestamp(message.Role, message.CreatedAt, message.LastUpdatedAt)</div>
+                            @if (message.Role == "assistant" && !message.IsStreaming)
+                            {
+                                <div class="message-actions">
+                                    <button type="button"
+                                            class="ghost-button message-action-button"
+                                            @onclick="() => CopyMessageAsync(message)">
+                                        @(copiedMessageId == message.Id ? "Copied" : "Copy")
+                                    </button>
+                                    <button type="button"
+                                            class="ghost-button message-action-button"
+                                            disabled="@isStreaming"
+                                            @onclick="() => ReportMessageAsync(message)">
+                                        @(reportedMessageId == message.Id ? "Reported" : "Report")
+                                    </button>
+                                    @if (IsProbablyIncomplete(message.Content))
+                                    {
+                                        <button type="button"
+                                                class="ghost-button message-action-button"
+                                                disabled="@isStreaming"
+                                                @onclick="() => ContinueResponseAsync(message)">
+                                            Continue
+                                        </button>
+                                    }
+                                </div>
+                            }
+                            @if (message.IsStreaming)
+                            {
+                                <span class="stream-dot"></span>
+                            }
+                        </div>
+                    </article>
+                }
+            }
+        </section>
+
+        <footer class="composer">
+            <div class="composer-topbar">
+                @if (!string.IsNullOrWhiteSpace(ChatStatus))
+                {
+                    <p class="status-note chat-status">@ChatStatus</p>
+                }
+
+                <button type="button" class="ghost-button jump-latest-button" @onclick="ScrollToLatestAsync">
+                    Latest
+                </button>
+            </div>
+
+            <form class="composer-form" @onsubmit="SendPromptSubmitAsync" @onsubmit:preventDefault="true">
+                <textarea @bind="promptText"
+                          @bind:event="oninput"
+                          @onkeydown="HandleComposerKeyDown"
+                          class="composer-input"
+                          placeholder="Message the assistant..."
+                          disabled="@(!IsAuthenticated || isStreaming)"
+                          rows="2"></textarea>
+                <div class="composer-bar">
+                    <span class="composer-tip">Enter sends. Shift+Enter adds a new line.</span>
+                    <button type="submit" class="primary-action" disabled="@(!IsAuthenticated || isStreaming || string.IsNullOrWhiteSpace(promptText))">
+                        @(isStreaming ? "Thinking..." : "Send")
+                    </button>
+                </div>
+            </form>
+        </footer>
+    </main>
+</div>
+
+@code {
+    private const string TokenStorageKey = "aichatapp.web.token";
+    private const string UserStorageKey = "aichatapp.web.username";
+    private const string ConversationStorageKey = "aichatapp.web.conversations";
+    private const int AutoScrollThreshold = 120;
+    private readonly List<ConversationViewModel> Conversations = [];
+    private ConversationViewModel ActiveConversation = new();
+    private readonly LoginFormModel loginModel = new();
+    private readonly RegisterFormModel registerModel = new();
+    private ElementReference messageRailRef;
+    private string? copiedMessageId;
+    private string? reportedMessageId;
+
+    private TwoFactorSetupResponse? twoFactorSetup;
+    private bool showRegister;
+    private bool isBusy;
+    private bool isStreaming;
+    private bool initialized;
+    private string? token;
+    private string? CurrentUsername;
+    private string promptText = string.Empty;
+    private string twoFactorCode = string.Empty;
+    private string? AuthMessage;
+    private string? ChatStatus;
+    private string? CompletionNotice;
+    private string? TwoFactorStatus;
+    private bool isTwoFactorEnabled;
+    private bool messageRailRegistered;
+    private bool pendingScrollToLatest;
+    private bool forceNextScrollToLatest;
+    private AssistantProfileOptions AssistantProfile => AssistantProfileOptionsAccessor.Value;
+
+    private bool IsAuthenticated => !string.IsNullOrWhiteSpace(token);
+    private string CurrentUsernameOrFallback => string.IsNullOrWhiteSpace(CurrentUsername) ? "You" : CurrentUsername;
+    private string SecurityPillText => isTwoFactorEnabled ? "Enabled" : twoFactorSetup is not null ? "Setup in progress" : "Not enabled";
+    private string SecurityPillClass => isTwoFactorEnabled ? "enabled" : twoFactorSetup is not null ? "pending" : "idle";
+
+    protected override void OnInitialized()
+    {
+        StartNewConversation();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !initialized)
+        {
+            initialized = true;
+            token = await BrowserStorage.GetAsync(TokenStorageKey);
+            CurrentUsername = await BrowserStorage.GetAsync(UserStorageKey);
+
+            if (IsAuthenticated)
+            {
+                await RestoreConversationsAsync();
+                AuthMessage = "Session restored. You can continue chatting or update 2FA.";
+                await RefreshTwoFactorStatusAsync();
+                QueueScrollToLatest(force: true);
+                await InvokeAsync(StateHasChanged);
+            }
+            else
+            {
+                ResetConversationWorkspace();
+            }
+        }
+
+        await EnsureMessageRailTrackingAsync();
+        await FlushPendingScrollAsync();
+    }
+
+    private void StartNewConversation()
+    {
+        var conversation = new ConversationViewModel();
+        Conversations.Insert(0, conversation);
+        ActiveConversation = conversation;
+        ChatStatus = null;
+        promptText = string.Empty;
+        QueueScrollToLatest(force: true);
+        PersistConversations();
+    }
+
+    private void SelectConversation(string conversationId)
+    {
+        var match = Conversations.FirstOrDefault(x => x.Id == conversationId);
+        if (match is not null)
+        {
+            ActiveConversation = match;
+            ChatStatus = null;
+            QueueScrollToLatest(force: true);
+            PersistConversations();
+        }
+    }
+
+    private void BeginConversationRename(ConversationViewModel conversation)
+    {
+        foreach (var item in Conversations)
+        {
+            item.IsRenaming = false;
+        }
+
+        conversation.DraftTitle = conversation.Title;
+        conversation.IsRenaming = true;
+    }
+
+    private void CancelConversationRename(ConversationViewModel conversation)
+    {
+        conversation.IsRenaming = false;
+        conversation.DraftTitle = conversation.Title;
+    }
+
+    private void SaveConversationTitle(ConversationViewModel conversation)
+    {
+        conversation.Title = string.IsNullOrWhiteSpace(conversation.DraftTitle)
+            ? "New conversation"
+            : conversation.DraftTitle.Trim();
+        conversation.HasCustomTitle = true;
+        conversation.IsRenaming = false;
+        PersistConversations();
+    }
+
+    private Task HandleRenameKeyDown(KeyboardEventArgs args, ConversationViewModel conversation)
+    {
+        if (args.Key == "Enter")
+        {
+            SaveConversationTitle(conversation);
+        }
+        else if (args.Key == "Escape")
+        {
+            CancelConversationRename(conversation);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private void DeleteConversation(ConversationViewModel conversation)
+    {
+        var wasActive = ActiveConversation.Id == conversation.Id;
+        Conversations.Remove(conversation);
+
+        if (Conversations.Count == 0)
+        {
+            var replacement = new ConversationViewModel();
+            Conversations.Add(replacement);
+            ActiveConversation = replacement;
+        }
+        else if (wasActive)
+        {
+            ActiveConversation = Conversations[0];
+        }
+
+        ChatStatus = null;
+        PersistConversations();
+    }
+
+    private async Task RegisterAsync()
+    {
+        await RunBusyAction(async cancellationToken =>
+        {
+            var message = await GatewayClient.RegisterAsync(new RegisterPayload
+            {
+                Username = registerModel.Username.Trim(),
+                Email = registerModel.Email.Trim(),
+                Password = registerModel.Password
+            }, cancellationToken);
+
+            AuthMessage = $"{message} You can sign in now.";
+            showRegister = false;
+            registerModel.Password = string.Empty;
+        });
+    }
+
+    private async Task LoginAsync()
+    {
+        await RunBusyAction(async cancellationToken =>
+        {
+            var issuedToken = await GatewayClient.LoginAsync(new LoginPayload
+            {
+                Username = loginModel.Username.Trim(),
+                Password = loginModel.Password,
+                OtpCode = string.IsNullOrWhiteSpace(loginModel.OtpCode) ? null : loginModel.OtpCode.Trim()
+            }, cancellationToken);
+
+            token = issuedToken;
+            CurrentUsername = loginModel.Username.Trim();
+            await BrowserStorage.SetAsync(TokenStorageKey, token);
+            await BrowserStorage.SetAsync(UserStorageKey, CurrentUsername);
+            await RestoreConversationsAsync();
+
+            loginModel.Password = string.Empty;
+            loginModel.OtpCode = string.Empty;
+            AuthMessage = AssistantProfile.SignedInMessage;
+            ChatStatus = null;
+            await RefreshTwoFactorStatusAsync(cancellationToken);
+        });
+    }
+
+    private async Task LogoutAsync()
+    {
+        token = null;
+        CurrentUsername = null;
+        twoFactorSetup = null;
+        twoFactorCode = string.Empty;
+        await BrowserStorage.RemoveAsync(TokenStorageKey);
+        await BrowserStorage.RemoveAsync(UserStorageKey);
+        ResetConversationWorkspace();
+        AuthMessage = "Signed out.";
+        ChatStatus = "Sign back in to stream through the authenticated flow.";
+        isTwoFactorEnabled = false;
+        TwoFactorStatus = null;
+    }
+
+    private async Task SetupTwoFactorAsync()
+    {
+        if (!EnsureAuthenticated())
+        {
+            return;
+        }
+
+        Logger.LogInformation("Enable 2FA setup clicked for user {User}.", CurrentUsernameOrFallback);
+        await RunBusyAction(async cancellationToken =>
+        {
+            twoFactorSetup = await GatewayClient.SetupTwoFactorAsync(token!, cancellationToken);
+            isTwoFactorEnabled = false;
+            twoFactorCode = string.Empty;
+            AuthMessage = "Authenticator setup generated.";
+            TwoFactorStatus = "QR code ready. Enter the current 6-digit code from Google Authenticator.";
+        });
+    }
+
+    private async Task VerifyTwoFactorAsync()
+    {
+        if (!EnsureAuthenticated())
+        {
+            return;
+        }
+
+        var normalizedCode = twoFactorCode?.Trim() ?? string.Empty;
+        Logger.LogInformation("Enable 2FA verify clicked for user {User}. Code length: {CodeLength}", CurrentUsernameOrFallback, normalizedCode.Length);
+        await RunBusyAction(async cancellationToken =>
+        {
+            var message = await GatewayClient.VerifyTwoFactorAsync(token!, normalizedCode, cancellationToken);
+            AuthMessage = message;
+            TwoFactorStatus = message;
+            isTwoFactorEnabled = true;
+            twoFactorSetup = null;
+            twoFactorCode = string.Empty;
+        });
+    }
+
+    private async Task DisableTwoFactorAsync()
+    {
+        if (!EnsureAuthenticated())
+        {
+            return;
+        }
+
+        Logger.LogInformation("Disable 2FA clicked for user {User}.", CurrentUsernameOrFallback);
+        await RunBusyAction(async cancellationToken =>
+        {
+            var normalizedCode = twoFactorCode?.Trim() ?? string.Empty;
+            var message = await GatewayClient.DisableTwoFactorAsync(token!, normalizedCode, cancellationToken);
+            AuthMessage = message;
+            TwoFactorStatus = message;
+            isTwoFactorEnabled = false;
+            twoFactorCode = string.Empty;
+            twoFactorSetup = null;
+        });
+    }
+
+    private void CancelTwoFactorSetup()
+    {
+        twoFactorSetup = null;
+        twoFactorCode = string.Empty;
+        TwoFactorStatus = null;
+    }
+
+    private async Task SendPromptAsync()
+    {
+        if (!EnsureAuthenticated())
+        {
+            return;
+        }
+
+        var trimmedPrompt = promptText.Trim();
+        if (string.IsNullOrWhiteSpace(trimmedPrompt))
+        {
+            return;
+        }
+
+        promptText = string.Empty;
+        ChatStatus = null;
+        isStreaming = true;
+
+        var userMessage = new MessageViewModel
+        {
+            Role = "user",
+            Content = trimmedPrompt,
+            CreatedAt = DateTimeOffset.Now,
+            LastUpdatedAt = DateTimeOffset.Now
+        };
+
+        var assistantMessage = new MessageViewModel
+        {
+            Role = "assistant",
+            Content = string.Empty,
+            IsStreaming = true,
+            CreatedAt = DateTimeOffset.Now,
+            LastUpdatedAt = DateTimeOffset.Now
+        };
+
+        ActiveConversation.Messages.Add(userMessage);
+        ActiveConversation.Messages.Add(assistantMessage);
+        if (!ActiveConversation.HasCustomTitle && IsDefaultConversationTitle(ActiveConversation.Title))
+        {
+            ActiveConversation.Title = BuildConversationTitle(trimmedPrompt);
+        }
+        QueueScrollToLatest(force: true);
+        await PersistConversationsAsync();
+        StateHasChanged();
+
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+
+            await foreach (var streamEvent in GatewayClient.StreamChatAsync(
+                token!,
+                new ChatRequestPayload
+                {
+                    ChatId = ActiveConversation.Id,
+                    User = CurrentUsernameOrFallback,
+                    Prompt = trimmedPrompt,
+                    ContextMode = "documentation"
+                },
+                cts.Token))
+            {
+                if (streamEvent.EventName == "token")
+                {
+                    assistantMessage.Content += streamEvent.Content;
+                    QueueScrollToLatest();
+                }
+                else if (streamEvent.EventName == "complete")
+                {
+                    assistantMessage.Content = streamEvent.Content;
+                    assistantMessage.IsStreaming = false;
+                    assistantMessage.LastUpdatedAt = DateTimeOffset.Now;
+                    ChatStatus = AssistantProfile.ResponseCompleteStatus;
+                    QueueScrollToLatest();
+                    await ShowCompletionNotificationAsync(AssistantProfile.AnswerCompleteNotification);
+                }
+
+                await InvokeAsync(StateHasChanged);
+            }
+
+            assistantMessage.IsStreaming = false;
+            await PersistConversationsAsync();
+        }
+        catch (Exception ex)
+        {
+            assistantMessage.IsStreaming = false;
+            assistantMessage.Content = string.IsNullOrWhiteSpace(assistantMessage.Content)
+                ? "I hit an error before the response could finish streaming."
+                : assistantMessage.Content;
+            ChatStatus = ex.Message;
+            await PersistConversationsAsync();
+        }
+        finally
+        {
+            isStreaming = false;
+            await PersistConversationsAsync();
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private Task SendPromptSubmitAsync()
+        => SendPromptAsync();
+
+    private async Task HandleComposerKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter" && !args.ShiftKey && !isStreaming && !string.IsNullOrWhiteSpace(promptText))
+        {
+            await SendPromptAsync();
+        }
+    }
+
+    private async Task ScrollToLatestAsync()
+    {
+        await JS.InvokeVoidAsync("aiChatUi.scrollToBottom", messageRailRef, true, true);
+    }
+
+    private MarkupString RenderMessageContent(MessageViewModel message)
+    {
+        var normalized = NormalizeMessageForDisplay(message);
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return new MarkupString("<p></p>");
+        }
+
+        var blocks = normalized
+            .Split($"{Environment.NewLine}{Environment.NewLine}", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        var html = new StringBuilder();
+        foreach (var block in blocks)
+        {
+            if (TryRenderUnorderedList(block, html) || TryRenderOrderedList(block, html))
+            {
+                continue;
+            }
+
+            html.Append("<p>");
+            html.Append(WebUtility.HtmlEncode(block).Replace(Environment.NewLine, "<br />"));
+            html.Append("</p>");
+        }
+
+        return new MarkupString(html.ToString());
+    }
+
+    private static string NormalizeMessageForDisplay(MessageViewModel message)
+    {
+        var content = (message.Content ?? string.Empty).Replace("\r\n", "\n").Trim();
+        if (string.IsNullOrWhiteSpace(content) || !string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase))
+        {
+            return content.Replace("\n", Environment.NewLine);
+        }
+
+        var bulletSeparatorCount = System.Text.RegularExpressions.Regex.Matches(content, @"\s-\s").Count;
+        if (bulletSeparatorCount >= 2 && !content.Contains("\n- ", StringComparison.Ordinal))
+        {
+            content = System.Text.RegularExpressions.Regex.Replace(content, @"\s-\s", "\n- ");
+        }
+
+        if (!content.Contains('\n')
+            && System.Text.RegularExpressions.Regex.IsMatch(content, @"\b\d+\.\s+\S+")
+            && System.Text.RegularExpressions.Regex.Matches(content, @"\b\d+\.\s+").Count >= 2)
+        {
+            content = System.Text.RegularExpressions.Regex.Replace(content, @"\s(?=\d+\.\s)", "\n");
+        }
+
+        return content.Replace("\n", Environment.NewLine);
+    }
+
+    private static bool TryRenderUnorderedList(string block, StringBuilder html)
+    {
+        var lines = block.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (lines.Length < 2 || lines.Count(line => line.StartsWith("- ", StringComparison.Ordinal)) < 2)
+        {
+            return false;
+        }
+
+        var introLines = lines.TakeWhile(line => !line.StartsWith("- ", StringComparison.Ordinal)).ToList();
+        var itemLines = lines.Skip(introLines.Count).ToList();
+        if (itemLines.Count < 2 || itemLines.Any(line => !line.StartsWith("- ", StringComparison.Ordinal)))
+        {
+            return false;
+        }
+
+        if (introLines.Count > 0)
+        {
+            html.Append("<p>");
+            html.Append(WebUtility.HtmlEncode(string.Join(" ", introLines)));
+            html.Append("</p>");
+        }
+
+        html.Append("<ul class=\"message-list\">");
+        foreach (var item in itemLines)
+        {
+            html.Append("<li>");
+            html.Append(WebUtility.HtmlEncode(item[2..].Trim()));
+            html.Append("</li>");
+        }
+        html.Append("</ul>");
+        return true;
+    }
+
+    private static bool TryRenderOrderedList(string block, StringBuilder html)
+    {
+        var lines = block.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (lines.Length < 2)
+        {
+            return false;
+        }
+
+        var introLines = lines.TakeWhile(line => !System.Text.RegularExpressions.Regex.IsMatch(line, @"^\d+\.\s+")).ToList();
+        var itemLines = lines.Skip(introLines.Count).ToList();
+        if (itemLines.Count < 2 || itemLines.Any(line => !System.Text.RegularExpressions.Regex.IsMatch(line, @"^\d+\.\s+")))
+        {
+            return false;
+        }
+
+        if (introLines.Count > 0)
+        {
+            html.Append("<p>");
+            html.Append(WebUtility.HtmlEncode(string.Join(" ", introLines)));
+            html.Append("</p>");
+        }
+
+        html.Append("<ol class=\"message-list ordered\">");
+        foreach (var item in itemLines)
+        {
+            var cleaned = System.Text.RegularExpressions.Regex.Replace(item, @"^\d+\.\s+", string.Empty);
+            html.Append("<li>");
+            html.Append(WebUtility.HtmlEncode(cleaned.Trim()));
+            html.Append("</li>");
+        }
+        html.Append("</ol>");
+        return true;
+    }
+
+    private async Task CopyMessageAsync(MessageViewModel message)
+    {
+        await JS.InvokeVoidAsync("aiChatUi.copyText", message.Content);
+        copiedMessageId = message.Id;
+        await InvokeAsync(StateHasChanged);
+        _ = ClearCopiedStateAsync(message.Id);
+    }
+
+    private async Task ReportMessageAsync(MessageViewModel message)
+    {
+        if (!EnsureAuthenticated())
+        {
+            return;
+        }
+
+        var previousUserMessage = FindPreviousUserMessage(message)?.Content ?? string.Empty;
+
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            var response = await GatewayClient.ReportResponseAsync(
+                token!,
+                new ReportChatResponsePayload
+                {
+                    ChatId = ActiveConversation.Id,
+                    MessageId = message.Id,
+                    Username = CurrentUsernameOrFallback,
+                    UserPrompt = previousUserMessage,
+                    AssistantResponse = message.Content,
+                    ContextMode = "documentation",
+                    WasUpdated = (message.LastUpdatedAt ?? message.CreatedAt) > message.CreatedAt.AddSeconds(1)
+                },
+                cts.Token);
+
+            reportedMessageId = message.Id;
+            ChatStatus = response;
+            await ShowCompletionNotificationAsync(AssistantProfile.ReportSavedNotification);
+            await InvokeAsync(StateHasChanged);
+            _ = ClearReportedStateAsync(message.Id);
+        }
+        catch (Exception ex)
+        {
+            ChatStatus = ex.Message;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task ContinueResponseAsync(MessageViewModel message)
+    {
+        if (!EnsureAuthenticated() || isStreaming)
+        {
+            return;
+        }
+
+        var originalContent = message.Content;
+        var sourceQuestion = FindPreviousUserMessage(message)?.Content ?? string.Empty;
+
+        isStreaming = true;
+        message.IsStreaming = true;
+        ChatStatus = "Continuing response...";
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+            var response = await GatewayClient.ContinueAsync(
+                token!,
+                new ContinueChatRequestPayload
+                {
+                    ChatId = ActiveConversation.Id,
+                    User = CurrentUsernameOrFallback,
+                    OriginalPrompt = sourceQuestion,
+                    PartialResponse = originalContent,
+                    ContextMode = "documentation"
+                },
+                cts.Token);
+
+            message.Content = MergeContinuation(originalContent, response.Response);
+            message.LastUpdatedAt = DateTimeOffset.Now;
+            ChatStatus = AssistantProfile.ResponseCompleteStatus;
+            QueueScrollToLatest(force: true);
+            await ShowCompletionNotificationAsync(AssistantProfile.ContinuationCompleteNotification);
+        }
+        catch (Exception ex)
+        {
+            message.Content = originalContent;
+            ChatStatus = ex.Message;
+        }
+        finally
+        {
+            isStreaming = false;
+            message.IsStreaming = false;
+            await PersistConversationsAsync();
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void QueueScrollToLatest(bool force = false)
+    {
+        pendingScrollToLatest = true;
+        forceNextScrollToLatest = forceNextScrollToLatest || force;
+    }
+
+    private async Task EnsureMessageRailTrackingAsync()
+    {
+        if (messageRailRegistered)
+        {
+            return;
+        }
+
+        await JS.InvokeVoidAsync("aiChatUi.registerMessageRail", messageRailRef, AutoScrollThreshold);
+        messageRailRegistered = true;
+    }
+
+    private async Task FlushPendingScrollAsync()
+    {
+        if (!pendingScrollToLatest)
+        {
+            return;
+        }
+
+        if (forceNextScrollToLatest)
+        {
+            await JS.InvokeVoidAsync("aiChatUi.scrollToBottom", messageRailRef, true, false);
+        }
+        else
+        {
+            await JS.InvokeAsync<bool>("aiChatUi.scrollToBottomIfFollowing", messageRailRef);
+        }
+
+        pendingScrollToLatest = false;
+        forceNextScrollToLatest = false;
+    }
+
+    private bool EnsureAuthenticated()
+    {
+        if (IsAuthenticated)
+        {
+            return true;
+        }
+
+        AuthMessage = AssistantProfile.AuthRequiredMessage;
+        return false;
+    }
+
+    private async Task RefreshTwoFactorStatusAsync(CancellationToken cancellationToken = default)
+    {
+        if (!IsAuthenticated)
+        {
+            isTwoFactorEnabled = false;
+            return;
+        }
+
+        try
+        {
+            isTwoFactorEnabled = await GatewayClient.GetTwoFactorStatusAsync(token!, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Unable to refresh 2FA status.");
+        }
+    }
+
+    private async Task RunBusyAction(Func<CancellationToken, Task> action)
+    {
+        isBusy = true;
+        AuthMessage = null;
+        TwoFactorStatus = null;
+
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            await action(cts.Token);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "UI action failed.");
+            AuthMessage = ex.Message;
+        }
+        finally
+        {
+            isBusy = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private static string BuildConversationTitle(string prompt)
+    {
+        var title = prompt.Length > 38 ? $"{prompt[..38]}..." : prompt;
+        return string.IsNullOrWhiteSpace(title) ? "New conversation" : title;
+    }
+
+    private static bool IsProbablyIncomplete(string content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            return false;
+        }
+
+        var trimmed = content.Trim();
+        if (trimmed.Length < 24)
+        {
+            return true;
+        }
+
+        if (trimmed.EndsWith(":") || trimmed.EndsWith("-") || trimmed.EndsWith(",") || trimmed.EndsWith("..."))
+        {
+            return true;
+        }
+
+        return System.Text.RegularExpressions.Regex.IsMatch(trimmed, @"\b(and|or|with|for|to|of|in)\s*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)
+               || !System.Text.RegularExpressions.Regex.IsMatch(trimmed, @"[.!?]$");
+    }
+
+    private MessageViewModel? FindPreviousUserMessage(MessageViewModel assistantMessage)
+    {
+        var index = ActiveConversation.Messages.FindIndex(x => x.Id == assistantMessage.Id);
+        if (index <= 0)
+        {
+            return null;
+        }
+
+        for (var i = index - 1; i >= 0; i--)
+        {
+            if (ActiveConversation.Messages[i].Role == "user")
+            {
+                return ActiveConversation.Messages[i];
+            }
+        }
+
+        return null;
+    }
+
+    private static string MergeContinuation(string original, string continuation)
+    {
+        if (string.IsNullOrWhiteSpace(continuation))
+        {
+            return original;
+        }
+
+        var cleanedContinuation = continuation.Trim();
+        if (cleanedContinuation.StartsWith(original, StringComparison.OrdinalIgnoreCase))
+        {
+            cleanedContinuation = cleanedContinuation[original.Length..].TrimStart();
+        }
+
+        var overlap = FindOverlapLength(original, cleanedContinuation);
+        if (overlap > 0)
+        {
+            cleanedContinuation = cleanedContinuation[overlap..].TrimStart();
+        }
+
+        if (string.IsNullOrWhiteSpace(cleanedContinuation))
+        {
+            return original;
+        }
+
+        var separator = string.IsNullOrWhiteSpace(original) || char.IsWhiteSpace(original[^1]) ? string.Empty : " ";
+        return $"{original}{separator}{cleanedContinuation}";
+    }
+
+    private static int FindOverlapLength(string original, string continuation)
+    {
+        var max = Math.Min(original.Length, continuation.Length);
+        for (var length = max; length >= 12; length--)
+        {
+            if (original.EndsWith(continuation[..length], StringComparison.OrdinalIgnoreCase))
+            {
+                return length;
+            }
+        }
+
+        return 0;
+    }
+
+    private async Task ClearCopiedStateAsync(string messageId)
+    {
+        await Task.Delay(1800);
+        if (copiedMessageId == messageId)
+        {
+            copiedMessageId = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task ClearReportedStateAsync(string messageId)
+    {
+        await Task.Delay(2200);
+        if (reportedMessageId == messageId)
+        {
+            reportedMessageId = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private Task ShowCompletionNotificationAsync(string message)
+    {
+        CompletionNotice = message;
+        _ = NotifyCompletionAsync(message);
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private async Task NotifyCompletionAsync(string message)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("aiChatUi.notifyCompletion", message);
+        }
+        catch
+        {
+        }
+
+        await Task.Delay(2600);
+        if (CompletionNotice == message)
+        {
+            CompletionNotice = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private static bool IsDefaultConversationTitle(string title)
+        => string.IsNullOrWhiteSpace(title) || string.Equals(title, "New conversation", StringComparison.Ordinal);
+
+    private void OpenBackoffice()
+        => Navigation.NavigateTo("/backoffice");
+
+    private void HandleBrandTitleClick(MouseEventArgs args)
+    {
+        if (args.ShiftKey)
+        {
+            Navigation.NavigateTo("/backoffice");
+        }
+    }
+
+    private async Task RestoreConversationsAsync()
+    {
+        var state = await BrowserStorage.GetJsonAsync<ConversationWorkspaceState>(ConversationStorageKey);
+        if (state?.Conversations is null || state.Conversations.Count == 0)
+        {
+            if (Conversations.Count == 0)
+            {
+                ResetConversationWorkspace();
+            }
+            return;
+        }
+
+        Conversations.Clear();
+        foreach (var conversation in state.Conversations)
+        {
+            conversation.IsRenaming = false;
+            conversation.DraftTitle = conversation.Title;
+            conversation.Messages ??= [];
+
+            foreach (var message in conversation.Messages)
+            {
+                message.IsStreaming = false;
+                if (message.CreatedAt == default)
+                {
+                    message.CreatedAt = DateTimeOffset.Now;
+                }
+                if (message.LastUpdatedAt == default || message.LastUpdatedAt is null)
+                {
+                    message.LastUpdatedAt = message.CreatedAt;
+                }
+            }
+
+            Conversations.Add(conversation);
+        }
+
+        ActiveConversation = Conversations.FirstOrDefault(x => x.Id == state.ActiveConversationId) ?? Conversations[0];
+        QueueScrollToLatest(force: true);
+    }
+
+    private void ResetConversationWorkspace()
+    {
+        Conversations.Clear();
+        ActiveConversation = new ConversationViewModel();
+        Conversations.Add(ActiveConversation);
+        ChatStatus = null;
+        promptText = string.Empty;
+    }
+
+    private void PersistConversations()
+    {
+        if (!initialized)
+        {
+            return;
+        }
+
+        _ = PersistConversationsAsync();
+    }
+
+    private ValueTask PersistConversationsAsync()
+    {
+        if (!initialized)
+        {
+            return ValueTask.CompletedTask;
+        }
+
+        var state = new ConversationWorkspaceState
+        {
+            ActiveConversationId = ActiveConversation.Id,
+            Conversations = Conversations
+        };
+
+        return BrowserStorage.SetJsonAsync(ConversationStorageKey, state);
+    }
+
+    private static string GetQrCodeUrl(string authenticatorUri)
+        => $"https://api.qrserver.com/v1/create-qr-code/?size=220x220&data={Uri.EscapeDataString(authenticatorUri)}";
+
+    private static string FormatMessageTimestamp(string role, DateTimeOffset createdAt, DateTimeOffset? lastUpdatedAt)
+    {
+        var baseLocal = createdAt.ToLocalTime();
+        var updatedLocal = (lastUpdatedAt ?? createdAt).ToLocalTime();
+        var wasUpdated = updatedLocal > baseLocal.AddSeconds(1);
+
+        if (wasUpdated)
+        {
+            return $"Updated {updatedLocal:MMM d, yyyy h:mm tt}";
+        }
+
+        var prefix = string.Equals(role, "user", StringComparison.OrdinalIgnoreCase) ? "Sent" : "Received";
+        return $"{prefix} {baseLocal:MMM d, yyyy h:mm tt}";
+    }
+}

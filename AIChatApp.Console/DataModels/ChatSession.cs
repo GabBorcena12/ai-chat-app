@@ -80,47 +80,15 @@ namespace AIChatApp.Console.DataModels
         public bool IsAllowedTopic(string input)
         {
             var paths = new ChatPaths();
-            string filePath = paths.DisAllowedTopicsFile;
-
-            if (!File.Exists(filePath))
-            {
-                System.Console.ForegroundColor = ConsoleColor.Red;
-                System.Console.WriteLine($"ERROR: Disallowed topics file not found: {filePath}");
-                System.Console.ResetColor();
-                return true; // default to allowed if no disallowed list
-            }
-
-            var disallowedTopics = File.ReadAllLines(filePath)
-                                       .Select(l => l.Trim().ToLower())
-                                       .Where(l => !string.IsNullOrWhiteSpace(l) && !l.StartsWith("#"))
-                                       .ToArray();
+            var disallowedTopics = paths.LoadDisallowedTopics()
+                .Select(l => l.Trim().ToLowerInvariant())
+                .Where(l => !string.IsNullOrWhiteSpace(l))
+                .ToArray();
 
             input = input.ToLower().Trim();
 
             // return true if input does NOT contain any disallowed topic
             return !disallowedTopics.Any(t => input.Contains(t));
         }
-
-        //public bool IsAllowedTopic(string input)
-        //{
-        //    string projectRoot = Directory.GetParent(AppContext.BaseDirectory).Parent.Parent.Parent.FullName;
-        //    string filePath = Path.Combine(projectRoot, "Data", "allowed_topics.txt");
-
-        //    if (!File.Exists(filePath))
-        //    {
-        //        Console.ForegroundColor = ConsoleColor.Red;
-        //        Console.WriteLine($"ERROR: Allowed topics file not found: {filePath}");
-        //        Console.ResetColor();
-        //        return false;
-        //    }
-
-        //    var allowedTopics = File.ReadAllLines(filePath)
-        //                            .Select(l => l.Trim())
-        //                            .Where(l => !string.IsNullOrWhiteSpace(l) && !l.StartsWith("#"))
-        //                            .ToArray();
-
-        //    input = input.ToLower().Trim();
-        //    return allowedTopics.Any(t => input.Contains(t));
-        //}
     }
 }

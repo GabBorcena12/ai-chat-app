@@ -1,0 +1,131 @@
+{
+    "topics":  [
+                   {
+                       "topic":  "purpose",
+                       "keywords":  [
+                                        "purpose",
+                                        "project purpose",
+                                        "what is this project",
+                                        "what is aichatapp for",
+                                        "what does this project do"
+                                    ],
+                       "summary":  "AIChatApp is a local .NET solution for authenticated chat, project documentation help, and local LLM-backed responses.",
+                       "context":  [
+                                       "- AIChatApp is a local .NET solution for authenticated chat, project documentation help, and local LLM-backed responses.",
+                                       "- The documentation assistant should answer at a high level first and stay short unless the user asks for more detail."
+                                   ]
+                   },
+                   {
+                       "topic":  "solution architecture",
+                       "keywords":  [
+                                        "structure",
+                                        "architecture",
+                                        "solution structure",
+                                        "solution architecture",
+                                        "project structure",
+                                        "project architecture",
+                                        "frontend",
+                                        "backend",
+                                        "gateway",
+                                        "core",
+                                        "shared infrastructure"
+                                    ],
+                       "summary":  "The solution is split into a frontend, an API, a gateway, and shared core infrastructure so responsibilities stay separated.",
+                       "context":  [
+                                       "- AIChatApp.Web is the Blazor frontend for login, 2FA management, chat UI, and streaming chat interactions.",
+                                       "- AIChatApp.Gateway is the reverse proxy entry point for auth, chat, and chat history routes.",
+                                       "- AIChatApp.API handles authentication, chat orchestration, prompt building, local model execution, and chat history persistence.",
+                                       "- AIChatApp.Core contains shared entities, DbContexts, middleware, assistant profile settings, config helpers, and path helpers.",
+                                       "- AIChatApp.Console is the local console client for direct testing."
+                                   ]
+                   },
+                   {
+                       "topic":  "chat flow",
+                       "keywords":  [
+                                        "chat flow",
+                                        "request flow",
+                                        "frontend to model",
+                                        "web app to model",
+                                        "chat request flow",
+                                        "streaming flow"
+                                    ],
+                       "summary":  "The web app sends requests to the gateway, the gateway forwards them to the API, and the API runs the local model and returns the answer.",
+                       "context":  [
+                                       "- The web app sends requests to the gateway.",
+                                       "- The gateway forwards requests to the API.",
+                                       "- The API builds prompts, runs the local model, and returns the answer.",
+                                       "- ask-stream streams token chunks and a final complete event.",
+                                       "- ask-ai returns a non-streaming JSON response.",
+                                       "- ask-continue finishes a response that was cut off."
+                                   ]
+                   },
+                   {
+                       "topic":  "authentication and 2fa",
+                       "keywords":  [
+                                        "auth",
+                                        "authentication",
+                                        "jwt",
+                                        "2fa",
+                                        "otp",
+                                        "google authenticator",
+                                        "setup 2fa",
+                                        "disable 2fa",
+                                        "totp"
+                                    ],
+                       "summary":  "Users sign in with credentials, receive a JWT, and can enable Google Authenticator 2FA using a current 6-digit TOTP code.",
+                       "context":  [
+                                       "- Users sign in with credentials and receive a JWT for protected requests.",
+                                       "- Gateway-protected calls also require X-Api-Client and X-Api-Key.",
+                                       "- 2FA setup returns AuthenticatorUri or SharedKey for Google Authenticator.",
+                                       "- 2FA verification uses a current 6-digit TOTP code with a 30-second window.",
+                                       "- Future sign-ins include OtpCode after 2FA is enabled."
+                                   ]
+                   },
+                   {
+                       "topic":  "configuration and model",
+                       "keywords":  [
+                                        "config",
+                                        "configuration",
+                                        "appsettings",
+                                        "local model",
+                                        "llm",
+                                        "gguf",
+                                        "model file",
+                                        "context size",
+                                        "gateway base url",
+                                        "api key",
+                                        "assistant profile"
+                                    ],
+                       "summary":  "The app uses config to select the assistant profile, local GGUF model, context size, and frontend gateway settings.",
+                       "context":  [
+                                       "- The active assistant is selected through AssistantProfile.",
+                                       "- The local model is configured through LocalModel in API config.",
+                                       "- LocalModel:FileName selects the GGUF model file from AIChatApp.Core/Models.",
+                                       "- LocalModel:ContextSize controls the local model context window.",
+                                       "- Frontend:GatewayBaseUrl, Frontend:ApiClientName, and Frontend:ApiKey are used by the web app for gateway calls."
+                                   ]
+                   },
+                   {
+                       "topic":  "operations and troubleshooting",
+                       "keywords":  [
+                                        "user secrets",
+                                        "environment variables",
+                                        "docker",
+                                        "slow responses",
+                                        "cut off responses",
+                                        "troubleshooting",
+                                        "invalid token",
+                                        "401"
+                                    ],
+                       "summary":  "Docker runs the solution as containers, and common runtime issues include stale JWTs, large prompts, retries, and token or stop-limit cutoffs.",
+                       "context":  [
+                                       "- Use user secrets for local sensitive values.",
+                                       "- Use environment variables for Docker or deployed environments.",
+                                       "- Docker lets the solution components run as containers and communicate over the compose network instead of local process ports.",
+                                       "- Slow responses usually come from model generation time, large prompts, retries, or timeout behavior.",
+                                       "- Cut-off responses usually come from token limits, stop conditions, or incomplete generation handling.",
+                                       "- 401 invalid_token usually means the JWT is stale or no longer matches the active configuration."
+                                   ]
+                   }
+               ]
+}

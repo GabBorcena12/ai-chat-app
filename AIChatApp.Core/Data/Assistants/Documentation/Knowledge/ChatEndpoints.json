@@ -1,0 +1,3 @@
+{
+    "content":  "AIChatApp Chat Endpoint Reference\n\nask-stream:\n- Route: POST /api/chat/ask-stream\n- Type: Server-Sent Events\n- Behavior: emits token events while generating, then a final complete event\n- Timeout target: controller uses a 5-minute server-side timeout\n\nask-ai:\n- Route: POST /api/chat/ask-ai\n- Type: JSON response\n- Behavior: returns a prompt and response payload\n\nask-continue:\n- Route: POST /api/chat/ask-continue\n- Type: JSON response\n- Behavior: finishes a response that was cut off\n\nGateway route mapping:\n- /chat/* is forwarded to /api/chat/*\n\nChat request fields:\n- chatId\n- user\n- prompt\n- contextMode\n\nask-continue request fields:\n- chatId\n- user\n- originalPrompt\n- partialResponse\n- contextMode"
+}

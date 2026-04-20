@@ -24,7 +24,12 @@ namespace AIChatApp.Core.Middleware
             }
             catch (OperationCanceledException ex)
             {
-                _logger.LogWarning(ex.Message, "Request was canceled or timed out.");
+                _logger.LogWarning(ex, "Request was canceled or timed out.");
+
+                if (context.RequestAborted.IsCancellationRequested || context.Response.HasStarted)
+                {
+                    return;
+                }
 
                 await WriteErrorResponse(
                     context,

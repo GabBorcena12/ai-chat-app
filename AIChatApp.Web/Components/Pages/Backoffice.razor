@@ -1,0 +1,1261 @@
+@page "/backoffice"
+@rendermode InteractiveServer
+@using System.Text.Json
+@inject AIChatApp.Web.Services.AIChatGatewayClient GatewayClient
+@inject AIChatApp.Web.Services.BrowserStorageService BrowserStorage
+@inject IJSRuntime JS
+
+<PageTitle>Backoffice</PageTitle>
+
+<div class="backoffice-page">
+    @if (!string.IsNullOrWhiteSpace(CompletionNotice))
+    {
+        <div class="completion-toast" role="status" aria-live="polite">@CompletionNotice</div>
+    }
+
+    <header class="backoffice-header">
+        <div>
+            <div class="eyebrow">Admin Workspace</div>
+            <h1>Knowledge and Validation Backoffice</h1>
+            <p class="backoffice-copy">Review reported answers, publish validated content, and keep prompts and knowledge in the database instead of code files.</p>
+        </div>
+        <div class="backoffice-session">
+            @if (IsAuthenticated)
+            {
+                <span class="status-pill enabled">Signed in</span>
+                <strong>@CurrentUsernameOrFallback</strong>
+            }
+            else
+            {
+                <span class="status-pill idle">Signed out</span>
+                <strong>Authentication required</strong>
+            }
+        </div>
+    </header>
+
+    @if (!initialized)
+    {
+        <p class="status-note">Loading backoffice...</p>
+    }
+    else if (!IsAuthenticated)
+    {
+        <p class="status-note">Sign in first to open the backoffice.</p>
+    }
+    else
+    {
+        @if (!string.IsNullOrWhiteSpace(StatusMessage))
+        {
+            <p class="status-note @(StatusIsError ? "error" : "success")">@StatusMessage</p>
+        }
+
+        <section class="backoffice-help-panel">
+            <div>
+                <div class="eyebrow">How It Works</div>
+                <h2>Backoffice Workflow</h2>
+            </div>
+            <ol class="backoffice-help-list">
+                <li>Review a reported answer in `Reported Responses`.</li>
+                <li>Correct the validated question and validated response.</li>
+                <li>Choose a review status and category.</li>
+                <li>If the fix should improve future answers, enable `Promote to knowledge`.</li>
+                <li>If it should go live immediately, also enable `Publish immediately`.</li>
+                <li>Use `Prompt Templates` for global behavior and `Knowledge Entries` for reusable content.</li>
+            </ol>
+        </section>
+
+        <div class="backoffice-layout">
+            <aside class="backoffice-sidebar">
+                <button type="button"
+                        class="backoffice-nav-button @(ActiveSection == BackofficeSection.Reports ? "active" : null)"
+                        @onclick="() => SetSection(BackofficeSection.Reports)">
+                    <span>Reported Responses</span>
+                    <small>Validate and promote reported answers</small>
+                </button>
+                <button type="button"
+                        class="backoffice-nav-button @(ActiveSection == BackofficeSection.Prompts ? "active" : null)"
+                        @onclick="() => SetSection(BackofficeSection.Prompts)">
+                    <span>Prompt Templates</span>
+                    <small>Control assistant behavior</small>
+                </button>
+                <button type="button"
+                        class="backoffice-nav-button @(ActiveSection == BackofficeSection.Knowledge ? "active" : null)"
+                        @onclick="() => SetSection(BackofficeSection.Knowledge)">
+                    <span>Knowledge Entries</span>
+                    <small>Manage quick answers and references</small>
+                </button>
+                <button type="button"
+                        class="backoffice-nav-button @(ActiveSection == BackofficeSection.Users ? "active" : null)"
+                        @onclick="() => SetSection(BackofficeSection.Users)">
+                    <span>User Management</span>
+                    <small>Create users and manage backoffice roles</small>
+                </button>
+            </aside>
+
+            <section class="backoffice-content">
+                @if (ActiveSection == BackofficeSection.Reports)
+                {
+                    <section class="backoffice-section">
+                        <div class="backoffice-section-header">
+                            <div>
+                                <h2>Reported Responses</h2>
+                                <p>Validate reported chat answers and optionally promote them into published knowledge.</p>
+                            </div>
+                            <button type="button" class="ghost-button" @onclick="LoadReportsAsync" disabled="@isBusy">Refresh</button>
+                        </div>
+
+                        <div class="backoffice-filters">
+                            <select class="text-input" @bind="ReportStatusFilter" title="Limit the list to one report status.">
+                                @foreach (var option in ReportStatusFilterOptions)
+                                {
+                                    <option value="@option.Value">@option.Label</option>
+                                }
+                            </select>
+                        </div>
+
+                        @if (FilteredReports.Count == 0)
+                        {
+                            <p class="backoffice-empty">No reported responses found for this filter.</p>
+                        }
+                        else
+                        {
+                            <p class="backoffice-results-meta">
+                                Showing @FilteredReports.Count reported response@(FilteredReports.Count == 1 ? string.Empty : "s")
+                            </p>
+
+                            @foreach (var report in FilteredReports)
+                            {
+                                <article class="backoffice-card backoffice-list-card">
+                                    <div class="backoffice-card-header">
+                                        <strong>@GetReportTitle(report)</strong>
+                                        <span>#@report.Id</span>
+                                        <span>@report.Username</span>
+                                        <span>@GetReportStatusLabel(report)</span>
+                                        @if (!string.IsNullOrWhiteSpace(report.ReviewCategory))
+                                        {
+                                            <span>@report.ReviewCategory</span>
+                                        }
+                                        <span>@FormatReportTimestamp(report)</span>
+                                    </div>
+                                    <p class="backoffice-list-summary">@GetReportPreview(report)</p>
+                                    <div class="backoffice-inline-options">
+                                        <span>@(report.PromotedKnowledgeEntryId.HasValue ? $"Promoted to knowledge #{report.PromotedKnowledgeEntryId.Value}" : "Not promoted")</span>
+                                        @if (!string.IsNullOrWhiteSpace(report.ReviewedBy))
+                                        {
+                                            <span>Reviewed by @report.ReviewedBy</span>
+                                        }
+                                    </div>
+                                    <div class="backoffice-actions">
+                                        <button type="button" class="ghost-button" @onclick="() => OpenReviewModal(report)">Review</button>
+                                    </div>
+                                </article>
+                            }
+                        }
+                    </section>
+                }
+                else if (ActiveSection == BackofficeSection.Prompts)
+                {
+                    <section class="backoffice-section">
+                        <div class="backoffice-section-header">
+                            <div>
+                                <h2>Prompt Templates</h2>
+                                <p>Edit the published prompt scaffolding stored in the database.</p>
+                            </div>
+                            <button type="button" class="ghost-button" @onclick="LoadPromptTemplatesAsync" disabled="@isBusy">Refresh</button>
+                        </div>
+
+                        @foreach (var template in PromptTemplates)
+                        {
+                            var draft = GetPromptDraft(template);
+                            <article class="backoffice-card">
+                                <div class="backoffice-card-header">
+                                    <strong>@template.TemplateName</strong>
+                                    <span>@template.UpdatedAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
+                                </div>
+                                <label>
+                                    <span title="This template text shapes how the assistant behaves for the selected prompt stage.">Content</span>
+                                    <textarea class="text-input backoffice-textarea" rows="8" @bind="draft.Content"></textarea>
+                                </label>
+                                <div class="backoffice-inline-options">
+                                    <label title="Published templates are live and can be used by the assistant."><input type="checkbox" @bind="draft.IsPublished" /> Published</label>
+                                </div>
+                                <div class="backoffice-actions">
+                                    <button type="button" class="primary-action slim" @onclick="() => SavePromptTemplateAsync(template, draft)" disabled="@isBusy">Save template</button>
+                                </div>
+                            </article>
+                        }
+                    </section>
+                }
+                else if (ActiveSection == BackofficeSection.Knowledge)
+                {
+                    <section class="backoffice-section">
+                        <div class="backoffice-section-header">
+                            <div>
+                                <h2>Knowledge Entries</h2>
+                                <p>Manage quick answers, topics, and reference content that the documentation assistant reads from SQL.</p>
+                            </div>
+                            <div class="backoffice-toolbar">
+                                <button type="button" class="ghost-button" @onclick="LoadKnowledgeEntriesAsync" disabled="@isBusy">Refresh</button>
+                                <button type="button" class="primary-action slim" @onclick="OpenCreateKnowledgeModal">New entry</button>
+                            </div>
+                        </div>
+
+                        <div class="backoffice-filters">
+                            <input class="text-input"
+                                   title="Search by title, source, type, summary, or content."
+                                   placeholder="Search title, source, type, or content..."
+                                   @bind="KnowledgeSearchTerm"
+                                   @bind:event="oninput" />
+                            <select class="text-input" @bind="KnowledgeTypeFilter" title="Limit the list to one knowledge entry type.">
+                                <option value="">All types</option>
+                                <option value="QuickAnswer">QuickAnswer</option>
+                                <option value="Topic">Topic</option>
+                                <option value="Reference">Reference</option>
+                            </select>
+                        </div>
+
+                        @if (FilteredKnowledgeEntries.Count == 0)
+                        {
+                            <p class="backoffice-empty">No knowledge entries found yet.</p>
+                        }
+                        else
+                        {
+                            <p class="backoffice-results-meta">
+                                Showing @KnowledgePageStart-@KnowledgePageEnd of @FilteredKnowledgeEntries.Count entries
+                            </p>
+
+                            @foreach (var entry in PagedKnowledgeEntries)
+                            {
+                                <article class="backoffice-card backoffice-list-card">
+                                    <div class="backoffice-card-header">
+                                        <strong>@entry.Title</strong>
+                                        <span>@entry.EntryType</span>
+                                        <span>@entry.SourceName</span>
+                                        <span>@FormatKnowledgeTimestamp(entry)</span>
+                                    </div>
+                                    <p class="backoffice-list-summary">@GetKnowledgePreview(entry)</p>
+                                    <div class="backoffice-inline-options">
+                                        <span>@(entry.IsPublished ? "Published" : "Draft")</span>
+                                        @if (!string.IsNullOrWhiteSpace(entry.UpdatedBy))
+                                        {
+                                            <span>Updated by @entry.UpdatedBy</span>
+                                        }
+                                    </div>
+                                    <div class="backoffice-actions">
+                                        <button type="button" class="ghost-button" @onclick="() => OpenEditKnowledgeModal(entry)">Edit</button>
+                                    </div>
+                                </article>
+                            }
+
+                            @if (KnowledgeTotalPages > 1)
+                            {
+                                <div class="backoffice-pagination">
+                                    <button type="button" class="ghost-button" disabled="@(KnowledgePage <= 1)" @onclick="PreviousKnowledgePage">Previous</button>
+                                    <span>Page @KnowledgePage of @KnowledgeTotalPages</span>
+                                    <button type="button" class="ghost-button" disabled="@(KnowledgePage >= KnowledgeTotalPages)" @onclick="NextKnowledgePage">Next</button>
+                                </div>
+                            }
+                        }
+                    </section>
+                }
+                else if (ActiveSection == BackofficeSection.Users)
+                {
+                    <section class="backoffice-section">
+                        <div class="backoffice-section-header">
+                            <div>
+                                <h2>User Management</h2>
+                                <p>Manage admin access, validator permissions, and application users from one place.</p>
+                            </div>
+                            <div class="backoffice-toolbar">
+                                <button type="button" class="ghost-button" @onclick="LoadUsersAsync" disabled="@isBusy">Refresh</button>
+                                <button type="button" class="primary-action slim" @onclick="OpenCreateUserModal">New user</button>
+                            </div>
+                        </div>
+
+                        <div class="backoffice-filters backoffice-filters-single">
+                            <input class="text-input"
+                                   title="Search by username, email, or role."
+                                   placeholder="Search username, email, or role..."
+                                   @bind="UserSearchTerm"
+                                   @bind:event="oninput" />
+                        </div>
+
+                        @if (FilteredUsers.Count == 0)
+                        {
+                            <p class="backoffice-empty">No users matched this filter.</p>
+                        }
+                        else
+                        {
+                            <p class="backoffice-results-meta">
+                                Showing @FilteredUsers.Count user@(FilteredUsers.Count == 1 ? string.Empty : "s")
+                            </p>
+
+                            @foreach (var user in FilteredUsers)
+                            {
+                                <article class="backoffice-card backoffice-list-card">
+                                    <div class="backoffice-card-header">
+                                        <strong>@user.Username</strong>
+                                        <span>@user.Email</span>
+                                        <span>@(user.IsDisabled ? "Disabled" : "Active")</span>
+                                        <span>@(user.IsConfirmed ? "Confirmed" : "Unconfirmed")</span>
+                                        <span>@(user.TwoFactorEnabled ? "2FA enabled" : "2FA off")</span>
+                                    </div>
+                                    <div class="backoffice-inline-options">
+                                        @foreach (var role in user.Roles.OrderBy(role => role))
+                                        {
+                                            <span class="backoffice-tag">@role</span>
+                                        }
+                                    </div>
+                                    <div class="backoffice-actions">
+                                        <button type="button" class="ghost-button" @onclick="() => OpenEditUserModal(user)">Manage</button>
+                                    </div>
+                                </article>
+                            }
+                        }
+                    </section>
+                }
+            </section>
+        </div>
+
+        @if (ShowKnowledgeModal)
+        {
+            <div class="backoffice-modal-backdrop" @onclick="CloseKnowledgeModal">
+                <div class="backoffice-modal" @onclick:stopPropagation="true">
+                    <div class="backoffice-section-header">
+                        <div>
+                            <h2>@(EditingKnowledgeId.HasValue ? "Edit Knowledge Entry" : "Create Knowledge Entry")</h2>
+                            <p>Update the published assistant knowledge without touching code files.</p>
+                        </div>
+                        <button type="button" class="ghost-button" @onclick="CloseKnowledgeModal">Close</button>
+                    </div>
+
+                    <div class="backoffice-grid">
+                        <label>
+                            <span title="Choose whether this entry is a quick answer, topic summary, or reference content.">Entry type</span>
+                            <select class="text-input" @bind="KnowledgeModalDraft.EntryType">
+                                <option>QuickAnswer</option>
+                                <option>Topic</option>
+                                <option>Reference</option>
+                            </select>
+                        </label>
+                        <label>
+                            <span title="Logical bucket or source name used to group knowledge entries.">Source name</span>
+                            <input class="text-input" @bind="KnowledgeModalDraft.SourceName" />
+                        </label>
+                        <label class="backoffice-wide">
+                            <span title="Admin-facing title for this knowledge record.">Title</span>
+                            <input class="text-input" @bind="KnowledgeModalDraft.Title" />
+                        </label>
+                        <label class="backoffice-wide">
+                            <span title="Optional short summary, especially useful for topic entries.">Summary</span>
+                            <input class="text-input" @bind="KnowledgeModalDraft.Summary" />
+                        </label>
+                        <label class="backoffice-wide">
+                            <span title="The main reusable content the assistant can read from this entry.">Content</span>
+                            <textarea class="text-input backoffice-textarea" rows="10" @bind="KnowledgeModalDraft.Content"></textarea>
+                        </label>
+                    </div>
+                    <div class="backoffice-inline-options">
+                        <label title="Published entries are active and available to the assistant."><input type="checkbox" @bind="KnowledgeModalDraft.IsPublished" /> Published</label>
+                    </div>
+                    <div class="backoffice-actions">
+                        <button type="button" class="ghost-button" @onclick="CloseKnowledgeModal">Cancel</button>
+                        <button type="button" class="primary-action slim" @onclick="SaveKnowledgeModalAsync" disabled="@isBusy">
+                            @(EditingKnowledgeId.HasValue ? "Save entry" : "Create entry")
+                        </button>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @if (ShowReportModal && SelectedReport is not null)
+        {
+            var draft = GetReviewDraft(SelectedReport);
+            <div class="backoffice-modal-backdrop" @onclick="CloseReportModal">
+                <div class="backoffice-modal" @onclick:stopPropagation="true">
+                    <div class="backoffice-section-header">
+                        <div>
+                            <h2>Review Report #@SelectedReport.Id</h2>
+                            <p>Validate the answer, classify the issue, and optionally promote the fix into reusable knowledge.</p>
+                        </div>
+                        <button type="button" class="ghost-button" @onclick="CloseReportModal">Close</button>
+                    </div>
+
+                    <div class="backoffice-card backoffice-review-source">
+                        <div class="backoffice-card-header">
+                            <strong>@SelectedReport.Username</strong>
+                            <span>@GetReportStatusLabel(SelectedReport)</span>
+                            @if (!string.IsNullOrWhiteSpace(SelectedReport.ReviewCategory))
+                            {
+                                <span>@SelectedReport.ReviewCategory</span>
+                            }
+                            <span>@FormatReportTimestamp(SelectedReport)</span>
+                        </div>
+                        <p class="backoffice-list-summary"><strong>Original prompt:</strong> @SelectedReport.UserPrompt</p>
+                        <p class="backoffice-list-summary"><strong>Original response:</strong> @SelectedReport.AssistantResponse</p>
+                    </div>
+
+                    <div class="backoffice-grid">
+                        <label>
+                            <span title="The cleaned or corrected user question you want to keep as the reviewed version.">User prompt</span>
+                            <textarea class="text-input backoffice-textarea" rows="2" @bind="draft.ValidatedQuestion"></textarea>
+                        </label>
+                        <label>
+                            <span title="The corrected answer that you consider acceptable for this report.">Validated response</span>
+                            <textarea class="text-input backoffice-textarea" rows="6" @bind="draft.ValidatedResponse"></textarea>
+                        </label>
+                        <label>
+                            <span title="Use status to track whether the report is still pending, reviewed, approved, or rejected.">Review status</span>
+                            <select class="text-input"
+                                    value="@draft.ReviewStatus"
+                                    @onchange="args => OnReviewStatusChanged(draft, args.Value?.ToString())">
+                                @foreach (var status in ReviewStatusOptions)
+                                {
+                                    <option value="@status">@status</option>
+                                }
+                            </select>
+                        </label>
+                        <label>
+                            <span title="Category helps classify the issue type for reporting and future quality analysis.">Category</span>
+                            <select class="text-input" @bind="draft.ReviewCategory">
+                                @foreach (var category in ReviewCategoryOptions)
+                                {
+                                    <option value="@category">@((string.IsNullOrWhiteSpace(category) ? "None" : category))</option>
+                                }
+                            </select>
+                        </label>
+                        <label class="backoffice-wide">
+                            <span title="Optional notes for why the answer was wrong or how it was fixed.">Review notes</span>
+                            <textarea class="text-input backoffice-textarea" rows="3" @bind="draft.ReviewNotes"></textarea>
+                        </label>
+                    </div>
+                    <div class="backoffice-inline-options">
+                        <label title="Create a reusable knowledge entry from this reviewed fix.">
+                            <input type="checkbox"
+                                   checked="@draft.PromoteToKnowledge"
+                                   disabled="@(!CanPromoteToKnowledge(draft))"
+                                   @onchange="args => OnPromoteToKnowledgeChanged(draft, args.Value)" />
+                            Promote to knowledge
+                        </label>
+                        <label title="If promoted, make the new knowledge live right away.">
+                            <input type="checkbox"
+                                   checked="@draft.PublishKnowledge"
+                                   disabled="@(!CanPublishKnowledge(draft))"
+                                   @onchange="args => OnPublishKnowledgeChanged(draft, args.Value)" />
+                            Publish immediately
+                        </label>
+                    </div>
+                    @if (draft.PromoteToKnowledge)
+                    {
+                        <div class="backoffice-grid">
+                            <label>
+                                <span title="Choose what kind of reusable knowledge this review should become.">Entry type</span>
+                                <select class="text-input" @bind="draft.KnowledgeEntryType">
+                                    <option>QuickAnswer</option>
+                                    <option>Topic</option>
+                                    <option>Reference</option>
+                                </select>
+                            </label>
+                            <label>
+                                <span title="Logical group or source bucket for this knowledge entry.">Source name</span>
+                                <input class="text-input" @bind="draft.KnowledgeSourceName" />
+                            </label>
+                            <label class="backoffice-wide">
+                                <span title="Admin-facing title for the promoted knowledge entry.">Knowledge title</span>
+                                <input class="text-input" @bind="draft.KnowledgeTitle" />
+                            </label>
+                        </div>
+                    }
+                    <div class="backoffice-actions">
+                        <button type="button" class="ghost-button" @onclick="CloseReportModal">Cancel</button>
+                        <button type="button" class="primary-action slim" @onclick="SaveSelectedReportReviewAsync" disabled="@isBusy">Save review</button>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @if (ShowUserModal)
+        {
+            <div class="backoffice-modal-backdrop" @onclick="CloseUserModal">
+                <div class="backoffice-modal" @onclick:stopPropagation="true">
+                    <div class="backoffice-section-header">
+                        <div>
+                            <h2>@(EditingUserId is null ? "Create User" : "Manage User")</h2>
+                            <p>Assign roles, control access, and manage who can review data or administer the app.</p>
+                        </div>
+                        <button type="button" class="ghost-button" @onclick="CloseUserModal">Close</button>
+                    </div>
+
+                    <div class="backoffice-grid">
+                        <label>
+                            <span>Username</span>
+                            <input class="text-input" @bind="UserModalDraft.Username" disabled="@(EditingUserId is not null)" />
+                        </label>
+                        <label>
+                            <span>Email</span>
+                            <input class="text-input" @bind="UserModalDraft.Email" />
+                        </label>
+                        @if (EditingUserId is null)
+                        {
+                            <label class="backoffice-wide">
+                                <span>Password</span>
+                                <input class="text-input" type="password" @bind="UserModalDraft.Password" />
+                            </label>
+                        }
+                    </div>
+
+                    <div class="backoffice-inline-options">
+                        <label><input type="checkbox" @bind="UserModalDraft.IsConfirmed" /> Confirmed</label>
+                        <label><input type="checkbox" @bind="UserModalDraft.IsDisabled" /> Disabled</label>
+                        @if (EditingUserId is not null)
+                        {
+                            <span>@(SelectedUser?.TwoFactorEnabled == true ? "2FA is enabled for this user." : "2FA is not enabled for this user.")</span>
+                        }
+                    </div>
+
+                    <div class="backoffice-role-stack">
+                        <span>Roles</span>
+                        <div class="backoffice-inline-options">
+                            @foreach (var role in BackofficeRoleOptions)
+                            {
+                                <label>
+                                    <input type="checkbox"
+                                           checked="@UserHasRole(UserModalDraft, role)"
+                                           @onchange="args => OnUserRoleChanged(role, args.Value)" />
+                                    @role
+                                </label>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="backoffice-actions">
+                        <button type="button" class="ghost-button" @onclick="CloseUserModal">Cancel</button>
+                        <button type="button" class="primary-action slim" @onclick="SaveUserModalAsync" disabled="@isBusy">
+                            @(EditingUserId is null ? "Create user" : "Save user")
+                        </button>
+                    </div>
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private const string TokenStorageKey = "aichatapp.web.token";
+    private const string UserStorageKey = "aichatapp.web.username";
+    private bool initialized;
+    private bool isBusy;
+    private string? token;
+    private string? currentUsername;
+    private string? StatusMessage;
+    private string ReportStatusFilter { get; set; } = "Pending";
+    private string UserSearchTerm { get; set; } = string.Empty;
+    private string KnowledgeSearchTerm { get; set; } = string.Empty;
+    private string KnowledgeTypeFilter { get; set; } = string.Empty;
+    private int KnowledgePage { get; set; } = 1;
+    private BackofficeSection ActiveSection { get; set; } = BackofficeSection.Reports;
+    private bool ShowKnowledgeModal { get; set; }
+    private bool ShowReportModal { get; set; }
+    private bool ShowUserModal { get; set; }
+    private int? EditingKnowledgeId { get; set; }
+    private string? EditingUserId { get; set; }
+    private int? SelectedReportId { get; set; }
+    private string? CompletionNotice;
+    private List<BackofficeReportViewModel> Reports { get; set; } = [];
+    private List<PromptTemplateViewModel> PromptTemplates { get; set; } = [];
+    private List<KnowledgeEntryViewModel> KnowledgeEntries { get; set; } = [];
+    private List<BackofficeUserViewModel> Users { get; set; } = [];
+    private Dictionary<int, BackofficeReviewPayload> ReviewDrafts { get; } = [];
+    private Dictionary<int, SavePromptTemplatePayload> PromptDrafts { get; } = [];
+    private Dictionary<int, SaveKnowledgeEntryPayload> KnowledgeDrafts { get; } = [];
+    private static readonly string[] BackofficeRoleOptions = ["Admin", "DataValidator", "AppUser"];
+    private static readonly string[] ReviewStatusOptions = ["Pending", "Reviewed", "Approved", "Rejected"];
+    private static readonly (string Value, string Label)[] ReportStatusFilterOptions =
+    [
+        ("Pending", "Needs action"),
+        ("Reviewed", "Reviewed"),
+        ("Approved", "Approved"),
+        ("Rejected", "Rejected"),
+        ("", "All statuses")
+    ];
+    private static readonly string[] ReviewCategoryOptions = ["", "Incorrect", "Incomplete", "PromptLeak", "Repetitive", "OffTopic", "TooLong", "Other"];
+    private SaveKnowledgeEntryPayload KnowledgeModalDraft { get; set; } = new()
+    {
+        ProfileId = "Documentation",
+        EntryType = "Reference",
+        SourceName = "Architecture"
+    };
+
+    private bool IsAuthenticated => !string.IsNullOrWhiteSpace(token);
+    private bool StatusIsError { get; set; }
+    private string CurrentUsernameOrFallback => string.IsNullOrWhiteSpace(currentUsername) ? "Unknown user" : currentUsername;
+    private BackofficeReportViewModel? SelectedReport => SelectedReportId.HasValue ? Reports.FirstOrDefault(report => report.Id == SelectedReportId.Value) : null;
+    private BackofficeUserViewModel? SelectedUser => !string.IsNullOrWhiteSpace(EditingUserId) ? Users.FirstOrDefault(user => string.Equals(user.Id, EditingUserId, StringComparison.Ordinal)) : null;
+    private List<BackofficeReportViewModel> FilteredReports => Reports
+        .Where(MatchesReportStatusFilter)
+        .ToList();
+    private List<BackofficeUserViewModel> FilteredUsers => Users
+        .Where(MatchesUserFilter)
+        .ToList();
+    private SaveBackofficeUserPayload UserModalDraft { get; set; } = CreateDefaultUserDraft();
+    private const int KnowledgePageSize = 8;
+    private List<KnowledgeEntryViewModel> KnowledgeEntriesOrdered => KnowledgeEntries
+        .OrderByDescending(entry => entry.UpdatedAt == default ? entry.CreatedAt : entry.UpdatedAt)
+        .ThenByDescending(entry => entry.CreatedAt)
+        .ToList();
+    private List<KnowledgeEntryViewModel> FilteredKnowledgeEntries => KnowledgeEntriesOrdered
+        .Where(MatchesKnowledgeFilter)
+        .ToList();
+    private int KnowledgeTotalPages => Math.Max(1, (int)Math.Ceiling(FilteredKnowledgeEntries.Count / (double)KnowledgePageSize));
+    private List<KnowledgeEntryViewModel> PagedKnowledgeEntries => FilteredKnowledgeEntries
+        .Skip((Math.Clamp(KnowledgePage, 1, KnowledgeTotalPages) - 1) * KnowledgePageSize)
+        .Take(KnowledgePageSize)
+        .ToList();
+    private int KnowledgePageStart => FilteredKnowledgeEntries.Count == 0 ? 0 : ((Math.Clamp(KnowledgePage, 1, KnowledgeTotalPages) - 1) * KnowledgePageSize) + 1;
+    private int KnowledgePageEnd => FilteredKnowledgeEntries.Count == 0 ? 0 : Math.Min(Math.Clamp(KnowledgePage, 1, KnowledgeTotalPages) * KnowledgePageSize, FilteredKnowledgeEntries.Count);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        token = await BrowserStorage.GetAsync(TokenStorageKey);
+        currentUsername = await BrowserStorage.GetAsync(UserStorageKey);
+        initialized = true;
+
+        if (IsAuthenticated)
+        {
+            await LoadAllAsync();
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadAllAsync()
+    {
+        await RunBusyAsync(async cancellationToken =>
+        {
+            await RefreshReportsCoreAsync(cancellationToken);
+            await RefreshPromptTemplatesCoreAsync(cancellationToken);
+            await RefreshKnowledgeEntriesCoreAsync(cancellationToken);
+            await RefreshUsersCoreAsync(cancellationToken);
+            ReviewDrafts.Clear();
+            PromptDrafts.Clear();
+            KnowledgeDrafts.Clear();
+            SetStatus("Backoffice loaded.");
+        });
+    }
+
+    private void SetSection(BackofficeSection section)
+    {
+        ActiveSection = section;
+        if (section == BackofficeSection.Knowledge)
+        {
+            KnowledgePage = 1;
+        }
+    }
+
+    private void PreviousKnowledgePage()
+    {
+        if (KnowledgePage > 1)
+        {
+            KnowledgePage--;
+        }
+    }
+
+    private void NextKnowledgePage()
+    {
+        if (KnowledgePage < KnowledgeTotalPages)
+        {
+            KnowledgePage++;
+        }
+    }
+
+    private Task LoadReportsAsync() => RunBusyAsync(async cancellationToken =>
+    {
+        await RefreshReportsCoreAsync(cancellationToken);
+        ReviewDrafts.Clear();
+        SetStatus("Reports refreshed.");
+    });
+
+    private Task LoadPromptTemplatesAsync() => RunBusyAsync(async cancellationToken =>
+    {
+        await RefreshPromptTemplatesCoreAsync(cancellationToken);
+        PromptDrafts.Clear();
+        SetStatus("Prompt templates refreshed.");
+    });
+
+    private Task LoadKnowledgeEntriesAsync() => RunBusyAsync(async cancellationToken =>
+    {
+        await RefreshKnowledgeEntriesCoreAsync(cancellationToken);
+        KnowledgeDrafts.Clear();
+        KnowledgePage = 1;
+        SetStatus("Knowledge entries refreshed.");
+    });
+
+    private Task LoadUsersAsync() => RunBusyAsync(async cancellationToken =>
+    {
+        await RefreshUsersCoreAsync(cancellationToken);
+        SetStatus("Users refreshed.");
+    });
+
+    private BackofficeReviewPayload GetReviewDraft(BackofficeReportViewModel report)
+    {
+        if (!ReviewDrafts.TryGetValue(report.Id, out var draft))
+        {
+            draft = new BackofficeReviewPayload
+            {
+                ReviewStatus = string.IsNullOrWhiteSpace(report.ReviewStatus) ? "Pending" : report.ReviewStatus,
+                ReviewCategory = NormalizeReviewCategory(report.ReviewCategory),
+                ReviewNotes = report.ReviewNotes,
+                ValidatedQuestion = report.ValidatedQuestion ?? report.UserPrompt,
+                ValidatedResponse = report.ValidatedResponse ?? report.AssistantResponse,
+                KnowledgeEntryType = "QuickAnswer",
+                KnowledgeSourceName = "QuickAnswers",
+                KnowledgeTitle = report.UserPrompt
+            };
+            NormalizeReviewDraftState(draft);
+            ReviewDrafts[report.Id] = draft;
+        }
+
+        return draft;
+    }
+
+    private SavePromptTemplatePayload GetPromptDraft(PromptTemplateViewModel template)
+    {
+        if (!PromptDrafts.TryGetValue(template.Id, out var draft))
+        {
+            draft = new SavePromptTemplatePayload
+            {
+                ProfileId = template.ProfileId,
+                TemplateName = template.TemplateName,
+                Content = template.Content,
+                IsPublished = template.IsPublished
+            };
+            PromptDrafts[template.Id] = draft;
+        }
+
+        return draft;
+    }
+
+    private SaveKnowledgeEntryPayload GetKnowledgeDraft(KnowledgeEntryViewModel entry)
+    {
+        if (!KnowledgeDrafts.TryGetValue(entry.Id, out var draft))
+        {
+            draft = new SaveKnowledgeEntryPayload
+            {
+                ProfileId = entry.ProfileId,
+                EntryType = entry.EntryType,
+                SourceName = entry.SourceName,
+                Title = entry.Title,
+                Summary = entry.Summary,
+                Content = DecodeKnowledgeContent(entry),
+                Aliases = DeserializeOptionalList(entry.AliasesJson),
+                Keywords = DeserializeOptionalList(entry.KeywordsJson),
+                IsPublished = entry.IsPublished,
+                SortOrder = entry.SortOrder
+            };
+            KnowledgeDrafts[entry.Id] = draft;
+        }
+
+        return draft;
+    }
+
+    private Task SaveReviewAsync(BackofficeReportViewModel report, BackofficeReviewPayload draft) => RunBusyAsync(async cancellationToken =>
+    {
+        if (draft.PromoteToKnowledge && string.Equals(draft.KnowledgeEntryType, "Topic", StringComparison.OrdinalIgnoreCase))
+        {
+            draft.ContextLines = SplitLines(draft.ValidatedResponse);
+        }
+
+        if (draft.PromoteToKnowledge && string.Equals(draft.KnowledgeEntryType, "QuickAnswer", StringComparison.OrdinalIgnoreCase))
+        {
+            draft.Aliases = SplitCsv(draft.ValidatedQuestion);
+        }
+
+        var successMessage = await GatewayClient.ReviewReportedResponseAsync(token!, report.Id, draft, cancellationToken);
+        await RefreshReportsCoreAsync(cancellationToken);
+        await RefreshKnowledgeEntriesCoreAsync(cancellationToken);
+        CloseReportModal();
+        SetStatus(successMessage);
+        await ShowCompletionNotificationAsync(successMessage);
+    });
+
+    private Task SavePromptTemplateAsync(PromptTemplateViewModel template, SavePromptTemplatePayload draft) => RunBusyAsync(async cancellationToken =>
+    {
+        var successMessage = await GatewayClient.UpdatePromptTemplateAsync(token!, template.Id, draft, cancellationToken);
+        await RefreshPromptTemplatesCoreAsync(cancellationToken);
+        SetStatus(successMessage);
+        await ShowCompletionNotificationAsync(successMessage);
+    });
+
+    private void OpenCreateKnowledgeModal()
+    {
+        EditingKnowledgeId = null;
+        KnowledgeModalDraft = new SaveKnowledgeEntryPayload
+        {
+            ProfileId = "Documentation",
+            EntryType = "Reference",
+            SourceName = "Architecture"
+        };
+        ShowKnowledgeModal = true;
+    }
+
+    private void OpenEditKnowledgeModal(KnowledgeEntryViewModel entry)
+    {
+        EditingKnowledgeId = entry.Id;
+        KnowledgeModalDraft = new SaveKnowledgeEntryPayload
+        {
+            ProfileId = entry.ProfileId,
+            EntryType = entry.EntryType,
+            SourceName = entry.SourceName,
+            Title = entry.Title,
+            Summary = entry.Summary,
+            Content = DecodeKnowledgeContent(entry),
+            Aliases = DeserializeOptionalList(entry.AliasesJson),
+            Keywords = DeserializeOptionalList(entry.KeywordsJson),
+            IsPublished = entry.IsPublished,
+            SortOrder = entry.SortOrder
+        };
+        ShowKnowledgeModal = true;
+    }
+
+    private void OpenReviewModal(BackofficeReportViewModel report)
+    {
+        SelectedReportId = report.Id;
+        GetReviewDraft(report);
+        ShowReportModal = true;
+    }
+
+    private void OpenCreateUserModal()
+    {
+        EditingUserId = null;
+        UserModalDraft = CreateDefaultUserDraft();
+        ShowUserModal = true;
+    }
+
+    private void OpenEditUserModal(BackofficeUserViewModel user)
+    {
+        EditingUserId = user.Id;
+        UserModalDraft = new SaveBackofficeUserPayload
+        {
+            Username = user.Username,
+            Email = user.Email,
+            Roles = user.Roles.ToList(),
+            IsConfirmed = user.IsConfirmed,
+            IsDisabled = user.IsDisabled
+        };
+        ShowUserModal = true;
+    }
+
+    private void CloseKnowledgeModal()
+    {
+        ShowKnowledgeModal = false;
+        EditingKnowledgeId = null;
+    }
+
+    private void CloseReportModal()
+    {
+        ShowReportModal = false;
+        SelectedReportId = null;
+    }
+
+    private void CloseUserModal()
+    {
+        ShowUserModal = false;
+        EditingUserId = null;
+        UserModalDraft = CreateDefaultUserDraft();
+    }
+
+    private Task SaveKnowledgeModalAsync() => RunBusyAsync(async cancellationToken =>
+    {
+        NormalizeKnowledgeDraft(KnowledgeModalDraft);
+
+        string successMessage;
+        if (EditingKnowledgeId.HasValue)
+        {
+            successMessage = await GatewayClient.UpdateKnowledgeEntryAsync(token!, EditingKnowledgeId.Value, KnowledgeModalDraft, cancellationToken);
+        }
+        else
+        {
+            successMessage = await GatewayClient.CreateKnowledgeEntryAsync(token!, KnowledgeModalDraft, cancellationToken);
+        }
+
+        CloseKnowledgeModal();
+        await RefreshKnowledgeEntriesCoreAsync(cancellationToken);
+        SetStatus(successMessage);
+        await ShowCompletionNotificationAsync(successMessage);
+    });
+
+    private Task SaveSelectedReportReviewAsync()
+    {
+        if (SelectedReport is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        return SaveReviewAsync(SelectedReport, GetReviewDraft(SelectedReport));
+    }
+
+    private Task SaveUserModalAsync() => RunBusyAsync(async cancellationToken =>
+    {
+        var normalizedDraft = NormalizeUserDraft(UserModalDraft);
+        string successMessage;
+
+        if (string.IsNullOrWhiteSpace(EditingUserId))
+        {
+            successMessage = await GatewayClient.CreateBackofficeUserAsync(token!, normalizedDraft, cancellationToken);
+        }
+        else
+        {
+            successMessage = await GatewayClient.UpdateBackofficeUserAsync(token!, EditingUserId, normalizedDraft, cancellationToken);
+        }
+
+        CloseUserModal();
+        await RefreshUsersCoreAsync(cancellationToken);
+        SetStatus(successMessage);
+        await ShowCompletionNotificationAsync(successMessage);
+    });
+
+    private async Task RunBusyAsync(Func<CancellationToken, Task> action)
+    {
+        if (!IsAuthenticated)
+        {
+            SetStatus("Sign in first to view or change anything in the backoffice.", isError: true);
+            return;
+        }
+
+        isBusy = true;
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(45));
+            await action(cts.Token);
+        }
+        catch (Exception ex)
+        {
+            SetStatus(ex.Message, isError: true);
+        }
+        finally
+        {
+            isBusy = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task RefreshReportsCoreAsync(CancellationToken cancellationToken, string? status = null)
+    {
+        Reports = await GatewayClient.GetReportedResponsesAsync(token!, status, cancellationToken);
+        if (SelectedReportId.HasValue && Reports.All(report => report.Id != SelectedReportId.Value))
+        {
+            CloseReportModal();
+        }
+    }
+
+    private bool MatchesReportStatusFilter(BackofficeReportViewModel report)
+    {
+        if (string.IsNullOrWhiteSpace(ReportStatusFilter))
+        {
+            return true;
+        }
+
+        return string.Equals(GetReportStatusLabel(report), ReportStatusFilter, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task RefreshPromptTemplatesCoreAsync(CancellationToken cancellationToken)
+        => PromptTemplates = await GatewayClient.GetPromptTemplatesAsync(token!, "Documentation", cancellationToken);
+
+    private async Task RefreshKnowledgeEntriesCoreAsync(CancellationToken cancellationToken)
+        => KnowledgeEntries = await GatewayClient.GetKnowledgeEntriesAsync(token!, "Documentation", null, cancellationToken);
+
+    private async Task RefreshUsersCoreAsync(CancellationToken cancellationToken)
+    {
+        Users = await GatewayClient.GetBackofficeUsersAsync(token!, cancellationToken);
+        if (!string.IsNullOrWhiteSpace(EditingUserId) && Users.All(user => !string.Equals(user.Id, EditingUserId, StringComparison.Ordinal)))
+        {
+            CloseUserModal();
+        }
+    }
+
+    private void SetStatus(string message, bool isError = false)
+    {
+        StatusMessage = message;
+        StatusIsError = isError;
+    }
+
+    private static void NormalizeKnowledgeDraft(SaveKnowledgeEntryPayload draft)
+    {
+        draft.Aliases = draft.EntryType == "QuickAnswer" ? NormalizeList(draft.Aliases ?? []) : null;
+        draft.Keywords = draft.EntryType == "Topic" ? NormalizeList(draft.Keywords ?? []) : null;
+        draft.Content = string.Join(Environment.NewLine, SplitLines(draft.Content));
+    }
+
+    private static string DecodeKnowledgeContent(KnowledgeEntryViewModel entry)
+    {
+        if (!string.Equals(entry.EntryType, "Topic", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(entry.Content))
+        {
+            return entry.Content ?? string.Empty;
+        }
+
+        try
+        {
+            var lines = JsonSerializer.Deserialize<List<string>>(entry.Content) ?? [];
+            return string.Join(Environment.NewLine, lines);
+        }
+        catch (JsonException)
+        {
+            return entry.Content ?? string.Empty;
+        }
+    }
+
+    private static List<string> DeserializeOptionalList(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return [];
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<List<string>>(json) ?? [];
+        }
+        catch (JsonException)
+        {
+            return SplitCsv(json);
+        }
+    }
+
+    private static List<string> SplitCsv(string? raw)
+        => NormalizeList((raw ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
+    private static List<string> SplitLines(string? raw)
+        => NormalizeList((raw ?? string.Empty).Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
+    private static List<string> NormalizeList(IEnumerable<string> values)
+        => values
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    private void OnReviewStatusChanged(BackofficeReviewPayload draft, string? status)
+    {
+        draft.ReviewStatus = string.IsNullOrWhiteSpace(status) ? "Pending" : status;
+        NormalizeReviewDraftState(draft);
+    }
+
+    private void OnPromoteToKnowledgeChanged(BackofficeReviewPayload draft, object? value)
+    {
+        draft.PromoteToKnowledge = CanPromoteToKnowledge(draft) && IsChecked(value);
+        NormalizeReviewDraftState(draft);
+    }
+
+    private void OnPublishKnowledgeChanged(BackofficeReviewPayload draft, object? value)
+    {
+        draft.PublishKnowledge = CanPublishKnowledge(draft) && IsChecked(value);
+        NormalizeReviewDraftState(draft);
+    }
+
+    private static bool CanPromoteToKnowledge(BackofficeReviewPayload draft)
+        => string.Equals(draft.ReviewStatus, "Reviewed", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(draft.ReviewStatus, "Approved", StringComparison.OrdinalIgnoreCase);
+
+    private static bool CanPublishKnowledge(BackofficeReviewPayload draft)
+        => draft.PromoteToKnowledge
+           && string.Equals(draft.ReviewStatus, "Approved", StringComparison.OrdinalIgnoreCase);
+
+    private static void NormalizeReviewDraftState(BackofficeReviewPayload draft)
+    {
+        if (!CanPromoteToKnowledge(draft))
+        {
+            draft.PromoteToKnowledge = false;
+        }
+
+        if (!CanPublishKnowledge(draft))
+        {
+            draft.PublishKnowledge = false;
+        }
+    }
+
+    private static bool IsChecked(object? value)
+        => value switch
+        {
+            bool boolValue => boolValue,
+            string stringValue when bool.TryParse(stringValue, out var parsed) => parsed,
+            _ => false
+        };
+
+    private bool MatchesKnowledgeFilter(KnowledgeEntryViewModel entry)
+    {
+        if (!string.IsNullOrWhiteSpace(KnowledgeTypeFilter)
+            && !string.Equals(entry.EntryType, KnowledgeTypeFilter, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(KnowledgeSearchTerm))
+        {
+            return true;
+        }
+
+        var term = KnowledgeSearchTerm.Trim();
+        return Contains(term, entry.Title)
+               || Contains(term, entry.SourceName)
+               || Contains(term, entry.EntryType)
+               || Contains(term, DecodeKnowledgeContent(entry))
+               || Contains(term, entry.Summary);
+    }
+
+    private static bool Contains(string term, string? value)
+        => !string.IsNullOrWhiteSpace(value) && value.Contains(term, StringComparison.OrdinalIgnoreCase);
+
+    private bool MatchesUserFilter(BackofficeUserViewModel user)
+    {
+        if (string.IsNullOrWhiteSpace(UserSearchTerm))
+        {
+            return true;
+        }
+
+        var term = UserSearchTerm.Trim();
+        return Contains(term, user.Username)
+               || Contains(term, user.Email)
+               || user.Roles.Any(role => Contains(term, role));
+    }
+
+    private static string NormalizeReviewCategory(string? category)
+    {
+        if (string.IsNullOrWhiteSpace(category))
+        {
+            return string.Empty;
+        }
+
+        return ReviewCategoryOptions.FirstOrDefault(option => string.Equals(option, category, StringComparison.OrdinalIgnoreCase))
+               ?? "Other";
+    }
+
+    private static string FormatKnowledgeTimestamp(KnowledgeEntryViewModel entry)
+    {
+        var created = entry.CreatedAt == default ? entry.UpdatedAt : entry.CreatedAt;
+        var updated = entry.UpdatedAt == default ? created : entry.UpdatedAt;
+        var effective = updated >= created ? updated : created;
+        return effective.ToLocalTime().ToString("MMM d, yyyy h:mm tt");
+    }
+
+    private static string GetKnowledgePreview(KnowledgeEntryViewModel entry)
+    {
+        var content = DecodeKnowledgeContent(entry);
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            return "No content saved yet.";
+        }
+
+        var compact = content.Replace("\r\n", " ").Replace('\n', ' ').Trim();
+        return compact.Length <= 180 ? compact : $"{compact[..180]}...";
+    }
+
+    private static string GetReportTitle(BackofficeReportViewModel report)
+    {
+        var source = string.IsNullOrWhiteSpace(report.ValidatedQuestion) ? report.UserPrompt : report.ValidatedQuestion;
+        if (string.IsNullOrWhiteSpace(source))
+        {
+            return $"Report #{report.Id}";
+        }
+
+        var compact = source.Replace("\r\n", " ").Replace('\n', ' ').Trim();
+        return compact.Length <= 72 ? compact : $"{compact[..72]}...";
+    }
+
+    private static string GetReportPreview(BackofficeReportViewModel report)
+    {
+        var answer = string.IsNullOrWhiteSpace(report.ValidatedResponse) ? report.AssistantResponse : report.ValidatedResponse;
+        if (string.IsNullOrWhiteSpace(answer))
+        {
+            return "No response saved yet.";
+        }
+
+        var compact = answer.Replace("\r\n", " ").Replace('\n', ' ').Trim();
+        return compact.Length <= 180 ? compact : $"{compact[..180]}...";
+    }
+
+    private static string GetReportStatusLabel(BackofficeReportViewModel report)
+        => string.IsNullOrWhiteSpace(report.ReviewStatus) ? "Pending" : report.ReviewStatus;
+
+    private static string FormatReportTimestamp(BackofficeReportViewModel report)
+        => report.CreatedAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt");
+
+    private Task ShowCompletionNotificationAsync(string message)
+    {
+        CompletionNotice = message;
+        _ = NotifyCompletionAsync(message);
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private async Task NotifyCompletionAsync(string message)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("aiChatUi.notifyCompletion", message);
+        }
+        catch
+        {
+        }
+
+        await Task.Delay(2600);
+        if (CompletionNotice == message)
+        {
+            CompletionNotice = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private enum BackofficeSection
+    {
+        Reports,
+        Prompts,
+        Knowledge,
+        Users
+    }
+
+    private static SaveBackofficeUserPayload CreateDefaultUserDraft()
+        => new()
+        {
+            Roles = ["AppUser"],
+            IsConfirmed = true
+        };
+
+    private static SaveBackofficeUserPayload NormalizeUserDraft(SaveBackofficeUserPayload draft)
+        => new()
+        {
+            Username = draft.Username.Trim(),
+            Email = draft.Email.Trim(),
+            Password = draft.Password,
+            Roles = NormalizeList(draft.Roles).ToList(),
+            IsConfirmed = draft.IsConfirmed,
+            IsDisabled = draft.IsDisabled
+        };
+
+    private static bool UserHasRole(SaveBackofficeUserPayload draft, string role)
+        => draft.Roles.Any(existingRole => string.Equals(existingRole, role, StringComparison.OrdinalIgnoreCase));
+
+    private void OnUserRoleChanged(string role, object? value)
+    {
+        if (IsChecked(value))
+        {
+            if (!UserHasRole(UserModalDraft, role))
+            {
+                UserModalDraft.Roles.Add(role);
+            }
+        }
+        else
+        {
+            UserModalDraft.Roles = UserModalDraft.Roles
+                .Where(existingRole => !string.Equals(existingRole, role, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+
+        if (UserModalDraft.Roles.Count == 0)
+        {
+            UserModalDraft.Roles.Add("AppUser");
+        }
+    }
+}

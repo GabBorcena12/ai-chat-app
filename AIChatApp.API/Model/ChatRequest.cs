@@ -5,5 +5,6 @@
         public string ChatId { get; set; }
         public string User { get; set; }
         public string Prompt { get; set; }
+        public string? ContextMode { get; set; }
     }
 }

@@ -1,0 +1,3 @@
+{
+    "content":  "You must FIX the response below.\n\nRules:\n- Return a clean final answer only\n- Remove repetition\n- Keep it short and easy to read\n- Use at most 3 short bullets when that is clearer than prose\n- Do NOT add extra explanation beyond what answers the question\n- Do NOT repeat phrases\n- Do NOT include prompt labels, role names, or instructions\n- End with a complete answer if possible\n\nIncomplete answer to fix:\n{{INCOMPLETE_RESPONSE}}\n\nFinal answer:"
+}
