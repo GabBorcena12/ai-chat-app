@@ -84,6 +84,12 @@
                     <small>Manage quick answers and references</small>
                 </button>
                 <button type="button"
+                        class="backoffice-nav-button @(ActiveSection == BackofficeSection.Profile ? "active" : null)"
+                        @onclick="() => SetSection(BackofficeSection.Profile)">
+                    <span>Profile Management</span>
+                    <small>Change chat display name and avatar</small>
+                </button>
+                <button type="button"
                         class="backoffice-nav-button @(ActiveSection == BackofficeSection.Users ? "active" : null)"
                         @onclick="() => SetSection(BackofficeSection.Users)">
                     <span>User Management</span>
@@ -255,6 +261,52 @@
                                 </div>
                             }
                         }
+                    </section>
+                }
+                else if (ActiveSection == BackofficeSection.Profile)
+                {
+                    <section class="backoffice-section">
+                        <div class="backoffice-section-header">
+                            <div>
+                                <h2>Profile Management</h2>
+                                <p>Control how your user appears in chat without changing the authenticated account.</p>
+                            </div>
+                        </div>
+
+                        <article class="backoffice-card profile-card">
+                            <div class="profile-card-header">
+                                <div class="avatar profile-preview-avatar">@CurrentAvatarLabel</div>
+                                <div>
+                                    <div class="mini-label">Chat profile preview</div>
+                                    <strong>@CurrentDisplayNameOrFallback</strong>
+                                    <p class="backoffice-list-summary">Signed in account: @CurrentUsernameOrFallback</p>
+                                </div>
+                            </div>
+
+                            <div class="backoffice-grid">
+                                <label>
+                                    <span>Display name</span>
+                                    <input class="text-input"
+                                           @bind="displayNameDraft"
+                                           @bind:event="oninput"
+                                           maxlength="40"
+                                           placeholder="Name shown in chat" />
+                                </label>
+                                <label>
+                                    <span>Avatar label</span>
+                                    <input class="text-input"
+                                           @bind="avatarLabelDraft"
+                                           @bind:event="oninput"
+                                           maxlength="4"
+                                           placeholder="You, GB, G" />
+                                </label>
+                            </div>
+
+                            <div class="backoffice-actions">
+                                <button type="button" class="ghost-button" @onclick="ResetChatProfileAsync" disabled="@isBusy">Reset</button>
+                                <button type="button" class="primary-action slim" @onclick="SaveChatProfileAsync" disabled="@isBusy">Save profile</button>
+                            </div>
+                        </article>
                     </section>
                 }
                 else if (ActiveSection == BackofficeSection.Users)
@@ -542,10 +594,16 @@
 @code {
     private const string TokenStorageKey = "aichatapp.web.token";
     private const string UserStorageKey = "aichatapp.web.username";
+    private const string DisplayNameStorageKey = "aichatapp.web.displayName";
+    private const string AvatarLabelStorageKey = "aichatapp.web.avatarLabel";
     private bool initialized;
     private bool isBusy;
     private string? token;
     private string? currentUsername;
+    private string? currentDisplayName;
+    private string? currentAvatar;
+    private string displayNameDraft = string.Empty;
+    private string avatarLabelDraft = string.Empty;
     private string? StatusMessage;
     private string ReportStatusFilter { get; set; } = "Pending";
     private string UserSearchTerm { get; set; } = string.Empty;
@@ -588,6 +646,8 @@
     private bool IsAuthenticated => !string.IsNullOrWhiteSpace(token);
     private bool StatusIsError { get; set; }
     private string CurrentUsernameOrFallback => string.IsNullOrWhiteSpace(currentUsername) ? "Unknown user" : currentUsername;
+    private string CurrentDisplayNameOrFallback => string.IsNullOrWhiteSpace(currentDisplayName) ? CurrentUsernameOrFallback : currentDisplayName;
+    private string CurrentAvatarLabel => string.IsNullOrWhiteSpace(currentAvatar) ? BuildDefaultAvatarLabel(CurrentDisplayNameOrFallback) : currentAvatar;
     private BackofficeReportViewModel? SelectedReport => SelectedReportId.HasValue ? Reports.FirstOrDefault(report => report.Id == SelectedReportId.Value) : null;
     private BackofficeUserViewModel? SelectedUser => !string.IsNullOrWhiteSpace(EditingUserId) ? Users.FirstOrDefault(user => string.Equals(user.Id, EditingUserId, StringComparison.Ordinal)) : null;
     private List<BackofficeReportViewModel> FilteredReports => Reports
@@ -622,6 +682,9 @@
 
         token = await BrowserStorage.GetAsync(TokenStorageKey);
         currentUsername = await BrowserStorage.GetAsync(UserStorageKey);
+        currentDisplayName = await BrowserStorage.GetAsync(DisplayNameStorageKey);
+        currentAvatar = await BrowserStorage.GetAsync(AvatarLabelStorageKey);
+        SyncProfileDrafts();
         initialized = true;
 
         if (IsAuthenticated)
@@ -654,6 +717,55 @@
         {
             KnowledgePage = 1;
         }
+    }
+
+    private async Task SaveChatProfileAsync()
+    {
+        var displayName = NormalizeProfileText(displayNameDraft, 40);
+        var avatarLabel = NormalizeProfileText(avatarLabelDraft, 4).ToUpperInvariant();
+
+        currentDisplayName = displayName;
+        currentAvatar = avatarLabel;
+        displayNameDraft = displayName;
+        avatarLabelDraft = avatarLabel;
+
+        if (string.IsNullOrWhiteSpace(displayName))
+        {
+            await BrowserStorage.RemoveAsync(DisplayNameStorageKey);
+        }
+        else
+        {
+            await BrowserStorage.SetAsync(DisplayNameStorageKey, displayName);
+        }
+
+        if (string.IsNullOrWhiteSpace(avatarLabel))
+        {
+            await BrowserStorage.RemoveAsync(AvatarLabelStorageKey);
+        }
+        else
+        {
+            await BrowserStorage.SetAsync(AvatarLabelStorageKey, avatarLabel);
+        }
+
+        SetStatus("Chat profile updated.");
+        await ShowCompletionNotificationAsync("Chat profile updated.");
+    }
+
+    private async Task ResetChatProfileAsync()
+    {
+        currentDisplayName = null;
+        currentAvatar = null;
+        SyncProfileDrafts();
+        await BrowserStorage.RemoveAsync(DisplayNameStorageKey);
+        await BrowserStorage.RemoveAsync(AvatarLabelStorageKey);
+        SetStatus("Chat profile reset.");
+        await ShowCompletionNotificationAsync("Chat profile reset.");
+    }
+
+    private void SyncProfileDrafts()
+    {
+        displayNameDraft = currentDisplayName ?? string.Empty;
+        avatarLabelDraft = currentAvatar ?? string.Empty;
     }
 
     private void PreviousKnowledgePage()
@@ -1213,6 +1325,7 @@
         Reports,
         Prompts,
         Knowledge,
+        Profile,
         Users
     }
 
@@ -1222,6 +1335,23 @@
             Roles = ["AppUser"],
             IsConfirmed = true
         };
+
+    private static string NormalizeProfileText(string value, int maxLength)
+    {
+        var normalized = System.Text.RegularExpressions.Regex.Replace(value.Trim(), @"\s+", " ");
+        return normalized.Length <= maxLength ? normalized : normalized[..maxLength];
+    }
+
+    private static string BuildDefaultAvatarLabel(string displayName)
+    {
+        var parts = displayName
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Take(2)
+            .Select(part => char.ToUpperInvariant(part[0]))
+            .ToArray();
+
+        return parts.Length == 0 ? "You" : new string(parts);
+    }
 
     private static SaveBackofficeUserPayload NormalizeUserDraft(SaveBackofficeUserPayload draft)
         => new()

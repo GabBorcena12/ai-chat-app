@@ -96,6 +96,108 @@ window.aiChatUi = {
 
         await navigator.clipboard.writeText(text);
     },
+    _activeSpeechUtterance: null,
+    _finishSpeech: null,
+    _preferredSpeechVoice: null,
+    _completeSpeech: function (completed) {
+        if (window.aiChatUi._finishSpeech) {
+            const finish = window.aiChatUi._finishSpeech;
+            window.aiChatUi._finishSpeech = null;
+            finish(completed);
+        }
+
+        window.aiChatUi._activeSpeechUtterance = null;
+    },
+    _getPreferredSpeechVoice: function () {
+        if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+            return null;
+        }
+
+        const voices = window.speechSynthesis.getVoices();
+        if (!voices || voices.length === 0) {
+            return null;
+        }
+
+        if (window.aiChatUi._preferredSpeechVoice && voices.includes(window.aiChatUi._preferredSpeechVoice)) {
+            return window.aiChatUi._preferredSpeechVoice;
+        }
+
+        const englishVoices = voices.filter(function (voice) {
+            return voice.lang && voice.lang.toLowerCase().startsWith("en");
+        });
+
+        const preferredNames = [
+            "jenny",
+            "aria",
+            "zira",
+            "samantha",
+            "susan",
+            "female",
+            "natural",
+            "google us english",
+            "google uk english",
+            "microsoft"
+        ];
+
+        const preferred = englishVoices.find(function (voice) {
+            const name = voice.name.toLowerCase();
+            return preferredNames.some(function (preferredName) {
+                return name.includes(preferredName);
+            });
+        }) || englishVoices.find(function (voice) {
+            return voice.localService;
+        }) || englishVoices[0] || voices[0];
+
+        window.aiChatUi._preferredSpeechVoice = preferred;
+        return preferred;
+    },
+    speakText: function (text) {
+        if (!text || typeof window === "undefined" || !("speechSynthesis" in window)) {
+            return Promise.resolve(false);
+        }
+
+        const normalized = text.replace(/\s+/g, " ").trim();
+        if (!normalized) {
+            return Promise.resolve(false);
+        }
+
+        window.aiChatUi.stopSpeaking();
+
+        return new Promise(function (resolve) {
+            const utterance = new SpeechSynthesisUtterance(normalized);
+            const voice = window.aiChatUi._getPreferredSpeechVoice();
+            if (voice) {
+                utterance.voice = voice;
+                utterance.lang = voice.lang;
+            } else {
+                utterance.lang = "en-US";
+            }
+
+            utterance.rate = 0.9;
+            utterance.pitch = 1.02;
+            utterance.volume = 1;
+            utterance.onend = function () {
+                window.aiChatUi._completeSpeech(true);
+            };
+            utterance.onerror = function () {
+                window.aiChatUi._completeSpeech(false);
+            };
+
+            window.aiChatUi._activeSpeechUtterance = utterance;
+            window.aiChatUi._finishSpeech = resolve;
+            window.speechSynthesis.speak(utterance);
+        });
+    },
+    stopSpeaking: function () {
+        if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+            return;
+        }
+
+        if (window.aiChatUi._activeSpeechUtterance) {
+            window.speechSynthesis.cancel();
+            window.aiChatUi._completeSpeech(false);
+        }
+    },
     playCompletionSound: function () {
         if (typeof window === "undefined") {
             return false;

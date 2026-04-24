@@ -12,10 +12,15 @@
 
 <PageTitle>@AssistantProfile.PageTitle</PageTitle>
 
-<div class="chat-app">
+<div class="chat-app @(isSidebarOpen ? "sidebar-open" : null)">
     @if (!string.IsNullOrWhiteSpace(CompletionNotice))
     {
         <div class="completion-toast" role="status" aria-live="polite">@CompletionNotice</div>
+    }
+
+    @if (isSidebarOpen)
+    {
+        <button type="button" class="sidebar-scrim" aria-label="Close sidebar" @onclick="CloseSidebar"></button>
     }
 
     <aside class="sidebar">
@@ -25,6 +30,9 @@
                     <div class="eyebrow">@AssistantProfile.SidebarEyebrow</div>
                     <h2 @onclick="HandleBrandTitleClick" class="brand-title-link">@AssistantProfile.SidebarTitle</h2>
                 </div>
+                <button type="button" class="ghost-button sidebar-close-button" aria-label="Close sidebar" @onclick="CloseSidebar">
+                    X
+                </button>
             </div>
 
         <button class="primary-action" @onclick="StartNewConversation">
@@ -132,10 +140,6 @@
                     <button type="button" class="ghost-button" @onclick="LogoutAsync">Sign out</button>
                 </div>
 
-                <div class="action-row">
-                    <button type="button" class="ghost-button" @onclick="OpenBackoffice">Backoffice</button>
-                </div>
-
                 @if (!string.IsNullOrWhiteSpace(AuthMessage))
                 {
                     <p class="status-note compact-note">@AuthMessage</p>
@@ -209,6 +213,13 @@
 
     <main class="chat-stage">
         <header class="chat-header">
+            <button type="button" class="ghost-button sidebar-toggle-button" aria-label="Open conversations and account menu" @onclick="ToggleSidebar">
+                <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M4 6h16" />
+                    <path d="M4 12h16" />
+                    <path d="M4 18h16" />
+                </svg>
+            </button>
             <div>
                 <div class="eyebrow">@AssistantProfile.WorkspaceEyebrow</div>
                 <h2>@ActiveConversation.Title</h2>
@@ -235,32 +246,85 @@
                 @foreach (var message in ActiveConversation.Messages)
                 {
                     <article class="message-card @message.Role">
-                        <div class="avatar">@(message.Role == "user" ? "You" : "AI")</div>
+                        <div class="avatar">@(message.Role == "user" ? CurrentAvatarLabel : "AI")</div>
                         <div class="message-body">
-                            <div class="message-role">@(message.Role == "user" ? CurrentUsernameOrFallback : AssistantProfile.AssistantName)</div>
+                            <div class="message-role">@(message.Role == "user" ? CurrentDisplayNameOrFallback : AssistantProfile.AssistantName)</div>
                             <div class="message-content">@RenderMessageContent(message)</div>
                             <div class="message-timestamp">@FormatMessageTimestamp(message.Role, message.CreatedAt, message.LastUpdatedAt)</div>
                             @if (message.Role == "assistant" && !message.IsStreaming)
                             {
                                 <div class="message-actions">
                                     <button type="button"
-                                            class="ghost-button message-action-button"
+                                            class="ghost-button message-action-button icon-action-button"
+                                            title="@(copiedMessageId == message.Id ? "Copied" : "Copy response")"
+                                            aria-label="@(copiedMessageId == message.Id ? "Copied" : "Copy response")"
                                             @onclick="() => CopyMessageAsync(message)">
-                                        @(copiedMessageId == message.Id ? "Copied" : "Copy")
+                                        @if (copiedMessageId == message.Id)
+                                        {
+                                            <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                                <path d="M20 6 9 17l-5-5" />
+                                            </svg>
+                                        }
+                                        else
+                                        {
+                                            <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                                <rect x="8" y="8" width="10" height="12" rx="2" />
+                                                <path d="M6 16H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                                            </svg>
+                                        }
                                     </button>
                                     <button type="button"
-                                            class="ghost-button message-action-button"
+                                            class="ghost-button message-action-button icon-action-button"
+                                            title="@(speakingMessageId == message.Id ? "Stop reading" : "Read response")"
+                                            aria-label="@(speakingMessageId == message.Id ? "Stop reading" : "Read response")"
+                                            @onclick="() => ToggleSpeechAsync(message)">
+                                        @if (speakingMessageId == message.Id)
+                                        {
+                                            <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                                <rect x="6" y="6" width="12" height="12" rx="2" />
+                                            </svg>
+                                        }
+                                        else
+                                        {
+                                            <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                                <path d="M4 9v6h4l5 4V5L8 9H4Z" />
+                                                <path d="M16 9.5a4 4 0 0 1 0 5" />
+                                                <path d="M18.5 7a7 7 0 0 1 0 10" />
+                                            </svg>
+                                        }
+                                    </button>
+                                    <button type="button"
+                                            class="ghost-button message-action-button icon-action-button"
+                                            title="@(reportedMessageId == message.Id ? "Reported" : "Report response")"
+                                            aria-label="@(reportedMessageId == message.Id ? "Reported" : "Report response")"
                                             disabled="@isStreaming"
-                                            @onclick="() => ReportMessageAsync(message)">
-                                        @(reportedMessageId == message.Id ? "Reported" : "Report")
+                                            @onclick="() => RequestReportConfirmation(message)">
+                                        @if (reportedMessageId == message.Id)
+                                        {
+                                            <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                                <path d="M20 6 9 17l-5-5" />
+                                            </svg>
+                                        }
+                                        else
+                                        {
+                                            <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                                <path d="M5 4v16" />
+                                                <path d="M5 5h11l-1.5 4L16 13H5" />
+                                            </svg>
+                                        }
                                     </button>
                                     @if (IsProbablyIncomplete(message.Content))
                                     {
                                         <button type="button"
-                                                class="ghost-button message-action-button"
+                                                class="ghost-button message-action-button icon-action-button"
+                                                title="Continue response"
+                                                aria-label="Continue response"
                                                 disabled="@isStreaming"
-                                                @onclick="() => ContinueResponseAsync(message)">
-                                            Continue
+                                                @onclick="() => RequestContinueConfirmation(message)">
+                                            <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                                <path d="M5 12h12" />
+                                                <path d="m13 6 6 6-6 6" />
+                                            </svg>
                                         </button>
                                     }
                                 </div>
@@ -304,11 +368,63 @@
             </form>
         </footer>
     </main>
+
+    @if (pendingReportMessage is not null)
+    {
+        <div class="modal-backdrop" role="presentation" @onclick="CancelReportConfirmation">
+            <section class="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="report-dialog-title" @onclick:stopPropagation="true">
+                <div class="confirm-dialog-icon">
+                    <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M5 4v16" />
+                        <path d="M5 5h11l-1.5 4L16 13H5" />
+                    </svg>
+                </div>
+                <div class="confirm-dialog-content">
+                    <div class="eyebrow">Report response</div>
+                    <h3 id="report-dialog-title">Send this answer for review?</h3>
+                    <p>This will save the user question and assistant response so it can be checked in the backoffice.</p>
+                </div>
+                <div class="confirm-dialog-actions">
+                    <button type="button" class="ghost-button" @onclick="CancelReportConfirmation">Cancel</button>
+                    <button type="button" class="primary-action danger-action" disabled="@isBusy" @onclick="ConfirmReportAsync">
+                        @(isBusy ? "Reporting..." : "Report")
+                    </button>
+                </div>
+            </section>
+        </div>
+    }
+
+    @if (pendingContinueMessage is not null)
+    {
+        <div class="modal-backdrop" role="presentation" @onclick="CancelContinueConfirmation">
+            <section class="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="continue-dialog-title" @onclick:stopPropagation="true">
+                <div class="confirm-dialog-icon continue-dialog-icon">
+                    <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M5 12h12" />
+                        <path d="m13 6 6 6-6 6" />
+                    </svg>
+                </div>
+                <div class="confirm-dialog-content">
+                    <div class="eyebrow">Continue response</div>
+                    <h3 id="continue-dialog-title">Continue this answer?</h3>
+                    <p>This will ask the assistant to finish the response from where it was cut off.</p>
+                </div>
+                <div class="confirm-dialog-actions">
+                    <button type="button" class="ghost-button" @onclick="CancelContinueConfirmation">Cancel</button>
+                    <button type="button" class="primary-action" disabled="@isStreaming" @onclick="ConfirmContinueAsync">
+                        @(isStreaming ? "Continuing..." : "Continue")
+                    </button>
+                </div>
+            </section>
+        </div>
+    }
 </div>
 
 @code {
     private const string TokenStorageKey = "aichatapp.web.token";
     private const string UserStorageKey = "aichatapp.web.username";
+    private const string DisplayNameStorageKey = "aichatapp.web.displayName";
+    private const string AvatarLabelStorageKey = "aichatapp.web.avatarLabel";
     private const string ConversationStorageKey = "aichatapp.web.conversations";
     private const int AutoScrollThreshold = 120;
     private readonly List<ConversationViewModel> Conversations = [];
@@ -318,6 +434,9 @@
     private ElementReference messageRailRef;
     private string? copiedMessageId;
     private string? reportedMessageId;
+    private string? speakingMessageId;
+    private MessageViewModel? pendingReportMessage;
+    private MessageViewModel? pendingContinueMessage;
 
     private TwoFactorSetupResponse? twoFactorSetup;
     private bool showRegister;
@@ -326,6 +445,8 @@
     private bool initialized;
     private string? token;
     private string? CurrentUsername;
+    private string? CurrentDisplayName;
+    private string? CurrentAvatar;
     private string promptText = string.Empty;
     private string twoFactorCode = string.Empty;
     private string? AuthMessage;
@@ -336,10 +457,13 @@
     private bool messageRailRegistered;
     private bool pendingScrollToLatest;
     private bool forceNextScrollToLatest;
+    private bool isSidebarOpen;
     private AssistantProfileOptions AssistantProfile => AssistantProfileOptionsAccessor.Value;
 
     private bool IsAuthenticated => !string.IsNullOrWhiteSpace(token);
     private string CurrentUsernameOrFallback => string.IsNullOrWhiteSpace(CurrentUsername) ? "You" : CurrentUsername;
+    private string CurrentDisplayNameOrFallback => string.IsNullOrWhiteSpace(CurrentDisplayName) ? CurrentUsernameOrFallback : CurrentDisplayName;
+    private string CurrentAvatarLabel => string.IsNullOrWhiteSpace(CurrentAvatar) ? BuildDefaultAvatarLabel(CurrentDisplayNameOrFallback) : CurrentAvatar;
     private string SecurityPillText => isTwoFactorEnabled ? "Enabled" : twoFactorSetup is not null ? "Setup in progress" : "Not enabled";
     private string SecurityPillClass => isTwoFactorEnabled ? "enabled" : twoFactorSetup is not null ? "pending" : "idle";
 
@@ -355,6 +479,8 @@
             initialized = true;
             token = await BrowserStorage.GetAsync(TokenStorageKey);
             CurrentUsername = await BrowserStorage.GetAsync(UserStorageKey);
+            CurrentDisplayName = await BrowserStorage.GetAsync(DisplayNameStorageKey);
+            CurrentAvatar = await BrowserStorage.GetAsync(AvatarLabelStorageKey);
 
             if (IsAuthenticated)
             {
@@ -381,6 +507,7 @@
         ActiveConversation = conversation;
         ChatStatus = null;
         promptText = string.Empty;
+        isSidebarOpen = false;
         QueueScrollToLatest(force: true);
         PersistConversations();
     }
@@ -392,10 +519,17 @@
         {
             ActiveConversation = match;
             ChatStatus = null;
+            isSidebarOpen = false;
             QueueScrollToLatest(force: true);
             PersistConversations();
         }
     }
+
+    private void ToggleSidebar()
+        => isSidebarOpen = !isSidebarOpen;
+
+    private void CloseSidebar()
+        => isSidebarOpen = false;
 
     private void BeginConversationRename(ConversationViewModel conversation)
     {
@@ -488,6 +622,8 @@
 
             token = issuedToken;
             CurrentUsername = loginModel.Username.Trim();
+            CurrentDisplayName = await BrowserStorage.GetAsync(DisplayNameStorageKey);
+            CurrentAvatar = await BrowserStorage.GetAsync(AvatarLabelStorageKey);
             await BrowserStorage.SetAsync(TokenStorageKey, token);
             await BrowserStorage.SetAsync(UserStorageKey, CurrentUsername);
             await RestoreConversationsAsync();
@@ -504,6 +640,8 @@
     {
         token = null;
         CurrentUsername = null;
+        CurrentDisplayName = null;
+        CurrentAvatar = null;
         twoFactorSetup = null;
         twoFactorCode = string.Empty;
         await BrowserStorage.RemoveAsync(TokenStorageKey);
@@ -815,8 +953,69 @@
     {
         await JS.InvokeVoidAsync("aiChatUi.copyText", message.Content);
         copiedMessageId = message.Id;
+        _ = ShowToastAsync("Copied to clipboard.");
         await InvokeAsync(StateHasChanged);
         _ = ClearCopiedStateAsync(message.Id);
+    }
+
+    private async Task ToggleSpeechAsync(MessageViewModel message)
+    {
+        if (speakingMessageId == message.Id)
+        {
+            await JS.InvokeVoidAsync("aiChatUi.stopSpeaking");
+            speakingMessageId = null;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        speakingMessageId = message.Id;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var completed = await JS.InvokeAsync<bool>("aiChatUi.speakText", message.Content);
+            if (!completed)
+            {
+                ChatStatus = "Text to speech is not available in this browser.";
+            }
+        }
+        catch
+        {
+            ChatStatus = "Text to speech is not available in this browser.";
+        }
+        finally
+        {
+            if (speakingMessageId == message.Id)
+            {
+                speakingMessageId = null;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+    }
+
+    private void RequestReportConfirmation(MessageViewModel message)
+    {
+        if (!EnsureAuthenticated())
+        {
+            return;
+        }
+
+        pendingReportMessage = message;
+    }
+
+    private void CancelReportConfirmation()
+        => pendingReportMessage = null;
+
+    private async Task ConfirmReportAsync()
+    {
+        if (pendingReportMessage is null)
+        {
+            return;
+        }
+
+        var message = pendingReportMessage;
+        pendingReportMessage = null;
+        await ReportMessageAsync(message);
     }
 
     private async Task ReportMessageAsync(MessageViewModel message)
@@ -830,6 +1029,7 @@
 
         try
         {
+            isBusy = true;
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
             var response = await GatewayClient.ReportResponseAsync(
                 token!,
@@ -856,6 +1056,35 @@
             ChatStatus = ex.Message;
             await InvokeAsync(StateHasChanged);
         }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private void RequestContinueConfirmation(MessageViewModel message)
+    {
+        if (!EnsureAuthenticated() || isStreaming)
+        {
+            return;
+        }
+
+        pendingContinueMessage = message;
+    }
+
+    private void CancelContinueConfirmation()
+        => pendingContinueMessage = null;
+
+    private async Task ConfirmContinueAsync()
+    {
+        if (pendingContinueMessage is null)
+        {
+            return;
+        }
+
+        var message = pendingContinueMessage;
+        pendingContinueMessage = null;
+        await ContinueResponseAsync(message);
     }
 
     private async Task ContinueResponseAsync(MessageViewModel message)
@@ -1113,6 +1342,19 @@
         return InvokeAsync(StateHasChanged);
     }
 
+    private async Task ShowToastAsync(string message)
+    {
+        CompletionNotice = message;
+        await InvokeAsync(StateHasChanged);
+        await Task.Delay(1800);
+
+        if (CompletionNotice == message)
+        {
+            CompletionNotice = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
     private async Task NotifyCompletionAsync(string message)
     {
         try
@@ -1134,8 +1376,16 @@
     private static bool IsDefaultConversationTitle(string title)
         => string.IsNullOrWhiteSpace(title) || string.Equals(title, "New conversation", StringComparison.Ordinal);
 
-    private void OpenBackoffice()
-        => Navigation.NavigateTo("/backoffice");
+    private static string BuildDefaultAvatarLabel(string displayName)
+    {
+        var parts = displayName
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Take(2)
+            .Select(part => char.ToUpperInvariant(part[0]))
+            .ToArray();
+
+        return parts.Length == 0 ? "You" : new string(parts);
+    }
 
     private void HandleBrandTitleClick(MouseEventArgs args)
     {
