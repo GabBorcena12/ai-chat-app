@@ -1,0 +1,517 @@
+@page "/"
+@rendermode InteractiveServer
+@inject TrainingWorkspaceService Workspace
+@inject TrainingAuthService AuthService
+@inject TrainingBrowserStorageService BrowserStorage
+@inject Microsoft.Extensions.Options.IOptions<TrainingFrontendOptions> TrainingFrontendOptionsAccessor
+
+<PageTitle>ML Training Workspace</PageTitle>
+
+@if (!string.IsNullOrWhiteSpace(statusMessage))
+{
+    <div class="training-toast">@statusMessage</div>
+}
+
+@if (!authInitialized)
+{
+    <section class="training-auth-page">
+        <article class="training-auth-card">
+            <p class="eyebrow">Secure Workspace</p>
+            <h1>Checking ML Training access...</h1>
+            <p>Training tools are only shown after the saved session is validated.</p>
+            <nav class="training-workspace-nav" aria-label="Workspace navigation">
+                <a href="@TrainingFrontendOptions.ChatAppUrl">Chat</a>
+                <a href="@TrainingFrontendOptions.BackofficeUrl">Backoffice</a>
+                <a class="active" href="/">ML Training</a>
+                <a href="@TrainingFrontendOptions.FaqsUrl">FAQs</a>
+            </nav>
+        </article>
+    </section>
+}
+else if (!IsAuthenticated)
+{
+    <section class="training-auth-page">
+        <article class="training-auth-card">
+            <div>
+                <p class="eyebrow">Admin Access</p>
+                <h1>Sign in before training the reviewer.</h1>
+                <p>Use the same AIChatApp account. If 2FA is enabled, enter the current Google Authenticator code.</p>
+                <nav class="training-workspace-nav" aria-label="Workspace navigation">
+                    <a href="@TrainingFrontendOptions.ChatAppUrl">Chat</a>
+                    <a href="@TrainingFrontendOptions.BackofficeUrl">Backoffice</a>
+                    <a class="active" href="/">ML Training</a>
+                    <a href="@TrainingFrontendOptions.FaqsUrl">FAQs</a>
+                </nav>
+            </div>
+
+            <form class="training-auth-form" @onsubmit="SignInAsync" @onsubmit:preventDefault>
+                <label>
+                    Username
+                    <input class="training-input" @bind="loginUsername" autocomplete="username" />
+                </label>
+                <label>
+                    Password
+                    <input class="training-input" type="password" @bind="loginPassword" autocomplete="current-password" />
+                </label>
+                <label>
+                    2FA code
+                    <input class="training-input" @bind="loginOtpCode" autocomplete="one-time-code" placeholder="Optional unless 2FA is enabled" />
+                </label>
+                <button class="primary-button" type="submit" disabled="@isSigningIn">
+                    @(isSigningIn ? "Signing in..." : "Sign in to ML Training")
+                </button>
+            </form>
+        </article>
+    </section>
+}
+else
+{
+    <div class="training-shell">
+        <aside class="training-sidebar">
+            <div class="brand-block">
+                <span>ML</span>
+                <div>
+                    <small>AIChatApp</small>
+                    <strong>Training Lab</strong>
+                </div>
+            </div>
+
+            <section class="training-sidebar-group @(accountSectionOpen ? null : "collapsed")">
+                <button type="button"
+                        class="training-sidebar-toggle"
+                        aria-expanded="@accountSectionOpen"
+                        @onclick="() => accountSectionOpen = !accountSectionOpen">
+                    <span>Account</span>
+                    <strong>@(accountSectionOpen ? "Hide" : "Show")</strong>
+                </button>
+                @if (accountSectionOpen)
+                {
+                    <div class="training-user-card">
+                        <small>Signed in as</small>
+                        <strong>@currentUsername</strong>
+                        <button class="secondary-button" @onclick="SignOutAsync">Sign out</button>
+                    </div>
+                }
+            </section>
+
+            <section class="training-sidebar-group @(workspacesSectionOpen ? null : "collapsed")">
+                <button type="button"
+                        class="training-sidebar-toggle"
+                        aria-expanded="@workspacesSectionOpen"
+                        @onclick="() => workspacesSectionOpen = !workspacesSectionOpen">
+                    <span>Workspaces</span>
+                    <strong>@(workspacesSectionOpen ? "Hide" : "Show")</strong>
+                </button>
+                @if (workspacesSectionOpen)
+                {
+                    <nav class="training-workspace-nav vertical" aria-label="Workspace navigation">
+                        <a href="@TrainingFrontendOptions.ChatAppUrl">
+                            <span>Chat</span>
+                            <small>Main assistant</small>
+                        </a>
+                        <a href="@TrainingFrontendOptions.BackofficeUrl">
+                            <span>Backoffice</span>
+                            <small>Validate answers</small>
+                        </a>
+                        <a class="active" href="/">
+                            <span>ML Training</span>
+                            <small>Reviewer model</small>
+                        </a>
+                        <a href="@TrainingFrontendOptions.FaqsUrl">
+                            <span>FAQs</span>
+                            <small>User guide</small>
+                        </a>
+                    </nav>
+                }
+            </section>
+
+            <section class="training-sidebar-group @(trainingFlowSectionOpen ? null : "collapsed")">
+                <button type="button"
+                        class="training-sidebar-toggle"
+                        aria-expanded="@trainingFlowSectionOpen"
+                        @onclick="() => trainingFlowSectionOpen = !trainingFlowSectionOpen">
+                    <span>Training Flow</span>
+                    <strong>@(trainingFlowSectionOpen ? "Hide" : "Show")</strong>
+                </button>
+                @if (trainingFlowSectionOpen)
+                {
+                    <nav class="training-section-nav" aria-label="ML training sections">
+                        <button class="nav-pill @(section == "workflow" ? "active" : null)" @onclick='() => section = "workflow"'>
+                            <span>Workflow</span>
+                            <small>How reports become reviewer models</small>
+                        </button>
+                        <button class="nav-pill @(section == "data" ? "active" : null)" @onclick='() => section = "data"'>
+                            <span>Training Data</span>
+                            <small>Approved examples and imports</small>
+                        </button>
+                        <button class="nav-pill @(section == "jobs" ? "active" : null)" @onclick='() => section = "jobs"'>
+                            <span>Training Jobs</span>
+                            <small>Build datasets and train</small>
+                        </button>
+                        <button class="nav-pill @(section == "models" ? "active" : null)" @onclick='() => section = "models"'>
+                            <span>Model Registry</span>
+                            <small>Publish the reviewer</small>
+                        </button>
+                    </nav>
+                }
+            </section>
+        </aside>
+
+        <main class="training-main">
+            <header class="hero-panel">
+                <div>
+                    <p class="eyebrow">Machine Learning Workspace</p>
+                    <h1>Train an ML.NET reviewer, not a chatbot.</h1>
+                    <p>The LLM still writes answers. This ML.NET model reviews generated answers and predicts Good, Incomplete, Repetitive, PromptLeak, TooLong, or Incorrect.</p>
+                </div>
+                <div class="metric-strip">
+                    <div><strong>@Workspace.Examples.Count</strong><span>examples</span></div>
+                    <div><strong>@ApprovedCount</strong><span>approved</span></div>
+                    <div><strong>@PublishedModelCount</strong><span>published reviewer</span></div>
+                </div>
+            </header>
+
+            @if (section == "workflow")
+            {
+                <section class="card-grid">
+                    @foreach (var item in WorkflowItems)
+                    {
+                        <article class="workflow-card">
+                            <span>@item.Number</span>
+                            <h2>@item.Title</h2>
+                            <p>@item.Body</p>
+                        </article>
+                    }
+                </section>
+            }
+            else if (section == "data")
+            {
+                <section class="content-card">
+                    <div class="section-heading">
+                        <div>
+                            <p class="eyebrow">Training Data</p>
+                            <h2>Approved Reviews Become Reviewer Examples</h2>
+                        </div>
+                    </div>
+
+                    <div class="split-grid">
+                        <div class="drop-zone">
+                            <InputFile OnChange="ImportTextFileAsync" />
+                            <p>Upload `.txt` notes only for experiments. The real workflow should come from reported responses validated in Backoffice.</p>
+                        </div>
+
+                        <div class="form-stack">
+                            <input class="training-input" @bind="manualQuestion" placeholder="Reviewed question" />
+                            <textarea class="training-input" @bind="manualBadResponse" placeholder="Bad assistant response"></textarea>
+                            <textarea class="training-input" @bind="manualExpectedAnswer" placeholder="Corrected answer"></textarea>
+                            <div class="two-col">
+                                <input class="training-input" @bind="manualIntent" placeholder="Intent, e.g. GatewayQuestion" />
+                                <input class="training-input" @bind="manualIssueType" placeholder="Issue, e.g. Incomplete" />
+                            </div>
+                            <button class="primary-button" @onclick="AddReviewedExample">Add reviewed example</button>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="content-card">
+                    <div class="section-heading">
+                        <div>
+                            <p class="eyebrow">Review</p>
+                            <h2>Training Examples</h2>
+                        </div>
+                        <button class="secondary-button" @onclick="ApproveAllDrafts">Approve all drafts</button>
+                    </div>
+
+                    <div class="example-list">
+                        @foreach (var example in Workspace.Examples)
+                        {
+                            <article class="example-row">
+                                <div>
+                                    <strong>@example.Question</strong>
+                                    <p>@example.ExpectedAnswer</p>
+                                    <small>@example.SourceType / @example.Intent / @example.IssueType</small>
+                                </div>
+                                <div class="status-stack">
+                                    <span class="status-badge @(example.ApprovedForTraining ? "approved" : null)">@example.ReviewStatus</span>
+                                    @if (!example.ApprovedForTraining)
+                                    {
+                                        <button class="secondary-button" @onclick="() => ApproveExample(example.Id)">Approve</button>
+                                    }
+                                </div>
+                            </article>
+                        }
+                    </div>
+                </section>
+            }
+            else if (section == "jobs")
+            {
+                <section class="content-card">
+                    <div class="section-heading">
+                        <div>
+                            <p class="eyebrow">Train</p>
+                            <h2>Dataset and ML.NET Training Trigger</h2>
+                        </div>
+                    </div>
+
+                    <div class="train-panel">
+                        <input class="training-input" @bind="datasetName" placeholder="Dataset name" />
+                        <button class="secondary-button" @onclick="BuildDataset">Build dataset from approved examples</button>
+                        <button class="primary-button" @onclick="QueueTrainingAsync" disabled="@(latestDatasetId is null || isTraining)">
+                            @(isTraining ? "Training ML.NET reviewer..." : "Train ML.NET reviewer")
+                        </button>
+                    </div>
+
+                    <div class="job-list">
+                        @foreach (var job in Workspace.Jobs)
+                        {
+                            <article class="job-card">
+                                <div>
+                                    <strong>Training Job #@job.Id</strong>
+                                    <p>Dataset #@job.DatasetId / @job.Status / reviewer classifier</p>
+                                </div>
+                                <div>
+                                    <span>Accuracy: @(job.Accuracy?.ToString("P1") ?? "-")</span>
+                                    <span>F1: @(job.F1Score?.ToString("P1") ?? "-")</span>
+                                </div>
+                            </article>
+                        }
+                    </div>
+                </section>
+            }
+            else if (section == "models")
+            {
+                <section class="content-card">
+                    <div class="section-heading">
+                        <div>
+                            <p class="eyebrow">Publish</p>
+                            <h2>Reviewer Model Registry</h2>
+                        </div>
+                    </div>
+
+                    <div class="model-grid">
+                        @foreach (var model in Workspace.Models)
+                        {
+                            <article class="model-card @(model.IsPublished ? "published" : null)">
+                                <span>@(model.IsPublished ? "Published" : "Candidate")</span>
+                                <h3>@model.ModelName @model.Version</h3>
+                                <p>Created from training job #@model.TrainingJobId. Published models are loaded by the API as response reviewers.</p>
+                                @if (!model.IsPublished)
+                                {
+                                    <button class="secondary-button" @onclick="() => PublishModel(model.Id)">Publish</button>
+                                }
+                            </article>
+                        }
+                    </div>
+                </section>
+            }
+        </main>
+    </div>
+}
+
+@code {
+    private const string TokenStorageKey = "aichatapp.mltraining.token";
+    private const string UsernameStorageKey = "aichatapp.mltraining.username";
+
+    private string section = "workflow";
+    private string? statusMessage;
+    private string datasetName = "DocumentationQuality";
+    private int? latestDatasetId;
+    private bool isTraining;
+    private bool authInitialized;
+    private bool isSigningIn;
+    private bool accountSectionOpen;
+    private bool workspacesSectionOpen;
+    private bool trainingFlowSectionOpen;
+    private string? authToken;
+    private string? currentUsername;
+    private string loginUsername = string.Empty;
+    private string loginPassword = string.Empty;
+    private string loginOtpCode = string.Empty;
+    private string manualQuestion = string.Empty;
+    private string manualBadResponse = string.Empty;
+    private string manualExpectedAnswer = string.Empty;
+    private string manualIntent = "DocumentationQuestion";
+    private string manualIssueType = "Incorrect";
+
+    private bool IsAuthenticated => !string.IsNullOrWhiteSpace(authToken);
+    private TrainingFrontendOptions TrainingFrontendOptions => TrainingFrontendOptionsAccessor.Value;
+    private int ApprovedCount => Workspace.Examples.Count(example => example.ApprovedForTraining);
+    private int PublishedModelCount => Workspace.Models.Count(model => model.IsPublished);
+
+    private static readonly (string Number, string Title, string Body)[] WorkflowItems =
+    [
+        ("01", "Users report bad answers", "Reports start in the main chat when a user flags an incorrect, incomplete, long, or repetitive response."),
+        ("02", "Admin validates in Backoffice", "The corrected answer, issue type, and intent become the source of truth."),
+        ("03", "Approved reports become candidates", "Only approved reviewed reports should enter the ML reviewer training set."),
+        ("04", "Build dataset manually", "An admin creates a dataset snapshot from approved examples."),
+        ("05", "Train ML.NET reviewer", "ML.NET trains a classifier that reviews answer quality; it does not generate responses."),
+        ("06", "Review metrics and publish", "After checking accuracy/F1, publish one model. The API loads that model as the response reviewer.")
+    ];
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        await InitializeAuthenticationAsync();
+        StateHasChanged();
+    }
+
+    private async Task InitializeAuthenticationAsync()
+    {
+        try
+        {
+            var storedToken = await BrowserStorage.GetAsync(TokenStorageKey);
+            var storedUsername = await BrowserStorage.GetAsync(UsernameStorageKey);
+
+            if (!string.IsNullOrWhiteSpace(storedToken) && await AuthService.ValidateTokenAsync(storedToken, CancellationToken.None))
+            {
+                authToken = storedToken;
+                currentUsername = storedUsername;
+            }
+            else
+            {
+                await ClearStoredSessionAsync();
+            }
+        }
+        catch
+        {
+            await ClearStoredSessionAsync();
+        }
+        finally
+        {
+            authInitialized = true;
+        }
+    }
+
+    private async Task SignInAsync()
+    {
+        if (string.IsNullOrWhiteSpace(loginUsername) || string.IsNullOrWhiteSpace(loginPassword))
+        {
+            ShowStatus("Username and password are required.");
+            return;
+        }
+
+        try
+        {
+            isSigningIn = true;
+            var token = await AuthService.LoginAsync(new TrainingLoginPayload
+            {
+                Username = loginUsername.Trim(),
+                Password = loginPassword,
+                OtpCode = string.IsNullOrWhiteSpace(loginOtpCode) ? null : loginOtpCode.Trim()
+            }, CancellationToken.None);
+
+            authToken = token;
+            currentUsername = loginUsername.Trim();
+            await BrowserStorage.SetAsync(TokenStorageKey, token);
+            await BrowserStorage.SetAsync(UsernameStorageKey, currentUsername);
+
+            loginPassword = string.Empty;
+            loginOtpCode = string.Empty;
+            ShowStatus("ML Training unlocked.");
+        }
+        catch (Exception ex)
+        {
+            ShowStatus(ex.Message);
+        }
+        finally
+        {
+            isSigningIn = false;
+        }
+    }
+
+    private async Task SignOutAsync()
+    {
+        await ClearStoredSessionAsync();
+        ShowStatus("Signed out of ML Training.");
+    }
+
+    private async Task ClearStoredSessionAsync()
+    {
+        authToken = null;
+        currentUsername = null;
+        await BrowserStorage.RemoveAsync(TokenStorageKey);
+        await BrowserStorage.RemoveAsync(UsernameStorageKey);
+    }
+
+    private async Task ImportTextFileAsync(InputFileChangeEventArgs args)
+    {
+        var file = args.File;
+        await using var stream = file.OpenReadStream(maxAllowedSize: 1024 * 1024);
+        var imported = await Workspace.ImportTextFileAsync(stream, file.Name, CancellationToken.None);
+        ShowStatus($"Imported {imported} draft training example(s).");
+    }
+
+    private void AddReviewedExample()
+    {
+        if (string.IsNullOrWhiteSpace(manualQuestion) || string.IsNullOrWhiteSpace(manualExpectedAnswer))
+        {
+            ShowStatus("Question and corrected answer are required.");
+            return;
+        }
+
+        Workspace.AddReviewedReportExample(manualQuestion, manualBadResponse, manualExpectedAnswer, manualIssueType, manualIntent);
+        manualQuestion = string.Empty;
+        manualBadResponse = string.Empty;
+        manualExpectedAnswer = string.Empty;
+        ShowStatus("Reviewed example added.");
+    }
+
+    private void ApproveExample(int id)
+    {
+        Workspace.ApproveExample(id, currentUsername ?? "admin");
+        ShowStatus("Example approved for training.");
+    }
+
+    private void ApproveAllDrafts()
+    {
+        foreach (var example in Workspace.Examples.Where(example => !example.ApprovedForTraining))
+        {
+            Workspace.ApproveExample(example.Id, currentUsername ?? "admin");
+        }
+
+        ShowStatus("All visible drafts approved.");
+    }
+
+    private void BuildDataset()
+    {
+        var dataset = Workspace.BuildDataset(datasetName);
+        latestDatasetId = dataset.Id;
+        ShowStatus($"Dataset {dataset.Name} v{dataset.Version} built with {dataset.ExampleCount} approved example(s).");
+    }
+
+    private async Task QueueTrainingAsync()
+    {
+        if (latestDatasetId is null)
+        {
+            return;
+        }
+
+        try
+        {
+            isTraining = true;
+            await Workspace.QueueAndRunTrainingAsync(latestDatasetId.Value, currentUsername ?? "admin", CancellationToken.None);
+            ShowStatus("Training completed and model version registered.");
+        }
+        catch (Exception ex)
+        {
+            ShowStatus(ex.Message);
+        }
+        finally
+        {
+            isTraining = false;
+        }
+    }
+
+    private void PublishModel(int modelId)
+    {
+        Workspace.PublishModel(modelId);
+        ShowStatus("Model version published.");
+    }
+
+    private void ShowStatus(string message)
+        => statusMessage = message;
+}

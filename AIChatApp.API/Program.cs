@@ -9,6 +9,8 @@ using AIChatApp.Core.Config;
 using AIChatApp.Core.Data_Context;
 using AIChatApp.Core.Data_Context.Entity;
 using AIChatApp.Core.Middleware;
+using AIChatApp.MLTraining.Models;
+using AIChatApp.MLTraining.Services;
 using LLama;
 using LLama.Common;
 using LLama.Native;
@@ -27,6 +29,7 @@ builder.Services.AddControllers();
 builder.Services.Configure<AssistantProfileOptions>(builder.Configuration.GetSection(AssistantProfileOptions.SectionName));
 builder.Services.Configure<LocalModelOptions>(builder.Configuration.GetSection(LocalModelOptions.SectionName));
 builder.Services.Configure<BackofficeOptions>(builder.Configuration.GetSection(BackofficeOptions.SectionName));
+builder.Services.Configure<ResponseReviewerOptions>(builder.Configuration.GetSection(ResponseReviewerOptions.SectionName));
 builder.Services.AddSingleton(sp =>
 {
     var modelOptions = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<LocalModelOptions>>().Value;
@@ -54,6 +57,32 @@ builder.Services.AddAuthentication(options =>
         ValidIssuer = jwtSettings["Issuer"],
         ValidAudience = jwtSettings["Audience"],
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey))
+    };
+    options.Events = new JwtBearerEvents
+    {
+        OnAuthenticationFailed = context =>
+        {
+            var logger = context.HttpContext.RequestServices
+                .GetRequiredService<ILoggerFactory>()
+                .CreateLogger("LocalJwt");
+
+            logger.LogWarning(context.Exception, "JWT authentication failed for {Path}.", context.HttpContext.Request.Path);
+            return Task.CompletedTask;
+        },
+        OnChallenge = context =>
+        {
+            var logger = context.HttpContext.RequestServices
+                .GetRequiredService<ILoggerFactory>()
+                .CreateLogger("LocalJwt");
+
+            logger.LogWarning(
+                "JWT challenge for {Path}. Error: {Error}. Description: {Description}.",
+                context.HttpContext.Request.Path,
+                context.Error,
+                context.ErrorDescription);
+
+            return Task.CompletedTask;
+        }
     };
 });
 
@@ -145,6 +174,8 @@ builder.Services.AddScoped<IAssistantContentService, AssistantContentService>();
 
 // Response processor (includes Agent / keyword logic)
 builder.Services.AddScoped<IResponseProcessor, AgentResponseProcessor>();
+builder.Services.AddSingleton<IResponseReviewer, ResponseReviewerService>();
+builder.Services.AddSingleton<TrainingWorkspaceService>();
 
 // Agent tools for product suggestions
 builder.Services.AddScoped<AgentTools>();

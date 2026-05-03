@@ -28,6 +28,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AIChatApp.Core\AIChatApp.Core.csproj" />
+    <ProjectReference Include="..\AIChatApp.MLTraining.Core\AIChatApp.MLTraining.Core.csproj" />
   </ItemGroup>
 
   <ProjectExtensions><VisualStudio><UserProperties appsettings_1development_1json__JsonSchema="https://www.schemastore.org/architectfx.json" /></VisualStudio></ProjectExtensions>

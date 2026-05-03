@@ -1,0 +1,241 @@
+@page "/faqs"
+@rendermode InteractiveServer
+@inject AIChatApp.Web.Services.FaqContentService FaqContent
+@inject NavigationManager Navigation
+
+<PageTitle>AIChatApp FAQs</PageTitle>
+
+<main class="faq-page">
+    <aside class="faq-sidebar">
+        <div class="faq-brand-block">
+            <span>?</span>
+            <div>
+                <small>AIChatApp</small>
+                <strong>FAQ Workspace</strong>
+            </div>
+        </div>
+
+        <section class="faq-sidebar-group">
+            <div class="faq-sidebar-heading">
+                <span>Workspaces</span>
+                <small>Move between app areas</small>
+            </div>
+            <nav class="workspace-nav faq-workspace-nav" aria-label="Workspace navigation">
+                <button type="button" class="workspace-nav-link app-chat" @onclick='() => Navigation.NavigateTo("/chat")'>
+                    <span>Chat</span>
+                    <small>Main assistant</small>
+                </button>
+                <button type="button" class="workspace-nav-link app-backoffice" @onclick='() => Navigation.NavigateTo("/backoffice")'>
+                    <span>Backoffice</span>
+                    <small>Validate answers</small>
+                </button>
+                <button type="button" class="workspace-nav-link app-ml" @onclick='() => Navigation.NavigateTo("/ml-training")'>
+                    <span>ML Training</span>
+                    <small>Train reviewer</small>
+                </button>
+                <button type="button" class="workspace-nav-link app-faq active" @onclick='() => Navigation.NavigateTo("/faqs")'>
+                    <span>FAQs</span>
+                    <small>User guide</small>
+                </button>
+            </nav>
+        </section>
+    </aside>
+
+    <div class="faq-main">
+        <header class="faq-hero">
+            <div>
+                <p class="eyebrow">Documentation Help</p>
+                <h1>Frequently Asked Questions</h1>
+                <p>Quick answers pulled from the same documentation knowledge files used by the assistant.</p>
+            </div>
+            <div class="faq-hero-actions">
+                <div class="faq-status-pill" title="FAQ content is loaded from documentation knowledge files.">
+                    <span class="faq-status-dot"></span>
+                    <span>Knowledge loaded</span>
+                </div>
+                <div class="faq-action-card">
+                    <div>
+                        <strong>@Items.Count</strong>
+                        <span>ready answers</span>
+                    </div>
+                    <button type="button" class="faq-back-button" @onclick='() => Navigation.NavigateTo("/chat")'>Back to chat</button>
+                </div>
+            </div>
+        </header>
+
+        <section class="faq-controls" aria-label="FAQ filters">
+            <div class="faq-search-box">
+                <span>Search</span>
+                <input class="text-input"
+                       placeholder="Try: gateway, 2FA, model, session..."
+                       value="@SearchTerm"
+                       @oninput="OnSearchChanged" />
+            </div>
+            <div class="faq-category-panel">
+                <span>Category</span>
+                <div class="faq-category-chips">
+                    <button type="button"
+                            class="faq-chip @(string.IsNullOrWhiteSpace(SelectedCategory) ? "active" : null)"
+                            @onclick='() => SetCategory(string.Empty)'>
+                        All
+                    </button>
+                    @foreach (var category in Categories)
+                    {
+                        <button type="button"
+                                class="faq-chip @(string.Equals(SelectedCategory, category, StringComparison.OrdinalIgnoreCase) ? "active" : null)"
+                                @onclick="() => SetCategory(category)">
+                            @category
+                        </button>
+                    }
+                </div>
+            </div>
+        </section>
+
+        <section class="faq-results-header">
+            <div>
+                <p class="eyebrow">Answers</p>
+                <h2>@ResultsTitle</h2>
+            </div>
+            @if (FilteredItems.Count > 0)
+            {
+                <p>Showing @PageStart-@PageEnd of @FilteredItems.Count</p>
+            }
+        </section>
+
+        <section class="faq-list" aria-label="FAQ answers">
+            @if (FilteredItems.Count == 0)
+            {
+                <div class="faq-empty">
+                    <h2>No FAQ matched your search.</h2>
+                    <p>Try a broader keyword like <code>chat</code>, <code>auth</code>, <code>gateway</code>, or <code>model</code>.</p>
+                    <button type="button" class="ghost-button" @onclick="ClearFilters">Clear filters</button>
+                </div>
+            }
+            else
+            {
+                @foreach (var item in PagedItems)
+                {
+                    <details class="faq-item">
+                        <summary>
+                            <span class="faq-question">@item.Question</span>
+                            <small>@item.Category</small>
+                        </summary>
+                        <p>@item.Answer</p>
+                    </details>
+                }
+            }
+        </section>
+
+        @if (FilteredItems.Count > PageSize)
+        {
+            <nav class="faq-pagination" aria-label="FAQ pagination">
+                <button type="button" class="ghost-button" disabled="@(CurrentPage == 1)" @onclick="PreviousPage">Previous</button>
+                <div class="faq-page-dots">
+                    @foreach (var pageNumber in VisiblePages)
+                    {
+                        <button type="button"
+                                class="faq-page-number @(pageNumber == CurrentPage ? "active" : null)"
+                                @onclick="() => GoToPage(pageNumber)">
+                            @pageNumber
+                        </button>
+                    }
+                </div>
+                <button type="button" class="ghost-button" disabled="@(CurrentPage == TotalPages)" @onclick="NextPage">Next</button>
+            </nav>
+        }
+    </div>
+</main>
+
+@code {
+    private const int PageSize = 8;
+    private string SearchTerm { get; set; } = string.Empty;
+    private string SelectedCategory { get; set; } = string.Empty;
+    private int CurrentPage { get; set; } = 1;
+    private IReadOnlyList<FaqItemViewModel> Items = [];
+
+    private List<string> Categories => Items
+        .Select(item => item.Category)
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .OrderBy(category => category)
+        .ToList();
+
+    private List<FaqItemViewModel> FilteredItems => Items
+        .Where(MatchesCategory)
+        .Where(MatchesSearch)
+        .ToList();
+
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(FilteredItems.Count / (double)PageSize));
+    private int SafeCurrentPage => Math.Clamp(CurrentPage, 1, TotalPages);
+    private int PageStart => FilteredItems.Count == 0 ? 0 : ((SafeCurrentPage - 1) * PageSize) + 1;
+    private int PageEnd => FilteredItems.Count == 0 ? 0 : Math.Min(SafeCurrentPage * PageSize, FilteredItems.Count);
+    private string ResultsTitle => FilteredItems.Count == 1 ? "1 matching FAQ" : $"{FilteredItems.Count} matching FAQs";
+
+    private List<FaqItemViewModel> PagedItems => FilteredItems
+        .Skip((SafeCurrentPage - 1) * PageSize)
+        .Take(PageSize)
+        .ToList();
+
+    private IEnumerable<int> VisiblePages
+    {
+        get
+        {
+            var start = Math.Max(1, SafeCurrentPage - 2);
+            var end = Math.Min(TotalPages, start + 4);
+            start = Math.Max(1, end - 4);
+
+            for (var page = start; page <= end; page++)
+            {
+                yield return page;
+            }
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        Items = FaqContent.LoadQuickAnswers();
+    }
+
+    private bool MatchesCategory(FaqItemViewModel item)
+        => string.IsNullOrWhiteSpace(SelectedCategory)
+           || string.Equals(item.Category, SelectedCategory, StringComparison.OrdinalIgnoreCase);
+
+    private bool MatchesSearch(FaqItemViewModel item)
+    {
+        if (string.IsNullOrWhiteSpace(SearchTerm))
+        {
+            return true;
+        }
+
+        return item.Question.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase)
+               || item.Answer.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase)
+               || item.Category.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void OnSearchChanged(ChangeEventArgs args)
+    {
+        SearchTerm = args.Value?.ToString() ?? string.Empty;
+        CurrentPage = 1;
+    }
+
+    private void SetCategory(string category)
+    {
+        SelectedCategory = category;
+        CurrentPage = 1;
+    }
+
+    private void ClearFilters()
+    {
+        SearchTerm = string.Empty;
+        SelectedCategory = string.Empty;
+        CurrentPage = 1;
+    }
+
+    private void PreviousPage()
+        => CurrentPage = Math.Max(1, SafeCurrentPage - 1);
+
+    private void NextPage()
+        => CurrentPage = Math.Min(TotalPages, SafeCurrentPage + 1);
+
+    private void GoToPage(int page)
+        => CurrentPage = Math.Clamp(page, 1, TotalPages);
+}

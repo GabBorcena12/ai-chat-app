@@ -11,6 +11,28 @@ namespace AIChatApp.API.Model
         public List<string> Roles { get; set; } = [];
     }
 
+    public class BackofficeWorkflowSummaryViewModel
+    {
+        public int PendingReports { get; set; }
+        public int ReviewedReports { get; set; }
+        public int ApprovedReports { get; set; }
+        public int TrainingCandidates { get; set; }
+        public int PublishedKnowledgeEntries { get; set; }
+    }
+
+    public class TrainingCandidateViewModel
+    {
+        public int ReportId { get; set; }
+        public string Question { get; set; } = string.Empty;
+        public string BadResponse { get; set; } = string.Empty;
+        public string CorrectAnswer { get; set; } = string.Empty;
+        public string IssueType { get; set; } = string.Empty;
+        public string Intent { get; set; } = "DocumentationQuestion";
+        public string ReviewedBy { get; set; } = string.Empty;
+        public DateTime? ReviewedAt { get; set; }
+        public bool IsPromotedToKnowledge { get; set; }
+    }
+
     public class ReviewReportedResponseRequest
     {
         public string ReviewStatus { get; set; } = "Reviewed";

@@ -6,6 +6,8 @@ using AIChatApp.API.Services.Processing;
 using AIChatApp.API.Services.Prompting;
 using AIChatApp.Core.Config;
 using AIChatApp.Core.Data_Context;
+using AIChatApp.MLTraining.Models;
+using AIChatApp.MLTraining.Services;
 using Azure.Core;
 using LLama;
 using LLama.Common;
@@ -36,6 +38,7 @@ namespace AIChatApp.API.Services.Orchestration
         private readonly AssistantProfileOptions _assistantProfile;
         private List<string> _antiPrompts = new List<string>();
         private readonly IAssistantContentService _assistantContentService;
+        private readonly IResponseReviewer _responseReviewer;
 
         public ChatOrchestrator(
             ILogger<ChatOrchestrator> logger,
@@ -47,6 +50,7 @@ namespace AIChatApp.API.Services.Orchestration
             Func<InteractiveExecutor> retryExecutorFactory, 
             IConfiguration configuration,
             IAssistantContentService assistantContentService,
+            IResponseReviewer responseReviewer,
             IOptions<AssistantProfileOptions> assistantProfileOptions)
         {
             _retryExecutorFactory = retryExecutorFactory;
@@ -58,6 +62,7 @@ namespace AIChatApp.API.Services.Orchestration
             _processor = processor;
             _assistantProfile = assistantProfileOptions.Value;
             _assistantContentService = assistantContentService;
+            _responseReviewer = responseReviewer;
             _assistantName = _assistantProfile.AssistantName;
             _messageUnableToGenerateResponse = "Sorry unable to generate response. Please try again.";
             _configuration = configuration;
@@ -235,6 +240,32 @@ namespace AIChatApp.API.Services.Orchestration
                     finalResponse = await RetryAndFixResponse(finalResponse, request, token);
                 }
 
+                var review = _responseReviewer.Review(request.Prompt, finalResponse, request.ContextMode);
+                _logger.LogInformation(
+                    "Response reviewer result for chat {ChatId}: {IssueType} ({Confidence:P0}) via {Source}.",
+                    request.ChatId,
+                    review.IssueType,
+                    review.Confidence,
+                    review.Source);
+
+                if (ShouldRepairReviewedResponse(review, request, token))
+                {
+                    var repairedResponse = await RetryAndFixResponse(finalResponse, request, token);
+                    var repairedReview = _responseReviewer.Review(request.Prompt, repairedResponse, request.ContextMode);
+                    _logger.LogInformation(
+                        "Response reviewer after repair for chat {ChatId}: {IssueType} ({Confidence:P0}) via {Source}.",
+                        request.ChatId,
+                        repairedReview.IssueType,
+                        repairedReview.Confidence,
+                        repairedReview.Source);
+
+                    if (!string.IsNullOrWhiteSpace(repairedResponse)
+                        && (!repairedReview.IsRisky || repairedResponse.Length < finalResponse.Length))
+                    {
+                        finalResponse = repairedResponse;
+                    }
+                }
+
                 await _chatHistoryService.SaveMessage(request.ChatId, _assistantName, finalResponse);
             }
             else
@@ -347,6 +378,24 @@ namespace AIChatApp.API.Services.Orchestration
             }
 
             return _processor.IsIncomplete(response);
+        }
+
+        private static bool ShouldRepairReviewedResponse(
+            ResponseReviewResult review,
+            ChatRequest request,
+            CancellationToken token)
+        {
+            if (token.IsCancellationRequested || !review.IsRisky)
+            {
+                return false;
+            }
+
+            if (!string.Equals(request.ContextMode, "documentation", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            return review.IssueType is "Incomplete" or "Repetitive" or "PromptLeak" or "TooLong";
         }
 
         private bool ShouldStopGeneration(StringBuilder buffer, string user, string? contextMode)

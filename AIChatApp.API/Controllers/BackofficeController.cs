@@ -2,6 +2,8 @@ using AIChatApp.API.Model;
 using AIChatApp.Core.Config;
 using AIChatApp.Core.Data_Context;
 using AIChatApp.Core.Data_Context.Entity;
+using AIChatApp.MLTraining.Models;
+using AIChatApp.MLTraining.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -22,19 +24,22 @@ namespace AIChatApp.API.Controllers
         private readonly ILogger<BackofficeController> _logger;
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly RoleManager<IdentityRole> _roleManager;
+        private readonly TrainingWorkspaceService _trainingWorkspace;
 
         public BackofficeController(
             AppDbContext dbContext,
             ChatPaths chatPaths,
             ILogger<BackofficeController> logger,
             UserManager<ApplicationUser> userManager,
-            RoleManager<IdentityRole> roleManager)
+            RoleManager<IdentityRole> roleManager,
+            TrainingWorkspaceService trainingWorkspace)
         {
             _dbContext = dbContext;
             _chatPaths = chatPaths;
             _logger = logger;
             _userManager = userManager;
             _roleManager = roleManager;
+            _trainingWorkspace = trainingWorkspace;
         }
 
         [HttpGet("reports")]
@@ -52,6 +57,100 @@ namespace AIChatApp.API.Controllers
                 .ToListAsync();
 
             return Ok(reports);
+        }
+
+        [HttpGet("workflow-summary")]
+        public async Task<IActionResult> GetWorkflowSummary()
+        {
+            var reports = await _dbContext.ChatResponseReports
+                .AsNoTracking()
+                .ToListAsync();
+
+            var publishedKnowledgeCount = await _dbContext.AssistantKnowledgeEntries
+                .AsNoTracking()
+                .CountAsync(x => x.ProfileId == "Documentation" && x.IsPublished);
+
+            return Ok(new BackofficeWorkflowSummaryViewModel
+            {
+                PendingReports = reports.Count(x => string.Equals(x.ReviewStatus, "Pending", StringComparison.OrdinalIgnoreCase)),
+                ReviewedReports = reports.Count(x => string.Equals(x.ReviewStatus, "Reviewed", StringComparison.OrdinalIgnoreCase)),
+                ApprovedReports = reports.Count(x => string.Equals(x.ReviewStatus, "Approved", StringComparison.OrdinalIgnoreCase)),
+                TrainingCandidates = reports.Count(IsTrainingCandidate),
+                PublishedKnowledgeEntries = publishedKnowledgeCount
+            });
+        }
+
+        [HttpGet("training-candidates")]
+        public async Task<IActionResult> GetTrainingCandidates()
+        {
+            var candidates = await _dbContext.ChatResponseReports
+                .AsNoTracking()
+                .Where(x => x.ReviewStatus == "Approved"
+                    && x.ValidatedResponse != null
+                    && x.ValidatedResponse != string.Empty
+                    && x.ReviewCategory != null
+                    && x.ReviewCategory != string.Empty)
+                .OrderByDescending(x => x.ReviewedAt ?? x.CreatedAt)
+                .Take(200)
+                .Select(x => new TrainingCandidateViewModel
+                {
+                    ReportId = x.Id,
+                    Question = x.ValidatedQuestion ?? x.UserPrompt,
+                    BadResponse = x.AssistantResponse,
+                    CorrectAnswer = x.ValidatedResponse ?? string.Empty,
+                    IssueType = x.ReviewCategory ?? "Other",
+                    Intent = x.ContextMode ?? "DocumentationQuestion",
+                    ReviewedBy = x.ReviewedBy ?? string.Empty,
+                    ReviewedAt = x.ReviewedAt,
+                    IsPromotedToKnowledge = x.PromotedKnowledgeEntryId.HasValue
+                })
+                .ToListAsync();
+
+            return Ok(candidates);
+        }
+
+        [HttpGet("reviewer/state")]
+        public IActionResult GetReviewerState()
+            => Ok(_trainingWorkspace.GetState());
+
+        [HttpPost("reviewer/build-dataset")]
+        public async Task<IActionResult> BuildReviewerDataset()
+        {
+            var candidates = await LoadTrainingCandidateEntitiesAsync();
+            var imported = _trainingWorkspace.ImportApprovedExamples(candidates.Select(ToTrainingExample));
+            var dataset = _trainingWorkspace.BuildDataset("DocumentationQualityReviewer");
+
+            return Ok($"Dataset v{dataset.Version} built with {dataset.ExampleCount} approved example(s). Imported {imported} new candidate(s).");
+        }
+
+        [HttpPost("reviewer/train")]
+        public async Task<IActionResult> TrainReviewer(CancellationToken cancellationToken)
+        {
+            var dataset = _trainingWorkspace.LatestDataset;
+            if (dataset is null)
+            {
+                return BadRequest("Build a reviewer dataset before training.");
+            }
+
+            var job = await _trainingWorkspace.QueueAndRunTrainingAsync(
+                dataset.Id,
+                User.FindFirstValue(ClaimTypes.Name) ?? "admin",
+                cancellationToken);
+
+            return Ok($"ML.NET reviewer trained. Accuracy: {job.Accuracy:P1}, F1: {job.F1Score:P1}.");
+        }
+
+        [HttpPost("reviewer/publish-latest")]
+        public IActionResult PublishLatestReviewer()
+        {
+            var model = _trainingWorkspace.LatestModel;
+            if (model is null)
+            {
+                return BadRequest("Train a reviewer model before publishing.");
+            }
+
+            _trainingWorkspace.PublishModel(model.Id);
+            return Ok($"Published reviewer model {model.Version}. The API can now use it to review responses.");
         }
 
         [HttpPut("reports/{id:int}/review")]
@@ -424,6 +523,38 @@ namespace AIChatApp.API.Controllers
                 ? JsonSerializer.Serialize(cleaned, JsonOptions)
                 : null;
         }
+
+        private static bool IsTrainingCandidate(ChatResponseReportEntity report)
+            => string.Equals(report.ReviewStatus, "Approved", StringComparison.OrdinalIgnoreCase)
+               && !string.IsNullOrWhiteSpace(report.ValidatedResponse)
+               && !string.IsNullOrWhiteSpace(report.ReviewCategory);
+
+        private async Task<List<ChatResponseReportEntity>> LoadTrainingCandidateEntitiesAsync()
+            => await _dbContext.ChatResponseReports
+                .AsNoTracking()
+                .Where(x => x.ReviewStatus == "Approved"
+                    && x.ValidatedResponse != null
+                    && x.ValidatedResponse != string.Empty
+                    && x.ReviewCategory != null
+                    && x.ReviewCategory != string.Empty)
+                .OrderByDescending(x => x.ReviewedAt ?? x.CreatedAt)
+                .ToListAsync();
+
+        private static TrainingExample ToTrainingExample(ChatResponseReportEntity report)
+            => new()
+            {
+                SourceType = "ReviewedReport",
+                SourceReference = $"Report-{report.Id}",
+                Question = report.ValidatedQuestion ?? report.UserPrompt,
+                BadResponse = report.AssistantResponse,
+                ExpectedAnswer = report.ValidatedResponse ?? string.Empty,
+                IssueType = report.ReviewCategory ?? "Other",
+                Intent = report.ContextMode ?? "DocumentationQuestion",
+                ReviewStatus = "Approved",
+                ApprovedForTraining = true,
+                ReviewedBy = report.ReviewedBy ?? string.Empty,
+                ReviewedAt = report.ReviewedAt
+            };
 
         private List<AssistantPromptTemplateEntity> BuildFallbackPromptTemplates(string profileId)
         {

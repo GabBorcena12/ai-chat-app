@@ -5,10 +5,19 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>974ec58b-e3ec-4705-95df-a0f5c1b5f3d6</UserSecretsId>
+    <DefaultItemExcludes>$(DefaultItemExcludes);artifacts\**;**\artifacts\**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>
+    <Content Remove="artifacts\**" />
+    <None Remove="artifacts\**" />
+    <Compile Remove="artifacts\**" />
+    <EmbeddedResource Remove="artifacts\**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\AIChatApp.Core\AIChatApp.Core.csproj" />
+    <ProjectReference Include="..\AIChatApp.MLTraining.Core\AIChatApp.MLTraining.Core.csproj" />
   </ItemGroup>
 
 </Project>

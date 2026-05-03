@@ -294,6 +294,33 @@
                                         "What is the usual local API target behind the gateway?"
                                     ],
                         "answer":  "In local development, the gateway commonly forwards to the API running on localhost."
+                    },
+                    {
+                        "aliases":  [
+                                        "Why does my session expire immediately after login?",
+                                        "why does chat say session expired after login",
+                                        "why does chat say session no longer matches the running API",
+                                        "why do I get logged out when I send chat after login"
+                                    ],
+                        "answer":  "In local development, make the Web app call the HTTPS Gateway URL directly: Frontend:GatewayBaseUrl should be https://localhost:7067/. Using the HTTP Gateway URL can lose the bearer token during redirect."
+                    },
+                    {
+                        "aliases":  [
+                                        "What gateway URL should the Web app use locally?",
+                                        "what should Frontend:GatewayBaseUrl be in development",
+                                        "what is the local gateway base url for web"
+                                    ],
+                        "answer":  "For local development, AIChatApp.Web should use Frontend:GatewayBaseUrl = https://localhost:7067/."
+                    },
+                    {
+                        "aliases":  [
+                                        "How does ML work in AIChatApp?",
+                                        "how does machine learning work in aichatapp",
+                                        "tell me more about machine learning in aichatapp",
+                                        "what is ml training in aichatapp",
+                                        "how does the ml training project work"
+                                    ],
+                        "answer":  "AIChatApp uses the local LLM to generate answers, while ML.NET acts as a reviewer that classifies response quality after admins build, train, and publish a reviewer model from approved reports."
                     }
                 ]
 }

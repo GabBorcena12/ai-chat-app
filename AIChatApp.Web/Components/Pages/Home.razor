@@ -1,6 +1,8 @@
 @page "/"
+@page "/chat"
 @rendermode InteractiveServer
 @using AIChatApp.Core.Config
+@using AIChatApp.Web.Config
 @using System.Net
 @using System.Text
 @inject AIChatApp.Web.Services.AIChatGatewayClient GatewayClient
@@ -9,6 +11,7 @@
 @inject ILogger<Home> Logger
 @inject NavigationManager Navigation
 @inject Microsoft.Extensions.Options.IOptions<AssistantProfileOptions> AssistantProfileOptionsAccessor
+@inject Microsoft.Extensions.Options.IOptions<FrontendOptions> FrontendOptionsAccessor
 
 <PageTitle>@AssistantProfile.PageTitle</PageTitle>
 
@@ -40,9 +43,17 @@
             <span>@AssistantProfile.NewChatLabel</span>
         </button>
 
-        <section class="sidebar-section">
-            <div class="section-title">Conversations</div>
-            <div class="conversation-list">
+        <section class="sidebar-section collapsible-sidebar-section @(conversationsSectionOpen ? null : "collapsed")">
+            <button type="button"
+                    class="sidebar-section-toggle"
+                    aria-expanded="@conversationsSectionOpen"
+                    @onclick="() => conversationsSectionOpen = !conversationsSectionOpen">
+                <span>Conversations</span>
+                <strong>@(conversationsSectionOpen ? "Hide" : "Show")</strong>
+            </button>
+            @if (conversationsSectionOpen)
+            {
+                <div class="conversation-list">
                 @foreach (var conversation in Conversations)
                 {
                     <div class="conversation-item @(conversation.Id == ActiveConversation.Id ? "active" : null)">
@@ -86,12 +97,51 @@
                         }
                     </div>
                 }
-            </div>
+                </div>
+            }
         </section>
 
-        <section class="sidebar-section account-panel">
-                <div class="section-title">Account</div>
+        <section class="sidebar-section collapsible-sidebar-section @(workspaceSectionOpen ? null : "collapsed")">
+            <button type="button"
+                    class="sidebar-section-toggle"
+                    aria-expanded="@workspaceSectionOpen"
+                    @onclick="() => workspaceSectionOpen = !workspaceSectionOpen">
+                <span>Workspaces</span>
+                <strong>@(workspaceSectionOpen ? "Hide" : "Show")</strong>
+            </button>
+            @if (workspaceSectionOpen)
+            {
+                <nav class="workspace-nav" aria-label="Workspace navigation">
+                    <button type="button" class="workspace-nav-link app-chat active" @onclick='() => Navigation.NavigateTo("/chat")'>
+                        <span>Chat</span>
+                        <small>Main assistant</small>
+                    </button>
+                    <button type="button" class="workspace-nav-link app-backoffice" @onclick='() => Navigation.NavigateTo("/backoffice")'>
+                        <span>Backoffice</span>
+                        <small>Validate answers</small>
+                    </button>
+                    <a class="workspace-nav-link app-ml"
+                       href="@FrontendOptions.MlTrainingUrl">
+                        <span>ML Training</span>
+                        <small>Train reviewer</small>
+                    </a>
+                    <button type="button" class="workspace-nav-link app-faq compact" @onclick='() => Navigation.NavigateTo("/faqs")'>
+                        FAQs
+                    </button>
+                </nav>
+            }
+        </section>
 
+        <section class="sidebar-section account-panel collapsible-sidebar-section @(accountSectionOpen ? null : "collapsed")">
+            <button type="button"
+                    class="sidebar-section-toggle"
+                    aria-expanded="@accountSectionOpen"
+                    @onclick="() => accountSectionOpen = !accountSectionOpen">
+                <span>Account</span>
+                <strong>@(accountSectionOpen ? "Hide" : "Show")</strong>
+            </button>
+            @if (accountSectionOpen)
+            {
             @if (!IsAuthenticated)
             {
                 <div class="auth-tabs">
@@ -207,6 +257,7 @@
                         <button type="button" class="primary-action slim" @onclick="SetupTwoFactorAsync" disabled="@isBusy">Set up Google Authenticator</button>
                     }
                 </div>
+            }
             }
         </section>
     </aside>
@@ -458,7 +509,11 @@
     private bool pendingScrollToLatest;
     private bool forceNextScrollToLatest;
     private bool isSidebarOpen;
+    private bool workspaceSectionOpen;
+    private bool conversationsSectionOpen = true;
+    private bool accountSectionOpen;
     private AssistantProfileOptions AssistantProfile => AssistantProfileOptionsAccessor.Value;
+    private FrontendOptions FrontendOptions => FrontendOptionsAccessor.Value;
 
     private bool IsAuthenticated => !string.IsNullOrWhiteSpace(token);
     private string CurrentUsernameOrFallback => string.IsNullOrWhiteSpace(CurrentUsername) ? "You" : CurrentUsername;
@@ -800,6 +855,12 @@
         }
         catch (Exception ex)
         {
+            if (IsInvalidSessionError(ex))
+            {
+                await EndInvalidSessionAsync(ex.Message);
+                return;
+            }
+
             assistantMessage.IsStreaming = false;
             assistantMessage.Content = string.IsNullOrWhiteSpace(assistantMessage.Content)
                 ? "I hit an error before the response could finish streaming."
@@ -1053,6 +1114,12 @@
         }
         catch (Exception ex)
         {
+            if (IsInvalidSessionError(ex))
+            {
+                await EndInvalidSessionAsync(ex.Message);
+                return;
+            }
+
             ChatStatus = ex.Message;
             await InvokeAsync(StateHasChanged);
         }
@@ -1125,6 +1192,12 @@
         }
         catch (Exception ex)
         {
+            if (IsInvalidSessionError(ex))
+            {
+                await EndInvalidSessionAsync(ex.Message);
+                return;
+            }
+
             message.Content = originalContent;
             ChatStatus = ex.Message;
         }
@@ -1184,6 +1257,30 @@
         AuthMessage = AssistantProfile.AuthRequiredMessage;
         return false;
     }
+
+    private async Task EndInvalidSessionAsync(string message)
+    {
+        token = null;
+        CurrentUsername = null;
+        CurrentDisplayName = null;
+        CurrentAvatar = null;
+        twoFactorSetup = null;
+        twoFactorCode = string.Empty;
+        isTwoFactorEnabled = false;
+        TwoFactorStatus = null;
+        AuthMessage = "Your session expired or no longer matches the running API. Please sign in again.";
+        ChatStatus = message;
+
+        await BrowserStorage.RemoveAsync(TokenStorageKey);
+        await BrowserStorage.RemoveAsync(UserStorageKey);
+        ResetConversationWorkspace();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private static bool IsInvalidSessionError(Exception ex)
+        => ex.Message.Contains("session is no longer valid", StringComparison.OrdinalIgnoreCase)
+           || ex.Message.Contains("invalid_token", StringComparison.OrdinalIgnoreCase)
+           || ex.Message.Contains("Unauthorized", StringComparison.OrdinalIgnoreCase);
 
     private async Task RefreshTwoFactorStatusAsync(CancellationToken cancellationToken = default)
     {

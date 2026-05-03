@@ -1,9 +1,12 @@
 @page "/backoffice"
 @rendermode InteractiveServer
+@using AIChatApp.Web.Config
 @using System.Text.Json
 @inject AIChatApp.Web.Services.AIChatGatewayClient GatewayClient
 @inject AIChatApp.Web.Services.BrowserStorageService BrowserStorage
 @inject IJSRuntime JS
+@inject NavigationManager Navigation
+@inject Microsoft.Extensions.Options.IOptions<FrontendOptions> FrontendOptionsAccessor
 
 <PageTitle>Backoffice</PageTitle>
 
@@ -48,57 +51,241 @@
             <p class="status-note @(StatusIsError ? "error" : "success")">@StatusMessage</p>
         }
 
-        <section class="backoffice-help-panel">
+        <section class="backoffice-help-panel backoffice-workflow-panel">
             <div>
-                <div class="eyebrow">How It Works</div>
-                <h2>Backoffice Workflow</h2>
+                <div class="eyebrow">Feedback Loop</div>
+                <h2>Improve Answers Without Code Changes</h2>
+                <p class="backoffice-copy">Reports become validated answers, approved reviews become training data, and the published ML.NET reviewer checks future LLM responses.</p>
             </div>
-            <ol class="backoffice-help-list">
-                <li>Review a reported answer in `Reported Responses`.</li>
-                <li>Correct the validated question and validated response.</li>
-                <li>Choose a review status and category.</li>
-                <li>If the fix should improve future answers, enable `Promote to knowledge`.</li>
-                <li>If it should go live immediately, also enable `Publish immediately`.</li>
-                <li>Use `Prompt Templates` for global behavior and `Knowledge Entries` for reusable content.</li>
-            </ol>
+            <div class="workflow-strip" aria-label="Backoffice improvement workflow">
+                <span>1. User reports</span>
+                <span>2. Admin validates</span>
+                <span>3. Approve candidate</span>
+                <span>4. Build dataset</span>
+                <span>5. Train reviewer</span>
+                <span>6. Publish reviewer</span>
+            </div>
         </section>
 
         <div class="backoffice-layout">
             <aside class="backoffice-sidebar">
-                <button type="button"
-                        class="backoffice-nav-button @(ActiveSection == BackofficeSection.Reports ? "active" : null)"
-                        @onclick="() => SetSection(BackofficeSection.Reports)">
-                    <span>Reported Responses</span>
-                    <small>Validate and promote reported answers</small>
-                </button>
-                <button type="button"
-                        class="backoffice-nav-button @(ActiveSection == BackofficeSection.Prompts ? "active" : null)"
-                        @onclick="() => SetSection(BackofficeSection.Prompts)">
-                    <span>Prompt Templates</span>
-                    <small>Control assistant behavior</small>
-                </button>
-                <button type="button"
-                        class="backoffice-nav-button @(ActiveSection == BackofficeSection.Knowledge ? "active" : null)"
-                        @onclick="() => SetSection(BackofficeSection.Knowledge)">
-                    <span>Knowledge Entries</span>
-                    <small>Manage quick answers and references</small>
-                </button>
-                <button type="button"
-                        class="backoffice-nav-button @(ActiveSection == BackofficeSection.Profile ? "active" : null)"
-                        @onclick="() => SetSection(BackofficeSection.Profile)">
-                    <span>Profile Management</span>
-                    <small>Change chat display name and avatar</small>
-                </button>
-                <button type="button"
-                        class="backoffice-nav-button @(ActiveSection == BackofficeSection.Users ? "active" : null)"
-                        @onclick="() => SetSection(BackofficeSection.Users)">
-                    <span>User Management</span>
-                    <small>Create users and manage backoffice roles</small>
-                </button>
+                <section class="backoffice-nav-group">
+                    <button type="button"
+                            class="backoffice-nav-heading"
+                            aria-expanded="@workspacesNavOpen"
+                            @onclick="() => workspacesNavOpen = !workspacesNavOpen">
+                        <span>Workspaces</span>
+                        <small>Move between app areas</small>
+                        <strong>@(workspacesNavOpen ? "Hide" : "Show")</strong>
+                    </button>
+                    @if (workspacesNavOpen)
+                    {
+                        <button type="button" class="backoffice-nav-button app-chat" @onclick='() => Navigation.NavigateTo("/chat")'>
+                            <span>Chat</span>
+                            <small>Main assistant</small>
+                        </button>
+                        <button type="button" class="backoffice-nav-button app-backoffice active" @onclick='() => Navigation.NavigateTo("/backoffice")'>
+                            <span>Backoffice</span>
+                            <small>Validation workspace</small>
+                        </button>
+                        <a class="backoffice-nav-button backoffice-nav-link app-ml"
+                           href="@MlTrainingUrl"
+                           title="Open the ML Training workspace.">
+                            <span>ML Training</span>
+                            <small>Train reviewer</small>
+                        </a>
+                        <button type="button" class="backoffice-nav-button app-faq" @onclick='() => Navigation.NavigateTo("/faqs")'>
+                            <span>FAQs</span>
+                            <small>User guide</small>
+                        </button>
+                    }
+                </section>
+
+                <section class="backoffice-nav-group">
+                    <button type="button"
+                            class="backoffice-nav-heading"
+                            aria-expanded="@validationNavOpen"
+                            @onclick="() => validationNavOpen = !validationNavOpen">
+                        <span>Validation</span>
+                        <small>Improve answer quality</small>
+                        <strong>@(validationNavOpen ? "Hide" : "Show")</strong>
+                    </button>
+                    @if (validationNavOpen)
+                    {
+                        <button type="button"
+                                class="backoffice-nav-button @(ActiveSection == BackofficeSection.Workflow ? "active" : null)"
+                                @onclick="() => SetSection(BackofficeSection.Workflow)">
+                            <span>Workflow</span>
+                            <small>See the full improvement loop</small>
+                        </button>
+                        <button type="button"
+                                class="backoffice-nav-button @(ActiveSection == BackofficeSection.Reports ? "active" : null)"
+                                @onclick="() => SetSection(BackofficeSection.Reports)">
+                            <span>Reported Responses</span>
+                            <small>Validate and promote reported answers</small>
+                        </button>
+                        <button type="button"
+                                class="backoffice-nav-button @(ActiveSection == BackofficeSection.Prompts ? "active" : null)"
+                                @onclick="() => SetSection(BackofficeSection.Prompts)">
+                            <span>Prompt Templates</span>
+                            <small>Control assistant behavior</small>
+                        </button>
+                        <button type="button"
+                                class="backoffice-nav-button @(ActiveSection == BackofficeSection.Knowledge ? "active" : null)"
+                                @onclick="() => SetSection(BackofficeSection.Knowledge)">
+                            <span>Knowledge Entries</span>
+                            <small>Manage quick answers and references</small>
+                        </button>
+                    }
+                </section>
+
+                <section class="backoffice-nav-group">
+                    <button type="button"
+                            class="backoffice-nav-heading"
+                            aria-expanded="@administrationNavOpen"
+                            @onclick="() => administrationNavOpen = !administrationNavOpen">
+                        <span>Administration</span>
+                        <small>People and profile settings</small>
+                        <strong>@(administrationNavOpen ? "Hide" : "Show")</strong>
+                    </button>
+                    @if (administrationNavOpen)
+                    {
+                        <button type="button"
+                                class="backoffice-nav-button @(ActiveSection == BackofficeSection.Profile ? "active" : null)"
+                                @onclick="() => SetSection(BackofficeSection.Profile)">
+                            <span>Profile Management</span>
+                            <small>Change chat display name and avatar</small>
+                        </button>
+                        <button type="button"
+                                class="backoffice-nav-button @(ActiveSection == BackofficeSection.Users ? "active" : null)"
+                                @onclick="() => SetSection(BackofficeSection.Users)">
+                            <span>User Management</span>
+                            <small>Create users and manage backoffice roles</small>
+                        </button>
+                    }
+                </section>
             </aside>
 
             <section class="backoffice-content">
-                @if (ActiveSection == BackofficeSection.Reports)
+                @if (ActiveSection == BackofficeSection.Workflow)
+                {
+                    <section class="backoffice-section">
+                        <div class="backoffice-section-header">
+                            <div>
+                                <h2>Answer Improvement Workflow</h2>
+                                <p>Follow this path when a response is wrong, incomplete, too long, or repetitive.</p>
+                            </div>
+                            <div class="backoffice-toolbar">
+                                <button type="button" class="ghost-button" @onclick="LoadAllAsync" disabled="@isBusy">Refresh</button>
+                                <a class="ghost-button backoffice-external-link"
+                                   href="@MlTrainingUrl"
+                                   target="_blank"
+                                   rel="noopener noreferrer">
+                                    Open ML Training
+                                </a>
+                            </div>
+                        </div>
+
+                        <div class="workflow-metrics">
+                            <article>
+                                <strong>@WorkflowSummary.PendingReports</strong>
+                                <span>Needs review</span>
+                            </article>
+                            <article>
+                                <strong>@WorkflowSummary.ApprovedReports</strong>
+                                <span>Approved fixes</span>
+                            </article>
+                            <article>
+                                <strong>@WorkflowSummary.TrainingCandidates</strong>
+                                <span>Training candidates</span>
+                            </article>
+                            <article>
+                                <strong>@WorkflowSummary.PublishedKnowledgeEntries</strong>
+                                <span>Live knowledge</span>
+                            </article>
+                        </div>
+
+                        <div class="reviewer-action-panel">
+                            <div>
+                                <div class="eyebrow">ML.NET Reviewer</div>
+                                <h3>Manual train and publish controls</h3>
+                                <p>The reviewer model classifies response quality. It does not generate answers.</p>
+                            </div>
+                            <div class="reviewer-state-grid">
+                                <span>@ReviewerState.ApprovedExamples approved example(s)</span>
+                                <span>@ReviewerState.DatasetCount dataset(s)</span>
+                                <span>@ReviewerState.JobCount training job(s)</span>
+                                <span>@(string.IsNullOrWhiteSpace(ReviewerState.PublishedModelVersion) ? "No reviewer published" : $"Published {ReviewerState.PublishedModelVersion}")</span>
+                            </div>
+                            <div class="backoffice-toolbar">
+                                <button type="button" class="ghost-button" @onclick="BuildReviewerDatasetAsync" disabled="@isBusy">Build Dataset</button>
+                                <button type="button" class="ghost-button" @onclick="TrainReviewerAsync" disabled="@isBusy">Train Model</button>
+                                <button type="button" class="primary-action slim" @onclick="PublishLatestReviewerAsync" disabled="@isBusy">Publish Reviewer</button>
+                            </div>
+                        </div>
+
+                        <div class="workflow-board">
+                            <article class="workflow-card">
+                                <span class="workflow-number">1</span>
+                                <h3>Report bad answer</h3>
+                                <p>User clicks Report on an assistant message. The original prompt and response are saved for review.</p>
+                                <button type="button" class="ghost-button" @onclick="() => SetSection(BackofficeSection.Reports)">Open reports</button>
+                            </article>
+                            <article class="workflow-card">
+                                <span class="workflow-number">2</span>
+                                <h3>Validate correction</h3>
+                                <p>Admin writes the correct answer, selects issue category, and sets status to Approved.</p>
+                            </article>
+                            <article class="workflow-card">
+                                <span class="workflow-number">3</span>
+                                <h3>Publish knowledge</h3>
+                                <p>Optional: promote the corrected answer as live knowledge so future matching questions can answer faster.</p>
+                                <button type="button" class="ghost-button" @onclick="() => SetSection(BackofficeSection.Knowledge)">Open knowledge</button>
+                            </article>
+                            <article class="workflow-card">
+                                <span class="workflow-number">4</span>
+                                <h3>Build and train</h3>
+                                <p>Approved reviews with a category feed Build Dataset and Train Model for the ML.NET reviewer.</p>
+                            </article>
+                            <article class="workflow-card pending">
+                                <span class="workflow-number">5</span>
+                                <h3>Publish quality gate</h3>
+                                <p>Publish Reviewer makes the API load the ML.NET reviewer before returning future answers.</p>
+                            </article>
+                        </div>
+
+                        <section class="backoffice-section">
+                            <div class="backoffice-section-header">
+                                <div>
+                                    <h2>Training Candidates</h2>
+                                    <p>These come from approved reports with a validated answer and issue category.</p>
+                                </div>
+                            </div>
+
+                            @if (TrainingCandidates.Count == 0)
+                            {
+                                <p class="backoffice-empty">No training candidates yet. Approve a report, choose a category, and save it.</p>
+                            }
+                            else
+                            {
+                                @foreach (var candidate in TrainingCandidates.Take(8))
+                                {
+                                    <article class="backoffice-card backoffice-list-card">
+                                        <div class="backoffice-card-header">
+                                            <strong>Report #@candidate.ReportId</strong>
+                                            <span>@candidate.IssueType</span>
+                                            <span>@candidate.Intent</span>
+                                            <span>@(candidate.IsPromotedToKnowledge ? "Knowledge promoted" : "Not promoted")</span>
+                                        </div>
+                                        <p class="backoffice-list-summary"><strong>Question:</strong> @candidate.Question</p>
+                                        <p class="backoffice-list-summary"><strong>Correct answer:</strong> @candidate.CorrectAnswer</p>
+                                    </article>
+                                }
+                            }
+                        </section>
+                    </section>
+                }
+                else if (ActiveSection == BackofficeSection.Reports)
                 {
                     <section class="backoffice-section">
                         <div class="backoffice-section-header">
@@ -106,7 +293,16 @@
                                 <h2>Reported Responses</h2>
                                 <p>Validate reported chat answers and optionally promote them into published knowledge.</p>
                             </div>
-                            <button type="button" class="ghost-button" @onclick="LoadReportsAsync" disabled="@isBusy">Refresh</button>
+                            <div class="backoffice-toolbar">
+                                <a class="ghost-button backoffice-external-link"
+                                   href="@MlTrainingUrl"
+                                   target="_blank"
+                                   rel="noopener noreferrer"
+                                   title="Open ML Training after reviewing reported responses.">
+                                    Open ML Training
+                                </a>
+                                <button type="button" class="ghost-button" @onclick="LoadReportsAsync" disabled="@isBusy">Refresh</button>
+                            </div>
                         </div>
 
                         <div class="backoffice-filters">
@@ -145,6 +341,7 @@
                                     <p class="backoffice-list-summary">@GetReportPreview(report)</p>
                                     <div class="backoffice-inline-options">
                                         <span>@(report.PromotedKnowledgeEntryId.HasValue ? $"Promoted to knowledge #{report.PromotedKnowledgeEntryId.Value}" : "Not promoted")</span>
+                                        <span>@(IsTrainingCandidate(report) ? "Training candidate" : "Not training-ready")</span>
                                         @if (!string.IsNullOrWhiteSpace(report.ReviewedBy))
                                         {
                                             <span>Reviewed by @report.ReviewedBy</span>
@@ -446,6 +643,21 @@
                         <p class="backoffice-list-summary"><strong>Original response:</strong> @SelectedReport.AssistantResponse</p>
                     </div>
 
+                    <div class="review-workflow-guide">
+                        <div class="review-workflow-step active">
+                            <strong>1. Correct</strong>
+                            <span>Write the answer that should have been returned.</span>
+                        </div>
+                        <div class="review-workflow-step @(CanPromoteToKnowledge(draft) ? "active" : null)">
+                            <strong>2. Classify</strong>
+                            <span>Approved + category turns this into training data.</span>
+                        </div>
+                        <div class="review-workflow-step @(draft.PromoteToKnowledge ? "active" : null)">
+                            <strong>3. Reuse</strong>
+                            <span>Publish as knowledge so future matches answer faster.</span>
+                        </div>
+                    </div>
+
                     <div class="backoffice-grid">
                         <label>
                             <span title="The cleaned or corrected user question you want to keep as the reviewed version.">User prompt</span>
@@ -456,7 +668,7 @@
                             <textarea class="text-input backoffice-textarea" rows="6" @bind="draft.ValidatedResponse"></textarea>
                         </label>
                         <label>
-                            <span title="Use status to track whether the report is still pending, reviewed, approved, or rejected.">Review status</span>
+                            <span title="Approved means this corrected response is trusted and can become ML training data.">Review status</span>
                             <select class="text-input"
                                     value="@draft.ReviewStatus"
                                     @onchange="args => OnReviewStatusChanged(draft, args.Value?.ToString())">
@@ -467,7 +679,7 @@
                             </select>
                         </label>
                         <label>
-                            <span title="Category helps classify the issue type for reporting and future quality analysis.">Category</span>
+                            <span title="This is the issue label used for future quality analysis and ML training examples.">Category</span>
                             <select class="text-input" @bind="draft.ReviewCategory">
                                 @foreach (var category in ReviewCategoryOptions)
                                 {
@@ -496,6 +708,9 @@
                             Publish immediately
                         </label>
                     </div>
+                    <p class="backoffice-results-meta">
+                        Training-ready rule: set status to Approved, choose a category, and keep a validated response.
+                    </p>
                     @if (draft.PromoteToKnowledge)
                     {
                         <div class="backoffice-grid">
@@ -598,6 +813,9 @@
     private const string AvatarLabelStorageKey = "aichatapp.web.avatarLabel";
     private bool initialized;
     private bool isBusy;
+    private bool workspacesNavOpen;
+    private bool validationNavOpen;
+    private bool administrationNavOpen;
     private string? token;
     private string? currentUsername;
     private string? currentDisplayName;
@@ -610,7 +828,7 @@
     private string KnowledgeSearchTerm { get; set; } = string.Empty;
     private string KnowledgeTypeFilter { get; set; } = string.Empty;
     private int KnowledgePage { get; set; } = 1;
-    private BackofficeSection ActiveSection { get; set; } = BackofficeSection.Reports;
+    private BackofficeSection ActiveSection { get; set; } = BackofficeSection.Workflow;
     private bool ShowKnowledgeModal { get; set; }
     private bool ShowReportModal { get; set; }
     private bool ShowUserModal { get; set; }
@@ -618,9 +836,13 @@
     private string? EditingUserId { get; set; }
     private int? SelectedReportId { get; set; }
     private string? CompletionNotice;
+    private string MlTrainingUrl => FrontendOptionsAccessor.Value.MlTrainingUrl;
     private List<BackofficeReportViewModel> Reports { get; set; } = [];
     private List<PromptTemplateViewModel> PromptTemplates { get; set; } = [];
     private List<KnowledgeEntryViewModel> KnowledgeEntries { get; set; } = [];
+    private List<TrainingCandidateViewModel> TrainingCandidates { get; set; } = [];
+    private BackofficeWorkflowSummaryViewModel WorkflowSummary { get; set; } = new();
+    private ReviewerWorkflowStateViewModel ReviewerState { get; set; } = new();
     private List<BackofficeUserViewModel> Users { get; set; } = [];
     private Dictionary<int, BackofficeReviewPayload> ReviewDrafts { get; } = [];
     private Dictionary<int, SavePromptTemplatePayload> PromptDrafts { get; } = [];
@@ -700,6 +922,7 @@
         await RunBusyAsync(async cancellationToken =>
         {
             await RefreshReportsCoreAsync(cancellationToken);
+            await RefreshWorkflowCoreAsync(cancellationToken);
             await RefreshPromptTemplatesCoreAsync(cancellationToken);
             await RefreshKnowledgeEntriesCoreAsync(cancellationToken);
             await RefreshUsersCoreAsync(cancellationToken);
@@ -787,6 +1010,7 @@
     private Task LoadReportsAsync() => RunBusyAsync(async cancellationToken =>
     {
         await RefreshReportsCoreAsync(cancellationToken);
+        await RefreshWorkflowCoreAsync(cancellationToken);
         ReviewDrafts.Clear();
         SetStatus("Reports refreshed.");
     });
@@ -801,6 +1025,7 @@
     private Task LoadKnowledgeEntriesAsync() => RunBusyAsync(async cancellationToken =>
     {
         await RefreshKnowledgeEntriesCoreAsync(cancellationToken);
+        await RefreshWorkflowCoreAsync(cancellationToken);
         KnowledgeDrafts.Clear();
         KnowledgePage = 1;
         SetStatus("Knowledge entries refreshed.");
@@ -888,10 +1113,12 @@
 
         var successMessage = await GatewayClient.ReviewReportedResponseAsync(token!, report.Id, draft, cancellationToken);
         await RefreshReportsCoreAsync(cancellationToken);
+        await RefreshWorkflowCoreAsync(cancellationToken);
         await RefreshKnowledgeEntriesCoreAsync(cancellationToken);
         CloseReportModal();
-        SetStatus(successMessage);
-        await ShowCompletionNotificationAsync(successMessage);
+        var workflowMessage = BuildReviewSavedMessage(draft, successMessage);
+        SetStatus(workflowMessage);
+        await ShowCompletionNotificationAsync(workflowMessage);
     });
 
     private Task SavePromptTemplateAsync(PromptTemplateViewModel template, SavePromptTemplatePayload draft) => RunBusyAsync(async cancellationToken =>
@@ -996,6 +1223,7 @@
 
         CloseKnowledgeModal();
         await RefreshKnowledgeEntriesCoreAsync(cancellationToken);
+        await RefreshWorkflowCoreAsync(cancellationToken);
         SetStatus(successMessage);
         await ShowCompletionNotificationAsync(successMessage);
     });
@@ -1063,6 +1291,37 @@
             CloseReportModal();
         }
     }
+
+    private async Task RefreshWorkflowCoreAsync(CancellationToken cancellationToken)
+    {
+        WorkflowSummary = await GatewayClient.GetBackofficeWorkflowSummaryAsync(token!, cancellationToken);
+        TrainingCandidates = await GatewayClient.GetTrainingCandidatesAsync(token!, cancellationToken);
+        ReviewerState = await GatewayClient.GetReviewerWorkflowStateAsync(token!, cancellationToken);
+    }
+
+    private Task BuildReviewerDatasetAsync() => RunBusyAsync(async cancellationToken =>
+    {
+        var message = await GatewayClient.BuildReviewerDatasetAsync(token!, cancellationToken);
+        await RefreshWorkflowCoreAsync(cancellationToken);
+        SetStatus(message);
+        await ShowCompletionNotificationAsync(message);
+    });
+
+    private Task TrainReviewerAsync() => RunBusyAsync(async cancellationToken =>
+    {
+        var message = await GatewayClient.TrainReviewerAsync(token!, cancellationToken);
+        await RefreshWorkflowCoreAsync(cancellationToken);
+        SetStatus(message);
+        await ShowCompletionNotificationAsync(message);
+    });
+
+    private Task PublishLatestReviewerAsync() => RunBusyAsync(async cancellationToken =>
+    {
+        var message = await GatewayClient.PublishLatestReviewerAsync(token!, cancellationToken);
+        await RefreshWorkflowCoreAsync(cancellationToken);
+        SetStatus(message);
+        await ShowCompletionNotificationAsync(message);
+    });
 
     private bool MatchesReportStatusFilter(BackofficeReportViewModel report)
     {
@@ -1197,6 +1456,25 @@
             _ => false
         };
 
+    private static bool IsTrainingCandidate(BackofficeReportViewModel report)
+        => string.Equals(report.ReviewStatus, "Approved", StringComparison.OrdinalIgnoreCase)
+           && !string.IsNullOrWhiteSpace(report.ValidatedResponse)
+           && !string.IsNullOrWhiteSpace(report.ReviewCategory);
+
+    private static string BuildReviewSavedMessage(BackofficeReviewPayload draft, string fallback)
+    {
+        if (string.Equals(draft.ReviewStatus, "Approved", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(draft.ReviewCategory)
+            && !string.IsNullOrWhiteSpace(draft.ValidatedResponse))
+        {
+            return draft.PromoteToKnowledge && draft.PublishKnowledge
+                ? "Review saved. It is now live knowledge and a training candidate."
+                : "Review saved. It is now a training candidate.";
+        }
+
+        return fallback;
+    }
+
     private bool MatchesKnowledgeFilter(KnowledgeEntryViewModel entry)
     {
         if (!string.IsNullOrWhiteSpace(KnowledgeTypeFilter)
@@ -1322,6 +1600,7 @@
 
     private enum BackofficeSection
     {
+        Workflow,
         Reports,
         Prompts,
         Knowledge,

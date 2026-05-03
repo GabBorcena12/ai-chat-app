@@ -6,13 +6,15 @@ AIChatApp is a full-stack AI chat platform built with Blazor, ASP.NET Core, YARP
 
 ## Overview
 
-This solution contains five main projects:
+This solution contains seven main projects:
 
 - `AIChatApp.API`: backend for authentication, chat orchestration, chat history, and LLM access
 - `AIChatApp.Gateway`: reverse proxy entry point with API key validation and rate limiting
 - `AIChatApp.Core`: shared config, middleware, data access, and model path helpers
 - `AIChatApp.Console`: local console chat client for direct model testing
 - `AIChatApp.Web`: Blazor frontend for login, 2FA management, conversation UI, and streaming chat
+- `AIChatApp.MLTraining`: optional standalone Blazor UI for reviewer training experiments
+- `AIChatApp.MLTraining.Core`: shared ML.NET reviewer models, trainer, runtime reviewer service, and training workflow services
 
 ## Key Features
 
@@ -28,6 +30,8 @@ This solution contains five main projects:
 - Browser-persisted conversation workspace with rename, delete, timestamps, copy, continue, and report actions
 - Response reporting pipeline for saving bad or suspicious AI answers for later investigation
 - Admin backoffice for reviewing reported answers, validating fixes, managing prompt templates, and maintaining assistant knowledge in SQL
+- ML.NET reviewer workflow for training a response-quality classifier from approved backoffice reports
+- Runtime response-quality review before answers are returned, with rule fallback when no ML.NET model is published
 - Docker-ready local deployment for API, gateway, and web application workflows
 
 ## Resume Summary
@@ -46,6 +50,7 @@ The backoffice is the admin workflow for improving assistant quality without edi
 - editing published prompt templates that shape assistant behavior
 - managing published knowledge entries such as quick answers, topics, and references
 - managing users and assigning backoffice roles such as `Admin`, `DataValidator`, and `AppUser`
+- building, training, and publishing the ML.NET reviewer from approved report examples
 
 ### Main Workflow
 
@@ -55,10 +60,42 @@ The backoffice is the admin workflow for improving assistant quality without edi
 4. The admin updates the validated question and validated response, then chooses a review status and category.
 5. If the fix should improve future answers, the admin checks `Promote to knowledge`.
 6. If the new knowledge should become live right away, the admin also checks `Publish immediately`.
-7. The reviewed fix is either saved only as review history or promoted into published assistant knowledge.
+7. Approved reports with a category become training candidates.
+8. In `Workflow`, the admin clicks `Build Dataset`.
+9. The admin clicks `Train Model` to train the ML.NET reviewer classifier.
+10. The admin reviews the accuracy/F1 result.
+11. The admin clicks `Publish Reviewer`.
+12. The API loads the published reviewer and classifies generated answers before they are returned.
+
+### ML.NET Reviewer Workflow
+
+The ML.NET reviewer does not generate chat answers. Qwen/Llama still generates responses. The reviewer checks the generated answer and predicts whether it looks `Good`, `Incomplete`, `Repetitive`, `PromptLeak`, `TooLong`, or `Incorrect`.
+
+High-level flow:
+
+1. User reports a bad response.
+2. Admin validates the response in Backoffice.
+3. Approved reports become training candidates.
+4. Admin builds a dataset from approved examples.
+5. Admin trains the ML.NET reviewer.
+6. Admin checks the accuracy/F1 result.
+7. Admin publishes the reviewer model.
+8. API uses the published reviewer before returning future LLM answers.
+
+Reviewer behavior:
+
+- if a published ML.NET model exists, the API uses it for response-quality classification
+- if no model is published yet, the API still uses rule-based fallback checks
+- risky documentation answers can be retried or cleaned before the user sees them
+- the reviewer is a quality gate, not a response generator
 
 ### Backoffice Sections
 
+- `Workflow`
+  - shows the full improvement loop from reported answer to published reviewer
+  - displays counts for pending reports, approved fixes, training candidates, and live knowledge
+  - provides `Build Dataset`, `Train Model`, and `Publish Reviewer` controls
+  - lists training candidates created from approved reviewed reports
 - `Reported Responses`
   - list view of reported answers
   - filter by status such as needs action, reviewed, approved, or rejected
@@ -67,8 +104,12 @@ The backoffice is the admin workflow for improving assistant quality without edi
   - database-backed assistant behavior rules such as system context, answer style, retry template, and continuation template
 - `Knowledge Entries`
   - database-backed quick answers, topics, and reference content used by the assistant
+- `Profile Management`
+  - update the chat display name and avatar label
 - `User Management`
   - create users from the backoffice
+  - assign `Admin`, `DataValidator`, and `AppUser` roles
+  - enable or disable users and manage confirmation state
   - assign `Admin`, `DataValidator`, and `AppUser` roles
   - enable or disable users and manage confirmation state
 
@@ -322,6 +363,15 @@ If you are running the projects locally with `dotnet run` instead of Docker, the
 - API: `https://localhost:7093` and `http://localhost:5157`
 - Gateway: `https://localhost:7067` and `http://localhost:5031`
 - Web: `https://localhost:7033` and `http://localhost:5143`
+- Web routes: `/chat`, `/backoffice`, `/faqs`, and `/ml-training`
+- Optional standalone ML Training UI: `http://localhost:55192` in local development. HTTPS `https://localhost:55191` also exists if the dev certificate is trusted.
+
+Important local auth note:
+
+- `AIChatApp.Web/appsettings.Development.json` should point `Frontend:GatewayBaseUrl` to `https://localhost:7067/`.
+- `AIChatApp.MLTraining/appsettings.Development.json` should point `TrainingFrontend:GatewayBaseUrl` to `https://localhost:7067/`.
+- Avoid using `http://localhost:5031/` for authenticated Web chat calls because Gateway HTTPS redirection can drop the `Authorization: Bearer <token>` header during redirect.
+- If chat says the session expired immediately after login, restart API, Gateway, and Web, then sign in again.
 
 PowerShell note: the backtick must be the final character on the line. Do not attach it directly to `8080` or any other value.
 
@@ -352,6 +402,18 @@ Run the Blazor web app:
 ```powershell
 dotnet run --project AIChatApp.Web
 ```
+
+Open Chat at `/chat` and ML Training at `/ml-training` on the Web app host.
+
+Optional standalone ML training UI:
+
+```powershell
+dotnet run --project AIChatApp.MLTraining
+```
+
+Open it locally at `http://localhost:55192`. Use `https://localhost:55191` only after trusting the ASP.NET Core development certificate.
+
+The preferred ML Training UI is now `/ml-training` inside `AIChatApp.Web`, so it uses the same browser session as Chat and Backoffice. The standalone ML Training project remains useful for isolated experiments.
 
 Run the console client:
 
@@ -406,6 +468,18 @@ When calling through the gateway, authenticated chat endpoints usually require b
 
 - `Authorization: Bearer <jwt>`
 - gateway headers: `X-Api-Client` and `X-Api-Key`
+
+For local Web development, call the HTTPS Gateway URL directly:
+
+```json
+{
+  "Frontend": {
+    "GatewayBaseUrl": "https://localhost:7067/"
+  }
+}
+```
+
+Using the HTTP Gateway URL can cause authenticated chat requests to fail after login if the request is redirected and the bearer token is not forwarded.
 
 ### Google Authenticator 2FA flow
 
@@ -659,6 +733,9 @@ Content-Type: application/json
 - The Web app is currently pinned to the documentation assistant experience.
 - The chat UI supports browser-persisted conversations, inline rename/delete, timestamps, copy, continue, report, completion notifications, and auto-follow scrolling.
 - The gateway maps `/chat/*`, `/auth/*`, and `/chathistory/*` to the API service.
+- In local development, the Web app should call the HTTPS Gateway URL directly to preserve `Authorization` headers on authenticated chat requests.
+- The preferred ML Training UI is hosted by `AIChatApp.Web` at `/ml-training`.
+- `AIChatApp.MLTraining` can still run as a standalone experiment UI, but normal navigation should use the Web-hosted `/ml-training` route.
 - Google Authenticator support is based on TOTP with 6-digit codes and 30-second time windows.
 - The Blazor frontend uses the gateway as its API entry point in development.
 - Rotate any secrets that were previously committed to the repository before using this project in a shared environment.

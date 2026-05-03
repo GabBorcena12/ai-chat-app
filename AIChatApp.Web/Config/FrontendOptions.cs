@@ -7,4 +7,5 @@ public class FrontendOptions
     public string GatewayBaseUrl { get; set; } = "http://localhost:5001/";
     public string ApiClientName { get; set; } = "GajiTechClient";
     public string ApiKey { get; set; } = "dummy-api-key";
+    public string MlTrainingUrl { get; set; } = "/ml-training";
 }

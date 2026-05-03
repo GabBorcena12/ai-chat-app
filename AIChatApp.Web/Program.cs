@@ -2,6 +2,8 @@ using AIChatApp.Web.Components;
 using AIChatApp.Web.Config;
 using AIChatApp.Web.Services;
 using AIChatApp.Core.Config;
+using AIChatApp.MLTraining.Models;
+using AIChatApp.MLTraining.Services;
 using System;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -10,6 +12,8 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 builder.Services.Configure<FrontendOptions>(builder.Configuration.GetSection(FrontendOptions.SectionName));
+builder.Services.Configure<ResponseReviewerOptions>(
+    builder.Configuration.GetSection(ResponseReviewerOptions.SectionName));
 builder.Services.Configure<AssistantProfileOptions>(options =>
 {
     options.ProfileId = "Documentation";
@@ -39,6 +43,8 @@ builder.Services.AddHttpClient<AIChatGatewayClient>(client =>
     client.Timeout = Timeout.InfiniteTimeSpan;
 });
 builder.Services.AddScoped<BrowserStorageService>();
+builder.Services.AddSingleton<FaqContentService>();
+builder.Services.AddSingleton<TrainingWorkspaceService>();
 
 var app = builder.Build();
 

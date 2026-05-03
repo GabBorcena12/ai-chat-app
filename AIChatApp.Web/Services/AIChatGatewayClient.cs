@@ -128,6 +128,7 @@ public class AIChatGatewayClient(
             var error = await response.Content.ReadAsStringAsync(cancellationToken);
             if (response.StatusCode == HttpStatusCode.Unauthorized)
             {
+                logger.LogWarning("Chat stream unauthorized. Body: {Body}", string.IsNullOrWhiteSpace(error) ? "<empty>" : error);
                 throw new InvalidOperationException("Your session is no longer valid for chat requests. Please sign in again.");
             }
             throw new InvalidOperationException(ReadError(error, "Unable to stream a response."));
@@ -180,6 +181,7 @@ public class AIChatGatewayClient(
         {
             if (response.StatusCode == HttpStatusCode.Unauthorized)
             {
+                logger.LogWarning("Chat JSON request unauthorized. Body: {Body}", string.IsNullOrWhiteSpace(content) ? "<empty>" : content);
                 throw new InvalidOperationException("Your session is no longer valid for chat requests. Please sign in again.");
             }
             throw new InvalidOperationException(ReadError(content, "Unable to continue the response."));
@@ -204,6 +206,7 @@ public class AIChatGatewayClient(
         {
             if (response.StatusCode == HttpStatusCode.Unauthorized)
             {
+                logger.LogWarning("Chat continuation unauthorized. Body: {Body}", string.IsNullOrWhiteSpace(content) ? "<empty>" : content);
                 throw new InvalidOperationException("Your session is no longer valid for chat requests. Please sign in again.");
             }
             throw new InvalidOperationException(ReadError(content, "Unable to continue the response."));
@@ -233,6 +236,54 @@ public class AIChatGatewayClient(
         using var request = CreateRequest(HttpMethod.Get, $"backoffice/reports{suffix}", token);
         return await SendJsonAsync<List<BackofficeReportViewModel>>(request, cancellationToken, "Unable to load reported responses.")
             ?? [];
+    }
+
+    public async Task<BackofficeWorkflowSummaryViewModel> GetBackofficeWorkflowSummaryAsync(
+        string token,
+        CancellationToken cancellationToken)
+    {
+        using var request = CreateRequest(HttpMethod.Get, "backoffice/workflow-summary", token);
+        return await SendJsonAsync<BackofficeWorkflowSummaryViewModel>(request, cancellationToken, "Unable to load the backoffice workflow summary.")
+            ?? new BackofficeWorkflowSummaryViewModel();
+    }
+
+    public async Task<List<TrainingCandidateViewModel>> GetTrainingCandidatesAsync(
+        string token,
+        CancellationToken cancellationToken)
+    {
+        using var request = CreateRequest(HttpMethod.Get, "backoffice/training-candidates", token);
+        return await SendJsonAsync<List<TrainingCandidateViewModel>>(request, cancellationToken, "Unable to load training candidates.")
+            ?? [];
+    }
+
+    public async Task<ReviewerWorkflowStateViewModel> GetReviewerWorkflowStateAsync(
+        string token,
+        CancellationToken cancellationToken)
+    {
+        using var request = CreateRequest(HttpMethod.Get, "backoffice/reviewer/state", token);
+        return await SendJsonAsync<ReviewerWorkflowStateViewModel>(request, cancellationToken, "Unable to load reviewer workflow state.")
+            ?? new ReviewerWorkflowStateViewModel();
+    }
+
+    public async Task<string> BuildReviewerDatasetAsync(string token, CancellationToken cancellationToken)
+    {
+        using var request = CreateRequest(HttpMethod.Post, "backoffice/reviewer/build-dataset", token);
+        request.Content = CreateJsonContent(new { });
+        return await SendTextAsync(request, cancellationToken, "Unable to build the reviewer dataset.");
+    }
+
+    public async Task<string> TrainReviewerAsync(string token, CancellationToken cancellationToken)
+    {
+        using var request = CreateRequest(HttpMethod.Post, "backoffice/reviewer/train", token);
+        request.Content = CreateJsonContent(new { });
+        return await SendTextAsync(request, cancellationToken, "Unable to train the reviewer model.");
+    }
+
+    public async Task<string> PublishLatestReviewerAsync(string token, CancellationToken cancellationToken)
+    {
+        using var request = CreateRequest(HttpMethod.Post, "backoffice/reviewer/publish-latest", token);
+        request.Content = CreateJsonContent(new { });
+        return await SendTextAsync(request, cancellationToken, "Unable to publish the reviewer model.");
     }
 
     public async Task<string> ReviewReportedResponseAsync(
