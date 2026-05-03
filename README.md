@@ -1,8 +1,10 @@
 # AIChatApp
 
+Last updated: May 3, 2026
+
 A local AI chat application built on .NET 9, LLamaSharp, SQL Server, JWT authentication, Google Authenticator-style TOTP 2FA, and a Blazor frontend.
 
-AIChatApp is a full-stack AI chat platform built with Blazor, ASP.NET Core, YARP, SQL Server, JWT authentication, Google Authenticator 2FA, and local GGUF model inference through LLamaSharp. The solution supports streaming chat over Server-Sent Events, continuation handling for cut-off responses, JSON-based prompt and knowledge configuration, assistant-profile-driven behavior, browser-persisted conversations, response reporting, and Docker-based local deployment.
+AIChatApp is a full-stack AI chat platform built with Blazor, ASP.NET Core, YARP, SQL Server, JWT authentication, Google Authenticator 2FA, and local GGUF model inference through LLamaSharp. The solution supports streaming chat over Server-Sent Events, continuation handling for cut-off responses, JSON-based prompt and knowledge configuration, assistant-profile-driven behavior, browser-persisted conversations, response reporting, backoffice validation, an ML.NET response reviewer workflow, a Web-hosted FAQ page, and Docker-based local deployment.
 
 ## Overview
 
@@ -12,7 +14,7 @@ This solution contains seven main projects:
 - `AIChatApp.Gateway`: reverse proxy entry point with API key validation and rate limiting
 - `AIChatApp.Core`: shared config, middleware, data access, and model path helpers
 - `AIChatApp.Console`: local console chat client for direct model testing
-- `AIChatApp.Web`: Blazor frontend for login, 2FA management, conversation UI, and streaming chat
+- `AIChatApp.Web`: Blazor frontend for login, 2FA management, chat UI, FAQ page, backoffice navigation, Web-hosted ML training, and streaming chat
 - `AIChatApp.MLTraining`: optional standalone Blazor UI for reviewer training experiments
 - `AIChatApp.MLTraining.Core`: shared ML.NET reviewer models, trainer, runtime reviewer service, and training workflow services
 
@@ -27,7 +29,9 @@ This solution contains seven main projects:
 - Assistant-profile-based prompt and knowledge loading
 - JSON-based prompt templates, quick answers, topic knowledge, and console/shared context files
 - Retrieval-style documentation context selection from focused knowledge sources
-- Browser-persisted conversation workspace with rename, delete, timestamps, copy, continue, and report actions
+- Browser-persisted conversation workspace with rename, delete, timestamps, copy, read-aloud, continue, and report actions
+- Unified Web workspace routes for Chat, Backoffice, FAQs, and ML Training
+- Responsive workspace sidebars with collapsible groups and app-themed navigation colors
 - Response reporting pipeline for saving bad or suspicious AI answers for later investigation
 - Admin backoffice for reviewing reported answers, validating fixes, managing prompt templates, and maintaining assistant knowledge in SQL
 - ML.NET reviewer workflow for training a response-quality classifier from approved backoffice reports
@@ -91,6 +95,11 @@ Reviewer behavior:
 
 ### Backoffice Sections
 
+- Sidebar groups
+  - `Workspaces`: links to Chat, Backoffice, ML Training, and FAQs
+  - `Validation`: workflow, reports, prompt templates, and knowledge entries
+  - `Administration`: profile and user management
+  - groups are collapsible so the page stays easier to scan
 - `Workflow`
   - shows the full improvement loop from reported answer to published reviewer
   - displays counts for pending reports, approved fixes, training candidates, and live knowledge
@@ -108,8 +117,6 @@ Reviewer behavior:
   - update the chat display name and avatar label
 - `User Management`
   - create users from the backoffice
-  - assign `Admin`, `DataValidator`, and `AppUser` roles
-  - enable or disable users and manage confirmation state
   - assign `Admin`, `DataValidator`, and `AppUser` roles
   - enable or disable users and manage confirmation state
 
@@ -260,6 +267,20 @@ AIChatApp.Core/Data/Console/disallowed_topics.json
 AIChatApp.Core/Data/Shared/system_api_context.json
 ```
 
+Web navigation is hosted in `AIChatApp.Web` and uses these routes:
+
+- `/chat`: main documentation chat assistant
+- `/backoffice`: admin validation workspace for reports, knowledge, prompts, users, and reviewer workflow controls
+- `/ml-training`: Web-hosted ML.NET reviewer training workspace using the same browser session as Chat and Backoffice
+- `/faqs`: readable FAQ page loaded from the assistant knowledge files
+
+The workspace sidebars use one theme color per app area instead of one color per link:
+
+- Chat: green/cyan
+- Backoffice: blue
+- ML Training: gold
+- FAQs: cyan
+
 Example local development setup:
 
 ```powershell
@@ -404,6 +425,8 @@ dotnet run --project AIChatApp.Web
 ```
 
 Open Chat at `/chat` and ML Training at `/ml-training` on the Web app host.
+
+The Web app also exposes `/backoffice` for admin validation and `/faqs` for end-user documentation answers.
 
 Optional standalone ML training UI:
 
@@ -731,11 +754,15 @@ Content-Type: application/json
 - Prompt and knowledge files are JSON-based under `AIChatApp.Core/Data/...`.
 - The documentation assistant uses profile-specific prompt templates, quick answers, topic summaries, and focused knowledge references.
 - The Web app is currently pinned to the documentation assistant experience.
-- The chat UI supports browser-persisted conversations, inline rename/delete, timestamps, copy, continue, report, completion notifications, and auto-follow scrolling.
+- The chat UI supports browser-persisted conversations, inline rename/delete, timestamps, copy, read-aloud, continue, report, completion notifications, and auto-follow scrolling.
+- Chat, Backoffice, ML Training, and FAQs are available as Web-hosted workspaces with side navigation.
+- Backoffice, ML Training, and FAQs each have workspace navigation; Chat also has collapsible conversations, workspace, and account sections.
+- Workspace links use the current app theme color, not separate colors for every link.
 - The gateway maps `/chat/*`, `/auth/*`, and `/chathistory/*` to the API service.
 - In local development, the Web app should call the HTTPS Gateway URL directly to preserve `Authorization` headers on authenticated chat requests.
 - The preferred ML Training UI is hosted by `AIChatApp.Web` at `/ml-training`.
 - `AIChatApp.MLTraining` can still run as a standalone experiment UI, but normal navigation should use the Web-hosted `/ml-training` route.
 - Google Authenticator support is based on TOTP with 6-digit codes and 30-second time windows.
 - The Blazor frontend uses the gateway as its API entry point in development.
+- `AIChatApp.Web.csproj` excludes generated `artifacts` folders so temporary build outputs are not copied recursively into `bin`.
 - Rotate any secrets that were previously committed to the repository before using this project in a shared environment.

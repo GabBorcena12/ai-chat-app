@@ -1,4 +1,4 @@
-{
+﻿{
     "entries":  [
                     {
                         "aliases":  [
@@ -321,6 +321,44 @@
                                         "how does the ml training project work"
                                     ],
                         "answer":  "AIChatApp uses the local LLM to generate answers, while ML.NET acts as a reviewer that classifies response quality after admins build, train, and publish a reviewer model from approved reports."
+                    },
+                    {
+                        "aliases":  [
+                                        "What Web routes are available?",
+                                        "what pages are available in the web app",
+                                        "what workspaces are available"
+                                    ],
+                        "answer":  "AIChatApp.Web has /chat, /backoffice, /ml-training, and /faqs."
+                    },
+                    {
+                        "aliases":  [
+                                        "Where do I open ML Training?",
+                                        "where is ml training now",
+                                        "how do i go to ml training"
+                                    ],
+                        "answer":  "Open ML Training at /ml-training in AIChatApp.Web so it uses the same browser session as Chat and Backoffice."
+                    },
+                    {
+                        "aliases":  [
+                                        "Where do I open FAQs?",
+                                        "where is the faq page",
+                                        "how do i go to faqs"
+                                    ],
+                        "answer":  "Open the FAQ page at /faqs in AIChatApp.Web."
+                    },
+                    {
+                        "aliases":  [
+                                        "How is Backoffice navigation organized?",
+                                        "what are the backoffice sidebar groups"
+                                    ],
+                        "answer":  "Backoffice groups navigation into Workspaces, Validation, and Administration."
+                    },
+                    {
+                        "aliases":  [
+                                        "Why do workspace links have the same color?",
+                                        "why are workspace nav links the same color"
+                                    ],
+                        "answer":  "Workspace links use the current app theme color so each app area feels consistent."
                     }
                 ]
 }
