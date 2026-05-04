@@ -1,10 +1,10 @@
 # AIChatApp
 
-Last updated: May 3, 2026
+Last updated: May 4, 2026
 
 A local AI chat application built on .NET 9, LLamaSharp, SQL Server, JWT authentication, Google Authenticator-style TOTP 2FA, and a Blazor frontend.
 
-AIChatApp is a full-stack AI chat platform built with Blazor, ASP.NET Core, YARP, SQL Server, JWT authentication, Google Authenticator 2FA, and local GGUF model inference through LLamaSharp. The solution supports streaming chat over Server-Sent Events, continuation handling for cut-off responses, JSON-based prompt and knowledge configuration, assistant-profile-driven behavior, browser-persisted conversations, response reporting, backoffice validation, an ML.NET response reviewer workflow, a Web-hosted FAQ page, and Docker-based local deployment.
+AIChatApp is a full-stack AI chat platform built with Blazor, ASP.NET Core, YARP, SQL Server, JWT authentication, Google Authenticator 2FA, and local GGUF model inference through LLamaSharp. The solution supports streaming chat over Server-Sent Events, continuation handling for cut-off responses, JSON-seeded prompt and knowledge configuration mirrored into SQL, assistant-profile-driven behavior, browser-persisted conversations, response reporting, backoffice validation, an ML.NET response reviewer workflow, a Web-hosted FAQ page, and Docker-based local deployment.
 
 ## Overview
 
@@ -27,7 +27,7 @@ This solution contains seven main projects:
 - JWT-authenticated API access with Google Authenticator TOTP 2FA
 - Gateway-side API key checks, route forwarding, and rate limiting with YARP
 - Assistant-profile-based prompt and knowledge loading
-- JSON-based prompt templates, quick answers, topic knowledge, and console/shared context files
+- JSON-based prompt templates, quick answers, topic knowledge, and console/shared context files imported into SQL for centralized tracking
 - Retrieval-style documentation context selection from focused knowledge sources
 - Browser-persisted conversation workspace with rename, delete, timestamps, copy, read-aloud, continue, and report actions
 - Unified Web workspace routes for Chat, Backoffice, FAQs, and ML Training
@@ -266,6 +266,8 @@ AIChatApp.Core/Data/Console/product_knowledge.json
 AIChatApp.Core/Data/Console/disallowed_topics.json
 AIChatApp.Core/Data/Shared/system_api_context.json
 ```
+
+At API startup, the JSON files under `AIChatApp.Core/Data` are imported into the `CoreDataFiles` SQL table after EF migrations run. The import is insert-only by `RelativePath`, so existing database rows are not overwritten by later startup runs. This keeps the JSON files useful as seed/source files while making the data visible in the database.
 
 Web navigation is hosted in `AIChatApp.Web` and uses these routes:
 
@@ -751,7 +753,7 @@ Content-Type: application/json
 - `ask-stream` is an SSE endpoint, not a normal JSON endpoint.
 - `ask-ai` is the non-streaming JSON endpoint.
 - `ask-continue` is the dedicated continuation endpoint for finishing a cut-off answer.
-- Prompt and knowledge files are JSON-based under `AIChatApp.Core/Data/...`.
+- Prompt and knowledge files are JSON-seeded under `AIChatApp.Core/Data/...` and mirrored into the `CoreDataFiles` table on API startup.
 - The documentation assistant uses profile-specific prompt templates, quick answers, topic summaries, and focused knowledge references.
 - The Web app is currently pinned to the documentation assistant experience.
 - The chat UI supports browser-persisted conversations, inline rename/delete, timestamps, copy, read-aloud, continue, report, completion notifications, and auto-follow scrolling.

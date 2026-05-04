@@ -1,16 +1,21 @@
 {
-    "items":  [
-                  "Greetings: hi, hello, hey, good morning/afternoon/evening, kamusta, kumusta, hi po",
-                  "Politeness/Appreciation: thanks, thank you, salamat, tnx",
-                  "Feedback/Sentiment: good, great, nice, love, awesome, satisfied, happy, bad, poor, slow, worst, hate, disappointed, ok lang, feedback, suggestion, complaint, review, service",
-                  "Business/Store: business, marketing, sales, customer, price, cost, profit, revenue, strategy",
-                  "Location/Store Info: location, address, store hours, open, close",
-                  "Financial/Admin: accounting, tax, finance, invoice, receipt, ledger, expenses",
-                  "Products/Inventory: product, products, catalog, offer, stock, in/out of stock, meron ba, may stock ba",
-                  "Pet \u0026 Poultry: pet supplies, feeds, poultry, chicken, dogs, cats, pet food, wet food",
-                  "Supplements/Health: vitamins, supplements, pet vitamins, poultry supplements, nutrition",
-                  "Health/Care/Vet: pet/poultry disease, vaccination, deworming, medication, veterinary, pet care",
-                  "Systems/Tools: ERP, POS, inventory, business software, management system",
-                  "Commands (ignore): /exit, /clear, /history, /save, /load"
-              ]
+  "items": [
+    "AIChatApp project",
+    "project documentation",
+    "solution architecture",
+    "authentication",
+    "Google Authenticator 2FA",
+    "JWT",
+    "gateway routing",
+    "chat endpoints",
+    "streaming chat",
+    "chat history",
+    "configuration",
+    "Docker",
+    "SQL Server",
+    "EF Core migrations",
+    "local LLM model",
+    "ML.NET reviewer",
+    "backoffice validation"
+  ]
 }

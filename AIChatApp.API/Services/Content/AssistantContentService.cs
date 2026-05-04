@@ -6,6 +6,10 @@ using System.Text.Json;
 
 namespace AIChatApp.API.Services.Content
 {
+    /// <summary>
+    /// Loads assistant prompts and knowledge from the database first, then falls back to the JSON files in Core.
+    /// This lets Backoffice edits override the bundled documentation without requiring a code deployment.
+    /// </summary>
     public class AssistantContentService : IAssistantContentService
     {
         private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -21,6 +25,8 @@ namespace AIChatApp.API.Services.Content
         public async Task<string> LoadPromptAsync(string profileId, string templateName, CancellationToken cancellationToken = default)
         {
             var normalizedTemplate = Path.GetFileNameWithoutExtension(templateName);
+
+            // Published prompt templates are treated as the live source of truth after Backoffice edits.
             var published = await _dbContext.AssistantPromptTemplates
                 .AsNoTracking()
                 .Where(x => x.ProfileId == profileId && x.TemplateName == normalizedTemplate && x.IsPublished)
@@ -34,6 +40,7 @@ namespace AIChatApp.API.Services.Content
         {
             var normalizedSource = Path.GetFileNameWithoutExtension(sourceName);
 
+            // Quick answers and FAQ topics are structured DB entries, so convert them into prompt-friendly text.
             if (string.Equals(normalizedSource, "QuickAnswers", StringComparison.OrdinalIgnoreCase))
             {
                 var quickAnswers = await LoadQuickAnswersAsync(profileId, cancellationToken);
@@ -54,6 +61,7 @@ namespace AIChatApp.API.Services.Content
                 }
             }
 
+            // Reference knowledge is stored as editable published rows. If none exist yet, use the bundled JSON file.
             var published = await _dbContext.AssistantKnowledgeEntries
                 .AsNoTracking()
                 .Where(x => x.ProfileId == profileId

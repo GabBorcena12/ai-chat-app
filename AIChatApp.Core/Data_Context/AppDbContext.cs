@@ -17,6 +17,19 @@ namespace AIChatApp.Core.Data_Context
         public DbSet<ChatResponseReportEntity> ChatResponseReports { get; set; }
         public DbSet<AssistantPromptTemplateEntity> AssistantPromptTemplates { get; set; }
         public DbSet<AssistantKnowledgeEntryEntity> AssistantKnowledgeEntries { get; set; }
+        public DbSet<CoreDataFileEntity> CoreDataFiles { get; set; }
+
+        protected override void OnModelCreating(ModelBuilder builder)
+        {
+            base.OnModelCreating(builder);
+
+            builder.Entity<CoreDataFileEntity>()
+                .HasIndex(x => x.RelativePath)
+                .IsUnique();
+
+            builder.Entity<CoreDataFileEntity>()
+                .HasIndex(x => x.ContentKey);
+        }
 
         // -- USAGE --
         // cd AIChatApp.API 

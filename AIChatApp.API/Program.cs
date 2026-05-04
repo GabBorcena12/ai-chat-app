@@ -171,6 +171,7 @@ builder.Services.AddScoped<ILLMService, LlamaLLMService>();
 // Promp Builder like RAG, system context and memory
 builder.Services.AddScoped<IPromptBuilder, PromptBuilder>();
 builder.Services.AddScoped<IAssistantContentService, AssistantContentService>();
+builder.Services.AddScoped<CoreDataImportService>();
 
 // Response processor (includes Agent / keyword logic)
 builder.Services.AddScoped<IResponseProcessor, AgentResponseProcessor>();
@@ -282,6 +283,7 @@ static async Task EnsureRolesAndBackofficeSeedAsync(IServiceProvider services)
     var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
     var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
     var assistantContentService = services.GetRequiredService<IAssistantContentService>();
+    var coreDataImportService = services.GetRequiredService<CoreDataImportService>();
     var backofficeOptions = services.GetRequiredService<Microsoft.Extensions.Options.IOptions<BackofficeOptions>>().Value;
     var logger = services.GetRequiredService<ILoggerFactory>().CreateLogger("StartupSeed");
 
@@ -350,6 +352,6 @@ static async Task EnsureRolesAndBackofficeSeedAsync(IServiceProvider services)
         }
     }
 
+    await coreDataImportService.ImportCoreDataJsonAsync();
     await assistantContentService.SeedProfileContentAsync("Documentation");
-    await assistantContentService.SeedProfileContentAsync("AnjeysSupplies");
 }

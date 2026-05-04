@@ -307,7 +307,7 @@ namespace AIChatApp.API.Services.Orchestration
                 return incompleteResponse;
             }
 
-            // 2?. Get LLM stream (or single output)
+            // Get LLM stream (or single output)
             var retryBuffer = new StringBuilder();
             var antiPrompts = new List<string>(_antiPrompts)
             {
@@ -347,7 +347,7 @@ namespace AIChatApp.API.Services.Orchestration
                 _logger.LogInformation($"LLM Success | Latency (RetryAndFixResponse): {sw.ElapsedMilliseconds} ms");
             }
 
-            // 3. Clean and return Response
+            // Clean and return Response
             var llmResponse = retryBuffer.ToString();
             _logger.LogInformation("Second Response : {1}", llmResponse);
             if (string.IsNullOrWhiteSpace(llmResponse))
@@ -573,7 +573,7 @@ namespace AIChatApp.API.Services.Orchestration
 
             try
             {
-                foreach (var profileId in new[] { "Documentation", "AnjeysSupplies" })
+                foreach (var profileId in new[] { _assistantProfile.ProfileId })
                 {
                     foreach (var entry in await _assistantContentService.LoadQuickAnswersAsync(profileId))
                     {

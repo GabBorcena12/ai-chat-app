@@ -189,14 +189,6 @@
                     },
                     {
                         "aliases":  [
-                                        "What changes when i switch from Documentation to AnjeysSupplies?",
-                                        "what changes when i switch assistant profiles",
-                                        "what changes when i switch from documentation to anjeyssupplies"
-                                    ],
-                        "answer":  "Switching the assistant profile changes the branding, prompt files, and assistant-specific knowledge, while the shared chat engine, gateway, API, and core infrastructure stay the same."
-                    },
-                    {
-                        "aliases":  [
                                         "Where is the gateway url configured for the web app?",
                                         "where does the frontend point to the gateway"
                                     ],
