@@ -1,6 +1,6 @@
 # AIChatApp
 
-Last updated: May 4, 2026
+Last updated: May 5, 2026
 
 A local AI chat application built on .NET 9, LLamaSharp, SQL Server, JWT authentication, Google Authenticator-style TOTP 2FA, and a Blazor frontend.
 
@@ -308,10 +308,6 @@ ApiKey.Settings__Keys__0=replace-with-your-api-key
 EmailSettings__AppPassword=replace-with-your-smtp-password
 Backoffice__DefaultAdminPassword=replace-with-a-strong-admin-password
 ```
-
-This repo also includes:
-
-- [.env.example](C:\Users\gabri\source\repos\AIChatApp\.env.example) as a reference for the environment variables the containers expect
 
 Quick Docker setup:
 
