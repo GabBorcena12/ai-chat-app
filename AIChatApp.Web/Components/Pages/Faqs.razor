@@ -1,6 +1,7 @@
 @page "/faqs"
 @rendermode InteractiveServer
 @inject AIChatApp.Web.Services.FaqContentService FaqContent
+@inject AIChatApp.Web.Services.BrowserStorageService BrowserStorage
 @inject NavigationManager Navigation
 
 <PageTitle>AIChatApp FAQs</PageTitle>
@@ -8,7 +9,7 @@
 <main class="faq-page">
     <aside class="faq-sidebar">
         <div class="faq-brand-block">
-            <span>?</span>
+            <img class="faq-logo app-logo" src="/brand-logo.svg" alt="AIChatApp logo" />
             <div>
                 <small>AIChatApp</small>
                 <strong>FAQ Workspace</strong>
@@ -39,6 +40,10 @@
                 </button>
             </nav>
         </section>
+
+        <button type="button" class="ghost-button faq-logout-button" @onclick="LogoutAsync">
+            Logout
+        </button>
     </aside>
 
     <div class="faq-main">
@@ -148,6 +153,8 @@
 
 @code {
     private const int PageSize = 8;
+    private const string TokenStorageKey = "aichatapp.web.token";
+    private const string UserStorageKey = "aichatapp.web.username";
     private string SearchTerm { get; set; } = string.Empty;
     private string SelectedCategory { get; set; } = string.Empty;
     private int CurrentPage { get; set; } = 1;
@@ -238,4 +245,11 @@
 
     private void GoToPage(int page)
         => CurrentPage = Math.Clamp(page, 1, TotalPages);
+
+    private async Task LogoutAsync()
+    {
+        await BrowserStorage.RemoveAsync(TokenStorageKey);
+        await BrowserStorage.RemoveAsync(UserStorageKey);
+        Navigation.NavigateTo("/chat");
+    }
 }

@@ -12,6 +12,42 @@ window.aiChatStorage = {
 
 window.aiChatUi = {
     _messageRailState: new WeakMap(),
+    isCompactViewport: function () {
+        return typeof window !== "undefined"
+            && typeof window.matchMedia === "function"
+            && window.matchMedia("(max-width: 1080px)").matches;
+    },
+    getFaqModalPageSize: function () {
+        if (typeof window === "undefined") {
+            return 6;
+        }
+
+        const height = window.innerHeight || document.documentElement.clientHeight || 900;
+        if (height < 600) {
+            return 2;
+        }
+
+        if (height < 720) {
+            return 3;
+        }
+
+        if (height < 860) {
+            return 4;
+        }
+
+        return 5;
+    },
+    getBackofficeModalPageSize: function (modalType) {
+        if (typeof window === "undefined") {
+            return 5;
+        }
+
+        return 5;
+    },
+    applyTheme: function (theme) {
+        const normalized = theme === "light" ? "light" : "dark";
+        document.documentElement.dataset.theme = normalized;
+    },
     _resolveMessageRailState: function (element, threshold) {
         if (!element) {
             return null;

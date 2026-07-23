@@ -7,6 +7,7 @@
 @using System.Text
 @inject AIChatApp.Web.Services.AIChatGatewayClient GatewayClient
 @inject AIChatApp.Web.Services.BrowserStorageService BrowserStorage
+@inject AIChatApp.Web.Services.FaqContentService FaqContent
 @inject IJSRuntime JS
 @inject ILogger<Home> Logger
 @inject NavigationManager Navigation
@@ -15,118 +16,189 @@
 
 <PageTitle>@AssistantProfile.PageTitle</PageTitle>
 
-<div class="chat-app @(isSidebarOpen ? "sidebar-open" : null)">
+<div class="chat-app @(isSidebarOpen ? "sidebar-open" : null) @(isSidebarNavHidden ? "sidebar-nav-hidden" : null)">
     @if (!string.IsNullOrWhiteSpace(CompletionNotice))
     {
         <div class="completion-toast" role="status" aria-live="polite">@CompletionNotice</div>
     }
 
-    @if (isSidebarOpen)
-    {
-        <button type="button" class="sidebar-scrim" aria-label="Close sidebar" @onclick="CloseSidebar"></button>
-    }
-
     <aside class="sidebar">
         <div class="brand-card">
-                <div class="brand-mark">AI</div>
+                <div class="brand-symbol" aria-hidden="true">
+                    <img src="chat-assistant-logo.png" alt="" />
+                </div>
                 <div>
                     <div class="eyebrow">@AssistantProfile.SidebarEyebrow</div>
                     <h2 @onclick="HandleBrandTitleClick" class="brand-title-link">@AssistantProfile.SidebarTitle</h2>
+                    <div class="sidebar-user-badge @(IsAuthenticated ? "signed-in" : "signed-out")">
+                        <span class="sidebar-user-avatar">@(IsAuthenticated ? CurrentAvatarLabel : "AI")</span>
+                        <span class="sidebar-user-copy">
+                            <strong>@(IsAuthenticated ? CurrentDisplayNameOrFallback : "Guest user")</strong>
+                            <small>@(IsAuthenticated ? $"@{CurrentUsernameOrFallback}" : AssistantProfile.HeaderAuthRequiredLabel)</small>
+                        </span>
+                    </div>
                 </div>
-                <button type="button" class="ghost-button sidebar-close-button" aria-label="Close sidebar" @onclick="CloseSidebar">
-                    X
+                <button type="button" class="ghost-button sidebar-nav-toggle-button nav-image-button" aria-label="Hide side navigation" title="Hide side navigation" @onclick="HideSidebarNav">
+                    <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <rect x="3" y="4" width="18" height="16" rx="3" />
+                        <path d="M9 4v16" />
+                        <path d="m15 9-3 3 3 3" />
+                    </svg>
                 </button>
             </div>
 
-        <button class="primary-action" @onclick="StartNewConversation">
-            <span>+</span>
+        <button class="primary-action" @onclick="StartNewConversationAsync">
+            <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 5v14" />
+                <path d="M5 12h14" />
+            </svg>
             <span>@AssistantProfile.NewChatLabel</span>
         </button>
 
-        <section class="sidebar-section collapsible-sidebar-section @(conversationsSectionOpen ? null : "collapsed")">
-            <button type="button"
-                    class="sidebar-section-toggle"
-                    aria-expanded="@conversationsSectionOpen"
-                    @onclick="() => conversationsSectionOpen = !conversationsSectionOpen">
-                <span>Conversations</span>
-                <strong>@(conversationsSectionOpen ? "Hide" : "Show")</strong>
-            </button>
-            @if (conversationsSectionOpen)
-            {
-                <div class="conversation-list">
-                @foreach (var conversation in Conversations)
+        @if (IsAuthenticated)
+        {
+            <section class="sidebar-section collapsible-sidebar-section @(conversationsSectionOpen ? null : "collapsed")">
+                <button type="button"
+                        class="sidebar-section-toggle"
+                        aria-expanded="@conversationsSectionOpen"
+                        @onclick="() => ToggleSidebarSection(SidebarSection.Conversations)">
+                    <span>Conversations</span>
+                    <strong class="section-toggle-icon" aria-hidden="true">
+                        <svg class="action-icon" viewBox="0 0 24 24">
+                            <path d="m6 9 6 6 6-6" />
+                        </svg>
+                    </strong>
+                </button>
+                @if (conversationsSectionOpen)
                 {
-                    <div class="conversation-item @(conversation.Id == ActiveConversation.Id ? "active" : null)">
-                        @if (conversation.IsRenaming)
-                        {
-                            <div class="conversation-editor">
-                                <input class="conversation-title-input"
-                                       @bind="conversation.DraftTitle"
-                                       @bind:event="oninput"
-                                       @onkeydown="args => HandleRenameKeyDown(args, conversation)"
-                                       maxlength="80" />
-                                <div class="conversation-actions">
-                                    <button type="button" class="ghost-button conversation-action" @onclick="() => SaveConversationTitle(conversation)">Save</button>
-                                    <button type="button" class="ghost-button conversation-action" @onclick="() => CancelConversationRename(conversation)">Cancel</button>
+                    <div class="conversation-list">
+                    @foreach (var conversation in Conversations)
+                    {
+                        <div class="conversation-item @(conversation.Id == ActiveConversation.Id ? "active" : null)">
+                            @if (conversation.IsRenaming)
+                            {
+                                <div class="conversation-editor">
+                                    <input class="conversation-title-input"
+                                           @bind="conversation.DraftTitle"
+                                           @bind:event="oninput"
+                                           @onkeydown="args => HandleRenameKeyDown(args, conversation)"
+                                           maxlength="80" />
+                                    <div class="conversation-actions">
+                                        <button type="button" class="ghost-button conversation-action" @onclick="() => SaveConversationTitle(conversation)">Save</button>
+                                        <button type="button" class="ghost-button conversation-action" @onclick="() => CancelConversationRename(conversation)">Cancel</button>
+                                    </div>
                                 </div>
-                            </div>
-                        }
-                        else
-                        {
-                            <button type="button"
-                                    class="conversation-select"
-                                    @onclick="() => SelectConversation(conversation.Id)">
-                                <span class="conversation-title">@conversation.Title</span>
-                                <span class="conversation-count">@conversation.Messages.Count messages</span>
-                            </button>
-                            <div class="conversation-actions">
+                            }
+                            else
+                            {
                                 <button type="button"
-                                        class="ghost-button conversation-rename-button"
-                                        title="Rename conversation"
-                                        @onclick="() => BeginConversationRename(conversation)">
-                                    Rename
+                                        class="conversation-select"
+                                        @onclick="() => SelectConversationAsync(conversation.Id)">
+                                    <span class="conversation-title">@conversation.Title</span>
+                                    <span class="conversation-count">@conversation.Messages.Count messages</span>
                                 </button>
-                                <button type="button"
-                                        class="ghost-button conversation-delete-button"
-                                        title="Delete conversation"
-                                        aria-label="Delete conversation"
-                                        @onclick="() => DeleteConversation(conversation)">
-                                    X
-                                </button>
-                            </div>
-                        }
+                                <div class="conversation-actions">
+                                    <button type="button"
+                                            class="ghost-button conversation-rename-button"
+                                            title="Rename conversation"
+                                            @onclick="() => BeginConversationRename(conversation)">
+                                        <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                            <path d="M12 20h9" />
+                                            <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z" />
+                                        </svg>
+                                        <span>Rename</span>
+                                    </button>
+                                    <button type="button"
+                                            class="ghost-button conversation-delete-button"
+                                            title="Delete conversation"
+                                            aria-label="Delete conversation"
+                                            @onclick="() => DeleteConversation(conversation)">
+                                        <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                            <path d="M3 6h18" />
+                                            <path d="M8 6V4h8v2" />
+                                            <path d="M19 6l-1 14H6L5 6" />
+                                            <path d="M10 11v5" />
+                                            <path d="M14 11v5" />
+                                        </svg>
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                    }
                     </div>
                 }
-                </div>
-            }
-        </section>
+            </section>
+        }
 
         <section class="sidebar-section collapsible-sidebar-section @(workspaceSectionOpen ? null : "collapsed")">
             <button type="button"
                     class="sidebar-section-toggle"
                     aria-expanded="@workspaceSectionOpen"
-                    @onclick="() => workspaceSectionOpen = !workspaceSectionOpen">
+                    @onclick="() => ToggleSidebarSection(SidebarSection.Workspaces)">
                 <span>Workspaces</span>
-                <strong>@(workspaceSectionOpen ? "Hide" : "Show")</strong>
+                <strong class="section-toggle-icon" aria-hidden="true">
+                    <svg class="action-icon" viewBox="0 0 24 24">
+                        <path d="m6 9 6 6 6-6" />
+                    </svg>
+                </strong>
             </button>
             @if (workspaceSectionOpen)
             {
                 <nav class="workspace-nav" aria-label="Workspace navigation">
-                    <button type="button" class="workspace-nav-link app-chat active" @onclick='() => Navigation.NavigateTo("/chat")'>
-                        <span>Chat</span>
-                        <small>Main assistant</small>
+                    <button type="button" class="workspace-nav-link app-chat active" @onclick='() => NavigateFromSidebarAsync("/chat")'>
+                        <span class="workspace-icon" aria-hidden="true">
+                            <svg class="action-icon" viewBox="0 0 24 24">
+                                <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8Z" />
+                            </svg>
+                        </span>
+                        <span class="workspace-copy">
+                            <span>Chat</span>
+                            <small>Main assistant</small>
+                        </span>
+                        <span class="workspace-state">Active</span>
                     </button>
-                    <button type="button" class="workspace-nav-link app-backoffice" @onclick='() => Navigation.NavigateTo("/backoffice")'>
-                        <span>Backoffice</span>
-                        <small>Validate answers</small>
+                    <button type="button" class="workspace-nav-link app-backoffice" @onclick='() => NavigateFromSidebarAsync("/backoffice")'>
+                        <span class="workspace-icon" aria-hidden="true">
+                            <svg class="action-icon" viewBox="0 0 24 24">
+                                <path d="M4 4h16v16H4z" />
+                                <path d="M8 9h8" />
+                                <path d="M8 13h5" />
+                                <path d="M8 17h8" />
+                            </svg>
+                        </span>
+                        <span class="workspace-copy">
+                            <span>Backoffice</span>
+                            <small>Validate answers</small>
+                        </span>
                     </button>
                     <a class="workspace-nav-link app-ml"
                        href="@FrontendOptions.MlTrainingUrl">
-                        <span>ML Training</span>
-                        <small>Train reviewer</small>
+                        <span class="workspace-icon" aria-hidden="true">
+                            <svg class="action-icon" viewBox="0 0 24 24">
+                                <path d="M4 19V5" />
+                                <path d="M8 19v-7" />
+                                <path d="M12 19V8" />
+                                <path d="M16 19v-4" />
+                                <path d="M20 19V9" />
+                            </svg>
+                        </span>
+                        <span class="workspace-copy">
+                            <span>ML Training</span>
+                            <small>Train reviewer</small>
+                        </span>
                     </a>
-                    <button type="button" class="workspace-nav-link app-faq compact" @onclick='() => Navigation.NavigateTo("/faqs")'>
-                        FAQs
+                    <button type="button" class="workspace-nav-link app-faq compact" @onclick="OpenFaqModalAsync">
+                        <span class="workspace-icon" aria-hidden="true">
+                            <svg class="action-icon" viewBox="0 0 24 24">
+                                <path d="M9 9a3 3 0 1 1 4 2.83c-.75.38-1 .82-1 1.67" />
+                                <path d="M12 17h.01" />
+                                <path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                            </svg>
+                        </span>
+                        <span class="workspace-copy">
+                            <span>FAQs</span>
+                            <small>Knowledge base</small>
+                        </span>
                     </button>
                 </nav>
             }
@@ -136,148 +208,112 @@
             <button type="button"
                     class="sidebar-section-toggle"
                     aria-expanded="@accountSectionOpen"
-                    @onclick="() => accountSectionOpen = !accountSectionOpen">
+                    @onclick="() => ToggleSidebarSection(SidebarSection.Account)">
                 <span>Account</span>
-                <strong>@(accountSectionOpen ? "Hide" : "Show")</strong>
+                <strong class="section-toggle-icon" aria-hidden="true">
+                    <svg class="action-icon" viewBox="0 0 24 24">
+                        <path d="m6 9 6 6 6-6" />
+                    </svg>
+                </strong>
             </button>
             @if (accountSectionOpen)
             {
-            @if (!IsAuthenticated)
-            {
-                <div class="auth-tabs">
-                    <button type="button" class="tab-button @(showRegister ? null : "active")" @onclick="() => showRegister = false">Sign in</button>
-                    <button type="button" class="tab-button @(showRegister ? "active" : null)" @onclick="() => showRegister = true">Register</button>
-                </div>
-
-                @if (!string.IsNullOrWhiteSpace(AuthMessage))
-                {
-                    <p class="status-note compact-note">@AuthMessage</p>
-                }
-
-                @if (showRegister)
-                {
-                    <EditForm Model="registerModel" OnValidSubmit="RegisterAsync" class="auth-form">
-                        <DataAnnotationsValidator />
-                        <InputText @bind-Value="registerModel.Username" class="text-input" placeholder="Username" />
-                        <ValidationMessage For="@(() => registerModel.Username)" />
-                        <InputText @bind-Value="registerModel.Email" class="text-input" placeholder="Email" />
-                        <ValidationMessage For="@(() => registerModel.Email)" />
-                        <InputText @bind-Value="registerModel.Password" class="text-input" placeholder="Password" type="password" />
-                        <ValidationMessage For="@(() => registerModel.Password)" />
-                        <button type="submit" class="primary-action slim" disabled="@isBusy">Create account</button>
-                    </EditForm>
-                }
-                else
-                {
-                    <EditForm Model="loginModel" OnValidSubmit="LoginAsync" class="auth-form">
-                        <DataAnnotationsValidator />
-                        <InputText @bind-Value="loginModel.Username" class="text-input" placeholder="Username" />
-                        <ValidationMessage For="@(() => loginModel.Username)" />
-                        <InputText @bind-Value="loginModel.Password" class="text-input" placeholder="Password" type="password" />
-                        <ValidationMessage For="@(() => loginModel.Password)" />
-                        <InputText @bind-Value="loginModel.OtpCode" class="text-input" placeholder="OTP code (when 2FA is enabled)" />
-                        <button type="submit" class="primary-action slim" disabled="@isBusy">Sign in</button>
-                    </EditForm>
-                }
-            }
-            else
-            {
-                <div class="account-summary">
-                    <div>
-                        <div class="eyebrow">Signed in as</div>
-                        <strong>@CurrentUsername</strong>
-                    </div>
-                    <button type="button" class="ghost-button" @onclick="LogoutAsync">Sign out</button>
-                </div>
-
-                @if (!string.IsNullOrWhiteSpace(AuthMessage))
-                {
-                    <p class="status-note compact-note">@AuthMessage</p>
-                }
-
-                <div class="two-factor-stack security-card">
-                    <div class="security-header">
-                        <div>
-                            <div class="mini-label">Security</div>
-                            <h3 class="security-title">Google Authenticator</h3>
-                        </div>
-                        <span class="status-pill @SecurityPillClass">@SecurityPillText</span>
-                    </div>
-
-                    @if (isTwoFactorEnabled)
+                <div class="account-nav-list" aria-label="Account shortcuts">
+                    @if (!IsAuthenticated)
                     {
-                        <p class="security-copy">Your account is protected with a time-based one-time password. You can replace the device or disable 2FA from here.</p>
-
-                        <div class="action-row">
-                            <button type="button" class="ghost-button" @onclick="SetupTwoFactorAsync" disabled="@isBusy">Set up a new device</button>
-                        </div>
-
-                        <label class="field-label" for="disable-2fa-code">Authenticator code</label>
-                        <input id="disable-2fa-code" @bind="twoFactorCode" @bind:event="oninput" class="text-input" placeholder="Enter a fresh 6-digit code to disable 2FA" inputmode="numeric" />
-
-                        @if (!string.IsNullOrWhiteSpace(TwoFactorStatus))
-                        {
-                            <p class="status-note compact-note">@TwoFactorStatus</p>
-                        }
-
-                        <div class="action-row">
-                            <button type="button" class="ghost-button danger-button" @onclick="DisableTwoFactorAsync" disabled="@isBusy || string.IsNullOrWhiteSpace(twoFactorCode)">Disable 2FA</button>
-                        </div>
-                    }
-                    else if (twoFactorSetup is not null)
-                    {
-                        <div class="two-factor-card">
-                            <div class="mini-label">Step 1</div>
-                            <img class="qr-code" src="@GetQrCodeUrl(twoFactorSetup.AuthenticatorUri)" alt="Google Authenticator QR code" />
-                            <p class="qr-help">Scan this QR code in Google Authenticator, then type the current 6-digit code below to finish setup.</p>
-                        </div>
-
-                        <label class="field-label" for="enable-2fa-code">Authenticator code</label>
-                        <input id="enable-2fa-code" @bind="twoFactorCode" @bind:event="oninput" class="text-input" placeholder="Enter the code from Google Authenticator" inputmode="numeric" />
-
-                        @if (!string.IsNullOrWhiteSpace(TwoFactorStatus))
-                        {
-                            <p class="status-note compact-note">@TwoFactorStatus</p>
-                        }
-
-                        <div class="action-row">
-                            <button type="button" class="primary-action slim" @onclick="VerifyTwoFactorAsync" disabled="@isBusy">@(isBusy ? "Confirming..." : "Confirm setup")</button>
-                            <button type="button" class="ghost-button" @onclick="CancelTwoFactorSetup">Cancel</button>
-                        </div>
+                        <button type="button"
+                                class="account-nav-item"
+                                @onclick="OpenAuthModalAsync">
+                            <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+                                <path d="m10 17 5-5-5-5" />
+                                <path d="M15 12H3" />
+                            </svg>
+                            <span>Sign in / Register</span>
+                        </button>
                     }
                     else
                     {
-                        <p class="security-copy">Add a second layer of protection to your account with Google Authenticator.</p>
-
-                        @if (!string.IsNullOrWhiteSpace(TwoFactorStatus))
-                        {
-                            <p class="status-note compact-note">@TwoFactorStatus</p>
-                        }
-
-                        <button type="button" class="primary-action slim" @onclick="SetupTwoFactorAsync" disabled="@isBusy">Set up Google Authenticator</button>
+                    <button type="button"
+                            class="account-nav-item @(activeAccountPanel == "profile" ? "active" : null)"
+                            @onclick="OpenProfileModalAsync">
+                        <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M20 21a8 8 0 1 0-16 0" />
+                            <path d="M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" />
+                        </svg>
+                        <span>Profile</span>
+                    </button>
+                    <button type="button"
+                            class="account-nav-item @(activeAccountPanel == "security" ? "active" : null)"
+                            @onclick="OpenSecurityModal">
+                        <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
+                            <path d="m9 12 2 2 4-5" />
+                        </svg>
+                        <span>Security</span>
+                    </button>
+                    <button type="button"
+                            class="account-nav-item @(activeAccountPanel == "preferences" ? "active" : null)"
+                            @onclick="OpenPreferencesModalAsync">
+                        <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" />
+                            <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6l-.04.07a2 2 0 1 1-3.46 0l-.04-.07a1.7 1.7 0 0 0-1-.6 1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1l-.07-.04a2 2 0 1 1 0-3.46l.07-.04a1.7 1.7 0 0 0 .6-1 1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6l.04-.07a2 2 0 1 1 3.46 0l.04.07a1.7 1.7 0 0 0 1 .6 1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.22.37.52.68.88.9l.07.04a2 2 0 1 1 0 3.46l-.07.04c-.36.22-.66.53-.88.9Z" />
+                        </svg>
+                        <span>Preferences</span>
+                    </button>
                     }
                 </div>
             }
-            }
         </section>
+
+        @if (IsAuthenticated)
+        {
+            <button type="button"
+                    class="ghost-button sidebar-logout-button"
+                    @onclick="LogoutAsync">
+                <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M10 17 15 12l-5-5" />
+                    <path d="M15 12H3" />
+                    <path d="M21 19V5a2 2 0 0 0-2-2h-6" />
+                </svg>
+                <span>Logout</span>
+            </button>
+        }
     </aside>
 
     <main class="chat-stage">
         <header class="chat-header">
-            <button type="button" class="ghost-button sidebar-toggle-button" aria-label="Open conversations and account menu" @onclick="ToggleSidebar">
+            <button type="button" class="ghost-button sidebar-toggle-button nav-image-button" aria-label="@(isSidebarNavHidden ? "Show side navigation" : "Open conversations and account menu")" @onclick="ToggleSidebar">
                 <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="M4 6h16" />
-                    <path d="M4 12h16" />
-                    <path d="M4 18h16" />
+                    @if (isSidebarNavHidden)
+                    {
+                        <rect x="3" y="4" width="18" height="16" rx="3" />
+                        <path d="M9 4v16" />
+                        <path d="m12 9 3 3-3 3" />
+                    }
+                    else
+                    {
+                        <path d="M4 7h16" />
+                        <path d="M4 12h16" />
+                        <path d="M4 17h16" />
+                    }
                 </svg>
             </button>
-            <div>
+            <div class="chat-title-block">
                 <div class="eyebrow">@AssistantProfile.WorkspaceEyebrow</div>
-                <h2>@ActiveConversation.Title</h2>
+                <h2>
+                    <span>@ActiveConversation.Title</span>
+                    <svg class="title-chevron action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="m6 9 6 6 6-6" />
+                    </svg>
+                </h2>
             </div>
             <div class="header-meta">
-                <span>@(IsAuthenticated ? AssistantProfile.HeaderSignedInLabel : AssistantProfile.HeaderAuthRequiredLabel)</span>
-                <span>@(isStreaming ? AssistantProfile.HeaderAnsweringLabel : AssistantProfile.HeaderReadyLabel)</span>
+                <span class="header-status-pill">
+                    <span class="status-dot" aria-hidden="true"></span>
+                    @(isStreaming ? AssistantProfile.HeaderAnsweringLabel : AssistantProfile.HeaderReadyLabel)
+                </span>
+                <span class="avatar header-user-avatar" aria-label="Current user">@CurrentAvatarLabel</span>
             </div>
         </header>
 
@@ -297,7 +333,16 @@
                 @foreach (var message in ActiveConversation.Messages)
                 {
                     <article class="message-card @message.Role">
-                        <div class="avatar">@(message.Role == "user" ? CurrentAvatarLabel : "AI")</div>
+                        <div class="avatar">
+                            @if (message.Role == "user")
+                            {
+                                @CurrentAvatarLabel
+                            }
+                            else
+                            {
+                                <span>AI</span>
+                            }
+                        </div>
                         <div class="message-body">
                             <div class="message-role">@(message.Role == "user" ? CurrentDisplayNameOrFallback : AssistantProfile.AssistantName)</div>
                             <div class="message-content">@RenderMessageContent(message)</div>
@@ -420,6 +465,298 @@
         </footer>
     </main>
 
+    @if (isAuthModalOpen)
+    {
+        <div class="modal-backdrop app-modal-backdrop" role="presentation" @onclick="CloseAuthModal">
+            <section class="confirm-dialog app-modal auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title" @onclick:stopPropagation="true">
+                <header class="app-modal-header">
+                    <div>
+                        <div class="eyebrow">Account access</div>
+                        <h3 id="auth-modal-title">Sign in to AIChatApp</h3>
+                    </div>
+                    <button type="button" class="ghost-button modal-close-button" aria-label="Close account dialog" @onclick="CloseAuthModal">
+                        <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M18 6 6 18" />
+                            <path d="m6 6 12 12" />
+                        </svg>
+                    </button>
+                </header>
+
+                <div class="auth-tabs modal-tabs">
+                    <button type="button" class="tab-button @(showRegister ? null : "active")" @onclick="() => showRegister = false">Sign in</button>
+                    <button type="button" class="tab-button @(showRegister ? "active" : null)" @onclick="() => showRegister = true">Register</button>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(AuthMessage))
+                {
+                    <p class="status-note compact-note">@AuthMessage</p>
+                }
+
+                @if (showRegister)
+                {
+                    <EditForm Model="registerModel" OnValidSubmit="RegisterAsync" class="auth-form modal-form">
+                        <DataAnnotationsValidator />
+                        <InputText @bind-Value="registerModel.Username" class="text-input" placeholder="Username" />
+                        <ValidationMessage For="@(() => registerModel.Username)" />
+                        <InputText @bind-Value="registerModel.Email" class="text-input" placeholder="Email" />
+                        <ValidationMessage For="@(() => registerModel.Email)" />
+                        <InputText @bind-Value="registerModel.Password" class="text-input" placeholder="Password" type="password" />
+                        <ValidationMessage For="@(() => registerModel.Password)" />
+                        <button type="submit" class="primary-action slim" disabled="@isBusy">@(isBusy ? "Creating..." : "Create account")</button>
+                    </EditForm>
+                }
+                else
+                {
+                    <EditForm Model="loginModel" OnValidSubmit="LoginAsync" class="auth-form modal-form">
+                        <DataAnnotationsValidator />
+                        <InputText @bind-Value="loginModel.Username" class="text-input" placeholder="Username" />
+                        <ValidationMessage For="@(() => loginModel.Username)" />
+                        <InputText @bind-Value="loginModel.Password" class="text-input" placeholder="Password" type="password" />
+                        <ValidationMessage For="@(() => loginModel.Password)" />
+                        <InputText @bind-Value="loginModel.OtpCode" class="text-input" placeholder="OTP code (when 2FA is enabled)" />
+                        <button type="submit" class="primary-action slim" disabled="@isBusy">@(isBusy ? "Signing in..." : "Sign in")</button>
+                    </EditForm>
+                }
+            </section>
+        </div>
+    }
+
+    @if (isSecurityModalOpen)
+    {
+        <div class="modal-backdrop app-modal-backdrop" role="presentation" @onclick="CloseSecurityModal">
+            <section class="confirm-dialog app-modal security-modal" role="dialog" aria-modal="true" aria-labelledby="security-modal-title" @onclick:stopPropagation="true">
+                <header class="app-modal-header">
+                    <div>
+                        <div class="eyebrow">Security</div>
+                        <h3 id="security-modal-title">Google Authenticator</h3>
+                    </div>
+                    <span class="status-pill @SecurityPillClass">@SecurityPillText</span>
+                    <button type="button" class="ghost-button modal-close-button" aria-label="Close security dialog" @onclick="CloseSecurityModal">
+                        <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M18 6 6 18" />
+                            <path d="m6 6 12 12" />
+                        </svg>
+                    </button>
+                </header>
+
+                <div class="two-factor-stack security-card modal-security-card">
+                    @if (isTwoFactorEnabled)
+                    {
+                        <p class="security-copy">Your account is protected with a time-based one-time password. You can replace the device or disable 2FA from here.</p>
+
+                        <div class="action-row">
+                            <button type="button" class="ghost-button" @onclick="SetupTwoFactorAsync" disabled="@isBusy">Set up a new device</button>
+                        </div>
+
+                        <label class="field-label" for="disable-2fa-code">Authenticator code</label>
+                        <input id="disable-2fa-code" @bind="twoFactorCode" @bind:event="oninput" class="text-input" placeholder="Enter a fresh 6-digit code to disable 2FA" inputmode="numeric" />
+
+                        @if (!string.IsNullOrWhiteSpace(TwoFactorStatus))
+                        {
+                            <p class="status-note compact-note">@TwoFactorStatus</p>
+                        }
+
+                        <div class="action-row">
+                            <button type="button" class="ghost-button danger-button" @onclick="DisableTwoFactorAsync" disabled="@isBusy || string.IsNullOrWhiteSpace(twoFactorCode)">Disable 2FA</button>
+                        </div>
+                    }
+                    else if (twoFactorSetup is not null)
+                    {
+                        <div class="two-factor-card">
+                            <div class="mini-label">Step 1</div>
+                            <img class="qr-code" src="@GetQrCodeUrl(twoFactorSetup.AuthenticatorUri)" alt="Google Authenticator QR code" />
+                            <p class="qr-help">Scan this QR code in Google Authenticator, then type the current 6-digit code below to finish setup.</p>
+                        </div>
+
+                        <label class="field-label" for="enable-2fa-code">Authenticator code</label>
+                        <input id="enable-2fa-code" @bind="twoFactorCode" @bind:event="oninput" class="text-input" placeholder="Enter the code from Google Authenticator" inputmode="numeric" />
+
+                        @if (!string.IsNullOrWhiteSpace(TwoFactorStatus))
+                        {
+                            <p class="status-note compact-note">@TwoFactorStatus</p>
+                        }
+
+                        <div class="action-row">
+                            <button type="button" class="primary-action slim" @onclick="VerifyTwoFactorAsync" disabled="@isBusy">@(isBusy ? "Confirming..." : "Confirm setup")</button>
+                            <button type="button" class="ghost-button" @onclick="CancelTwoFactorSetup">Cancel</button>
+                        </div>
+                    }
+                    else
+                    {
+                        <p class="security-copy">Add a second layer of protection to your account with Google Authenticator.</p>
+
+                        @if (!string.IsNullOrWhiteSpace(TwoFactorStatus))
+                        {
+                            <p class="status-note compact-note">@TwoFactorStatus</p>
+                        }
+
+                        <button type="button" class="primary-action slim" @onclick="SetupTwoFactorAsync" disabled="@isBusy">@(isBusy ? "Preparing..." : "Set up Google Authenticator")</button>
+                    }
+                </div>
+            </section>
+        </div>
+    }
+
+    @if (isAccountDetailModalOpen)
+    {
+        <div class="modal-backdrop app-modal-backdrop" role="presentation" @onclick="CloseAccountDetailModal">
+            <section class="confirm-dialog app-modal account-detail-modal" role="dialog" aria-modal="true" aria-labelledby="account-detail-modal-title" @onclick:stopPropagation="true">
+                <header class="app-modal-header">
+                    <div>
+                        <div class="eyebrow">Account</div>
+                        <h3 id="account-detail-modal-title">@(activeAccountPanel == "preferences" ? "Preferences" : "Profile")</h3>
+                    </div>
+                    <button type="button" class="ghost-button modal-close-button" aria-label="Close account details" @onclick="CloseAccountDetailModal">
+                        <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M18 6 6 18" />
+                            <path d="m6 6 12 12" />
+                        </svg>
+                    </button>
+                </header>
+
+                <div class="account-modal-body">
+                    @if (!string.IsNullOrWhiteSpace(AuthMessage))
+                    {
+                        <p class="status-note compact-note account-modal-status">@AuthMessage</p>
+                    }
+
+                    @if (activeAccountPanel == "preferences")
+                    {
+                        <div class="account-detail-card account-modal-card">
+                            <div class="account-modal-icon" aria-hidden="true">
+                                <svg class="action-icon" viewBox="0 0 24 24">
+                                    <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" />
+                                    <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6l-.04.07a2 2 0 1 1-3.46 0l-.04-.07a1.7 1.7 0 0 0-1-.6 1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1l-.07-.04a2 2 0 1 1 0-3.46l.07-.04a1.7 1.7 0 0 0 .6-1 1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6l.04-.07a2 2 0 1 1 3.46 0l.04.07a1.7 1.7 0 0 0 1 .6 1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.22.37.52.68.88.9l.07.04a2 2 0 1 1 0 3.46l-.07.04c-.36.22-.66.53-.88.9Z" />
+                                </svg>
+                            </div>
+                            <div>
+                                <div class="mini-label">Preferences</div>
+                                <strong>Chat preferences</strong>
+                                <small>Display name, avatar, and assistant settings live in Backoffice.</small>
+                            </div>
+                            <button type="button" class="primary-action slim" @onclick='() => Navigation.NavigateTo("/backoffice")'>
+                                Open Backoffice
+                            </button>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="account-detail-card account-modal-card">
+                            <span class="avatar account-modal-avatar" aria-hidden="true">@CurrentAvatarLabel</span>
+                            <div>
+                                <div class="mini-label">Signed in as</div>
+                                <strong>@CurrentDisplayNameOrFallback</strong>
+                                <small>@CurrentUsernameOrFallback</small>
+                            </div>
+                            <button type="button" class="primary-action slim" @onclick='() => Navigation.NavigateTo("/backoffice")'>
+                                Manage profile
+                            </button>
+                        </div>
+                    }
+                </div>
+            </section>
+        </div>
+    }
+
+    @if (isFaqModalOpen)
+    {
+        <div class="modal-backdrop app-modal-backdrop" role="presentation" @onclick="CloseFaqModal">
+            <section class="confirm-dialog app-modal faq-modal" role="dialog" aria-modal="true" aria-labelledby="faq-modal-title" @onclick:stopPropagation="true">
+                <header class="app-modal-header">
+                    <div>
+                        <div class="eyebrow">Knowledge base</div>
+                        <h3 id="faq-modal-title">Frequently Asked Questions</h3>
+                    </div>
+                    <button type="button" class="ghost-button modal-close-button" aria-label="Close FAQ dialog" @onclick="CloseFaqModal">
+                        <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M18 6 6 18" />
+                            <path d="m6 6 12 12" />
+                        </svg>
+                    </button>
+                </header>
+
+                <div class="faq-modal-body">
+                    <div class="faq-modal-summary">
+                        <div>
+                            <strong>@FilteredFaqItems.Count questions</strong>
+                            <span>Showing @FaqPageStart-@FaqPageEnd</span>
+                        </div>
+                        <div class="faq-filter-wrap">
+                            <button type="button"
+                                    class="ghost-button faq-filter-button @(isFaqFilterOpen || HasFaqFilter ? "active" : null)"
+                                    aria-expanded="@isFaqFilterOpen"
+                                    @onclick="ToggleFaqFilter">
+                                <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M3 5h18" />
+                                    <path d="M6 12h12" />
+                                    <path d="M10 19h4" />
+                                </svg>
+                                <span>Filter</span>
+                            </button>
+
+                            @if (isFaqFilterOpen)
+                            {
+                                <div class="faq-filter-popover">
+                                    <label for="faq-filter-input">Search questions</label>
+                                    <input id="faq-filter-input"
+                                           class="text-input"
+                                           placeholder="Type keyword..."
+                                           value="@FaqSearchTerm"
+                                           @oninput="OnFaqSearchChanged" />
+                                    @if (HasFaqFilter)
+                                    {
+                                        <button type="button" class="ghost-button" @onclick="ClearFaqFilter">Clear filter</button>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </div>
+
+                    <section class="faq-modal-list" aria-label="Frequently asked questions">
+                        @if (FilteredFaqItems.Count == 0)
+                        {
+                            <div class="faq-modal-empty">
+                                <strong>No questions found</strong>
+                                <span>Try another keyword.</span>
+                            </div>
+                        }
+                        else
+                        {
+                            @foreach (var item in PagedFaqItems)
+                            {
+                                <details class="faq-modal-item" open="@IsFaqItemExpanded(item)">
+                                    <summary @onclick:preventDefault="true" @onclick="() => ToggleFaqItem(item)">
+                                        <span>@item.Question</span>
+                                        <small>@item.Category</small>
+                                    </summary>
+                                    <p>@item.Answer</p>
+                                </details>
+                            }
+                        }
+                    </section>
+
+                    @if (FaqTotalPages > 1)
+                    {
+                        <nav class="faq-modal-pagination" aria-label="FAQ pagination">
+                            <button type="button" class="ghost-button" disabled="@(FaqSafeCurrentPage == 1)" @onclick="PreviousFaqPage">Previous</button>
+                            <div class="faq-page-dots">
+                                @foreach (var pageNumber in VisibleFaqPages)
+                                {
+                                    <button type="button"
+                                            class="faq-page-number @(pageNumber == FaqSafeCurrentPage ? "active" : null)"
+                                            @onclick="() => GoToFaqPage(pageNumber)">
+                                        @pageNumber
+                                    </button>
+                                }
+                            </div>
+                            <button type="button" class="ghost-button" disabled="@(FaqSafeCurrentPage == FaqTotalPages)" @onclick="NextFaqPage">Next</button>
+                        </nav>
+                    }
+                </div>
+            </section>
+        </div>
+    }
+
     @if (pendingReportMessage is not null)
     {
         <div class="modal-backdrop" role="presentation" @onclick="CancelReportConfirmation">
@@ -477,7 +814,9 @@
     private const string DisplayNameStorageKey = "aichatapp.web.displayName";
     private const string AvatarLabelStorageKey = "aichatapp.web.avatarLabel";
     private const string ConversationStorageKey = "aichatapp.web.conversations";
+    private const string ThemeStorageKey = "aichatapp.web.theme";
     private const int AutoScrollThreshold = 120;
+    private const int DefaultFaqPageSize = 5;
     private readonly List<ConversationViewModel> Conversations = [];
     private ConversationViewModel ActiveConversation = new();
     private readonly LoginFormModel loginModel = new();
@@ -509,22 +848,66 @@
     private bool pendingScrollToLatest;
     private bool forceNextScrollToLatest;
     private bool isSidebarOpen;
+    private bool isSidebarNavHidden;
+    private bool isAuthModalOpen;
+    private bool isSecurityModalOpen;
+    private bool isAccountDetailModalOpen;
+    private bool isFaqModalOpen;
+    private bool isLightTheme;
     private bool workspaceSectionOpen;
     private bool conversationsSectionOpen = true;
     private bool accountSectionOpen;
+    private string activeAccountPanel = "profile";
+    private IReadOnlyList<FaqItemViewModel> FaqItems = [];
+    private int CurrentFaqPage = 1;
+    private int CurrentFaqPageSize = DefaultFaqPageSize;
+    private string? expandedFaqQuestion;
+    private string FaqSearchTerm = string.Empty;
+    private bool isFaqFilterOpen;
     private AssistantProfileOptions AssistantProfile => AssistantProfileOptionsAccessor.Value;
     private FrontendOptions FrontendOptions => FrontendOptionsAccessor.Value;
 
     private bool IsAuthenticated => !string.IsNullOrWhiteSpace(token);
     private string CurrentUsernameOrFallback => string.IsNullOrWhiteSpace(CurrentUsername) ? "You" : CurrentUsername;
     private string CurrentDisplayNameOrFallback => string.IsNullOrWhiteSpace(CurrentDisplayName) ? CurrentUsernameOrFallback : CurrentDisplayName;
-    private string CurrentAvatarLabel => string.IsNullOrWhiteSpace(CurrentAvatar) ? BuildDefaultAvatarLabel(CurrentDisplayNameOrFallback) : CurrentAvatar;
+    private string CurrentAvatarLabel => IsAuthenticated ? BuildAvatarLabel(CurrentAvatar, CurrentDisplayNameOrFallback, CurrentUsernameOrFallback) : "AI";
     private string SecurityPillText => isTwoFactorEnabled ? "Enabled" : twoFactorSetup is not null ? "Setup in progress" : "Not enabled";
     private string SecurityPillClass => isTwoFactorEnabled ? "enabled" : twoFactorSetup is not null ? "pending" : "idle";
+    private bool HasFaqFilter => !string.IsNullOrWhiteSpace(FaqSearchTerm);
+    private List<FaqItemViewModel> FilteredFaqItems => FaqItems
+        .Where(MatchesFaqSearch)
+        .ToList();
+
+    private int FaqPageSize => Math.Max(1, CurrentFaqPageSize);
+    private int FaqTotalPages => Math.Max(1, (int)Math.Ceiling(FilteredFaqItems.Count / (double)FaqPageSize));
+    private int FaqSafeCurrentPage => Math.Clamp(CurrentFaqPage, 1, FaqTotalPages);
+    private int FaqPageStart => FilteredFaqItems.Count == 0 ? 0 : ((FaqSafeCurrentPage - 1) * FaqPageSize) + 1;
+    private int FaqPageEnd => FilteredFaqItems.Count == 0 ? 0 : Math.Min(FaqSafeCurrentPage * FaqPageSize, FilteredFaqItems.Count);
+
+    private List<FaqItemViewModel> PagedFaqItems => FilteredFaqItems
+        .Skip((FaqSafeCurrentPage - 1) * FaqPageSize)
+        .Take(FaqPageSize)
+        .ToList();
+
+    private IEnumerable<int> VisibleFaqPages
+    {
+        get
+        {
+            var start = Math.Max(1, FaqSafeCurrentPage - 2);
+            var end = Math.Min(FaqTotalPages, start + 4);
+            start = Math.Max(1, end - 4);
+
+            for (var page = start; page <= end; page++)
+            {
+                yield return page;
+            }
+        }
+    }
 
     protected override void OnInitialized()
     {
-        StartNewConversation();
+        FaqItems = FaqContent.LoadQuickAnswers();
+        ResetConversationWorkspace();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -536,9 +919,13 @@
             CurrentUsername = await BrowserStorage.GetAsync(UserStorageKey);
             CurrentDisplayName = await BrowserStorage.GetAsync(DisplayNameStorageKey);
             CurrentAvatar = await BrowserStorage.GetAsync(AvatarLabelStorageKey);
+            var storedTheme = await BrowserStorage.GetAsync(ThemeStorageKey);
+            isLightTheme = string.Equals(storedTheme, "light", StringComparison.OrdinalIgnoreCase);
+            await ApplyThemeAsync();
 
             if (IsAuthenticated)
             {
+                OpenSidebarSection(SidebarSection.Conversations);
                 await RestoreConversationsAsync();
                 AuthMessage = "Session restored. You can continue chatting or update 2FA.";
                 await RefreshTwoFactorStatusAsync();
@@ -547,6 +934,8 @@
             }
             else
             {
+                OpenSidebarSection(SidebarSection.Account);
+                isAuthModalOpen = true;
                 ResetConversationWorkspace();
             }
         }
@@ -555,36 +944,233 @@
         await FlushPendingScrollAsync();
     }
 
-    private void StartNewConversation()
+    private async Task StartNewConversationAsync()
     {
         var conversation = new ConversationViewModel();
         Conversations.Insert(0, conversation);
         ActiveConversation = conversation;
         ChatStatus = null;
         promptText = string.Empty;
-        isSidebarOpen = false;
         QueueScrollToLatest(force: true);
         PersistConversations();
+        await Task.CompletedTask;
     }
 
-    private void SelectConversation(string conversationId)
+    private async Task SelectConversationAsync(string conversationId)
     {
         var match = Conversations.FirstOrDefault(x => x.Id == conversationId);
         if (match is not null)
         {
             ActiveConversation = match;
             ChatStatus = null;
-            isSidebarOpen = false;
             QueueScrollToLatest(force: true);
             PersistConversations();
         }
+
+        await Task.CompletedTask;
+    }
+
+    private async Task NavigateFromSidebarAsync(string uri)
+    {
+        Navigation.NavigateTo(uri);
+        await Task.CompletedTask;
+    }
+
+    private async Task OpenFaqModalAsync()
+    {
+        OpenSidebarSection(SidebarSection.Workspaces);
+        CurrentFaqPage = 1;
+        expandedFaqQuestion = null;
+        await UpdateFaqPageSizeAsync();
+        isFaqModalOpen = true;
+        await CloseSidebarForAccountModalOnCompactViewportAsync();
+    }
+
+    private void CloseFaqModal()
+    {
+        isFaqModalOpen = false;
+        isFaqFilterOpen = false;
+        expandedFaqQuestion = null;
+    }
+
+    private void PreviousFaqPage()
+    {
+        CurrentFaqPage = Math.Max(1, FaqSafeCurrentPage - 1);
+        expandedFaqQuestion = null;
+    }
+
+    private void NextFaqPage()
+    {
+        CurrentFaqPage = Math.Min(FaqTotalPages, FaqSafeCurrentPage + 1);
+        expandedFaqQuestion = null;
+    }
+
+    private void GoToFaqPage(int page)
+    {
+        CurrentFaqPage = Math.Clamp(page, 1, FaqTotalPages);
+        expandedFaqQuestion = null;
+    }
+
+    private void ToggleFaqFilter()
+        => isFaqFilterOpen = !isFaqFilterOpen;
+
+    private void OnFaqSearchChanged(ChangeEventArgs args)
+    {
+        FaqSearchTerm = args.Value?.ToString() ?? string.Empty;
+        CurrentFaqPage = 1;
+        expandedFaqQuestion = null;
+    }
+
+    private void ClearFaqFilter()
+    {
+        FaqSearchTerm = string.Empty;
+        CurrentFaqPage = 1;
+        expandedFaqQuestion = null;
+    }
+
+    private bool MatchesFaqSearch(FaqItemViewModel item)
+    {
+        if (string.IsNullOrWhiteSpace(FaqSearchTerm))
+        {
+            return true;
+        }
+
+        return item.Question.Contains(FaqSearchTerm, StringComparison.OrdinalIgnoreCase)
+               || item.Answer.Contains(FaqSearchTerm, StringComparison.OrdinalIgnoreCase)
+               || item.Category.Contains(FaqSearchTerm, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool IsFaqItemExpanded(FaqItemViewModel item)
+        => string.Equals(expandedFaqQuestion, item.Question, StringComparison.Ordinal);
+
+    private void ToggleFaqItem(FaqItemViewModel item)
+        => expandedFaqQuestion = IsFaqItemExpanded(item) ? null : item.Question;
+
+    private async Task UpdateFaqPageSizeAsync()
+    {
+        var pageSize = await JS.InvokeAsync<int>("aiChatUi.getFaqModalPageSize");
+        CurrentFaqPageSize = Math.Clamp(pageSize, 2, DefaultFaqPageSize);
+        CurrentFaqPage = Math.Clamp(CurrentFaqPage, 1, FaqTotalPages);
     }
 
     private void ToggleSidebar()
-        => isSidebarOpen = !isSidebarOpen;
+    {
+        if (isSidebarNavHidden)
+        {
+            isSidebarNavHidden = false;
+            isSidebarOpen = true;
+            return;
+        }
 
-    private void CloseSidebar()
-        => isSidebarOpen = false;
+        if (!isSidebarOpen)
+        {
+            isSidebarOpen = true;
+        }
+    }
+
+    private void HideSidebarNav()
+    {
+        isSidebarNavHidden = true;
+        isSidebarOpen = false;
+    }
+
+    private async Task CloseSidebarForAccountModalOnCompactViewportAsync()
+    {
+        if (!isSidebarOpen)
+        {
+            return;
+        }
+
+        var isCompactViewport = await JS.InvokeAsync<bool>("aiChatUi.isCompactViewport");
+        if (isCompactViewport)
+        {
+            isSidebarOpen = false;
+        }
+    }
+
+    private async Task ToggleThemeAsync()
+    {
+        isLightTheme = !isLightTheme;
+        await BrowserStorage.SetAsync(ThemeStorageKey, isLightTheme ? "light" : "dark");
+        await ApplyThemeAsync();
+    }
+
+    private ValueTask ApplyThemeAsync()
+        => JS.InvokeVoidAsync("aiChatUi.applyTheme", isLightTheme ? "light" : "dark");
+
+    private void ToggleSidebarSection(SidebarSection section)
+    {
+        var shouldOpen = section switch
+        {
+            SidebarSection.Conversations => !conversationsSectionOpen,
+            SidebarSection.Workspaces => !workspaceSectionOpen,
+            SidebarSection.Account => !accountSectionOpen,
+            _ => false
+        };
+
+        conversationsSectionOpen = shouldOpen && section == SidebarSection.Conversations;
+        workspaceSectionOpen = shouldOpen && section == SidebarSection.Workspaces;
+        accountSectionOpen = shouldOpen && section == SidebarSection.Account;
+    }
+
+    private void OpenSidebarSection(SidebarSection section)
+    {
+        if (!IsAuthenticated && section == SidebarSection.Conversations)
+        {
+            section = SidebarSection.Account;
+        }
+
+        conversationsSectionOpen = section == SidebarSection.Conversations;
+        workspaceSectionOpen = section == SidebarSection.Workspaces;
+        accountSectionOpen = section == SidebarSection.Account;
+    }
+
+    private async Task OpenAuthModalAsync()
+    {
+        OpenSidebarSection(SidebarSection.Account);
+        isAuthModalOpen = true;
+        await CloseSidebarForAccountModalOnCompactViewportAsync();
+    }
+
+    private void CloseAuthModal()
+        => isAuthModalOpen = false;
+
+    private async Task OpenProfileModalAsync()
+    {
+        activeAccountPanel = "profile";
+        OpenSidebarSection(SidebarSection.Account);
+        isAccountDetailModalOpen = true;
+        await CloseSidebarForAccountModalOnCompactViewportAsync();
+    }
+
+    private async Task OpenPreferencesModalAsync()
+    {
+        activeAccountPanel = "preferences";
+        OpenSidebarSection(SidebarSection.Account);
+        isAccountDetailModalOpen = true;
+        await CloseSidebarForAccountModalOnCompactViewportAsync();
+    }
+
+    private void CloseAccountDetailModal()
+        => isAccountDetailModalOpen = false;
+
+    private async Task OpenSecurityModal()
+    {
+        if (!EnsureAuthenticated())
+        {
+            await OpenAuthModalAsync();
+            return;
+        }
+
+        activeAccountPanel = "security";
+        OpenSidebarSection(SidebarSection.Account);
+        isSecurityModalOpen = true;
+        await CloseSidebarForAccountModalOnCompactViewportAsync();
+        await RefreshTwoFactorStatusAsync();
+    }
+
+    private void CloseSecurityModal()
+        => isSecurityModalOpen = false;
 
     private void BeginConversationRename(ConversationViewModel conversation)
     {
@@ -687,6 +1273,9 @@
             loginModel.OtpCode = string.Empty;
             AuthMessage = AssistantProfile.SignedInMessage;
             ChatStatus = null;
+            isAuthModalOpen = false;
+            OpenSidebarSection(SidebarSection.Conversations);
+            activeAccountPanel = "profile";
             await RefreshTwoFactorStatusAsync(cancellationToken);
         });
     }
@@ -706,6 +1295,9 @@
         ChatStatus = "Sign back in to stream through the authenticated flow.";
         isTwoFactorEnabled = false;
         TwoFactorStatus = null;
+        isSecurityModalOpen = false;
+        isAuthModalOpen = true;
+        OpenSidebarSection(SidebarSection.Account);
     }
 
     private async Task SetupTwoFactorAsync()
@@ -1255,6 +1847,8 @@
         }
 
         AuthMessage = AssistantProfile.AuthRequiredMessage;
+        isAuthModalOpen = true;
+        OpenSidebarSection(SidebarSection.Account);
         return false;
     }
 
@@ -1484,6 +2078,60 @@
         return parts.Length == 0 ? "You" : new string(parts);
     }
 
+    private static string BuildAvatarLabel(string? savedAvatar, string displayName, string username)
+    {
+        if (!string.IsNullOrWhiteSpace(savedAvatar))
+        {
+            var normalizedSavedAvatar = NormalizeAvatarLabel(savedAvatar, fallback: string.Empty);
+            if (normalizedSavedAvatar.Length >= 2)
+            {
+                return normalizedSavedAvatar;
+            }
+
+            if (string.Equals(normalizedSavedAvatar, "A", StringComparison.Ordinal))
+            {
+                return "GB";
+            }
+        }
+
+        var displayInitials = BuildDefaultAvatarLabel(displayName);
+        if (!string.Equals(displayInitials, "You", StringComparison.Ordinal))
+        {
+            return displayInitials;
+        }
+
+        return BuildUsernameAvatarLabel(username);
+    }
+
+    private static string BuildUsernameAvatarLabel(string username)
+    {
+        var normalized = username.Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return "U";
+        }
+
+        var letters = normalized
+            .Where(char.IsLetterOrDigit)
+            .Take(2)
+            .Select(char.ToUpperInvariant)
+            .ToArray();
+
+        return letters.Length == 0 ? "U" : new string(letters);
+    }
+
+    private static string NormalizeAvatarLabel(string value, string fallback)
+    {
+        var letters = value
+            .Trim()
+            .Where(char.IsLetterOrDigit)
+            .Take(2)
+            .Select(char.ToUpperInvariant)
+            .ToArray();
+
+        return letters.Length == 0 ? fallback : new string(letters);
+    }
+
     private void HandleBrandTitleClick(MouseEventArgs args)
     {
         if (args.ShiftKey)
@@ -1582,5 +2230,12 @@
 
         var prefix = string.Equals(role, "user", StringComparison.OrdinalIgnoreCase) ? "Sent" : "Received";
         return $"{prefix} {baseLocal:MMM d, yyyy h:mm tt}";
+    }
+
+    private enum SidebarSection
+    {
+        Conversations,
+        Workspaces,
+        Account
     }
 }

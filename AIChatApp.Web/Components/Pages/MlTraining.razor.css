@@ -2,9 +2,10 @@
     --gold: #d9b86f;
     --rust: #bd6b4d;
     --green: #78c091;
+    --cyan: #50ccdc;
     --line: rgba(255, 255, 255, 0.1);
     --ink: #f4f1e8;
-    --muted: #c6d0d4;
+    --muted: #aeb8b2;
 
     display: grid;
     grid-template-columns: clamp(240px, 20vw, 280px) minmax(0, 1fr);
@@ -13,17 +14,19 @@
     min-height: 0;
     overflow: hidden;
     background:
-        radial-gradient(circle at 6% 14%, rgba(217, 184, 111, 0.08), transparent 28%),
-        linear-gradient(145deg, #101316 0%, #15191d 48%, #0f1114 100%);
+        radial-gradient(circle at 10% 10%, rgba(217, 184, 111, 0.16), transparent 28%),
+        radial-gradient(circle at 92% 16%, rgba(120, 192, 145, 0.12), transparent 26%),
+        linear-gradient(135deg, #0d1013, #171d21 46%, #101316);
 }
 
 .training-auth-page {
     --gold: #d9b86f;
     --rust: #bd6b4d;
     --green: #78c091;
+    --cyan: #50ccdc;
     --line: rgba(255, 255, 255, 0.1);
     --ink: #f4f1e8;
-    --muted: #c6d0d4;
+    --muted: #aeb8b2;
 
     min-height: 100vh;
     display: grid;
@@ -77,6 +80,8 @@
     gap: 0.55rem;
     margin-top: 1rem;
     min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
 }
 
 .training-workspace-nav a {
@@ -86,6 +91,7 @@
     justify-content: center;
     min-height: 42px;
     min-width: 0;
+    max-width: 100%;
     padding: 0.7rem 0.9rem;
     border: 1px solid var(--line);
     border-radius: 14px;
@@ -131,7 +137,9 @@
     gap: 0.8rem;
     padding: 1rem;
     border-right: 1px solid var(--line);
-    background: rgba(13, 16, 19, 0.82);
+    background:
+        radial-gradient(circle at 30% 8%, rgba(80, 204, 220, 0.09), transparent 32%),
+        rgba(13, 16, 19, 0.86);
     backdrop-filter: blur(16px);
     overflow-y: auto;
     overflow-x: hidden;
@@ -173,7 +181,7 @@
 }
 
 .training-sidebar-toggle span {
-    color: var(--gold);
+    color: #8ce3ef;
     font-size: 0.74rem;
     font-weight: 800;
     letter-spacing: 0.14em;
@@ -193,7 +201,13 @@
 
 .training-sidebar-toggle:hover strong {
     color: var(--ink);
-    background: rgba(217, 184, 111, 0.14);
+    background: rgba(80, 204, 220, 0.14);
+}
+
+.training-logout-button {
+    margin-top: auto;
+    width: 100%;
+    min-height: 2.8rem;
 }
 
 .brand-block {
@@ -235,6 +249,7 @@
     border: 0;
     border-radius: 0;
     background: transparent;
+    overflow: hidden;
 }
 
 .training-workspace-nav.vertical a {
@@ -249,6 +264,14 @@
     text-align: left;
     white-space: normal;
     font-size: 0.92rem;
+    overflow: hidden;
+}
+
+.training-workspace-nav.vertical span,
+.training-workspace-nav.vertical small {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .training-workspace-nav.vertical small {
@@ -262,20 +285,56 @@
     color: rgba(244, 241, 232, 0.82);
 }
 
-.brand-block > span {
-    display: grid;
-    place-items: center;
+.brand-block > span,
+.brand-block > img {
+    display: block;
     width: 54px;
     height: 54px;
+    padding: 0.18rem;
     border-radius: 18px;
-    background: linear-gradient(135deg, var(--gold), var(--rust));
-    color: #15110a;
-    font-weight: 900;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.86));
+    object-fit: contain;
+    box-shadow: none;
+}
+
+@media (min-width: 901px) {
+    .training-shell {
+        grid-template-columns: 88px minmax(0, 1fr);
+        transition: grid-template-columns 0.22s ease;
+    }
+
+    .training-shell:has(.training-sidebar:hover),
+    .training-shell:has(.training-sidebar:focus-within) {
+        grid-template-columns: clamp(240px, 20vw, 280px) minmax(0, 1fr);
+    }
+
+    .training-sidebar {
+        transition: padding 0.22s ease;
+    }
+
+    .training-shell:not(:has(.training-sidebar:hover)):not(:has(.training-sidebar:focus-within)) .training-sidebar {
+        padding-inline: 0.7rem;
+        align-items: center;
+    }
+
+    .training-shell:not(:has(.training-sidebar:hover)):not(:has(.training-sidebar:focus-within)) .brand-block {
+        width: 58px;
+        min-height: 58px;
+        padding: 0;
+        justify-content: center;
+    }
+
+    .training-shell:not(:has(.training-sidebar:hover)):not(:has(.training-sidebar:focus-within)) .brand-block > div,
+    .training-shell:not(:has(.training-sidebar:hover)):not(:has(.training-sidebar:focus-within)) .training-sidebar-group,
+    .training-shell:not(:has(.training-sidebar:hover)):not(:has(.training-sidebar:focus-within)) .training-logout-button {
+        display: none;
+    }
 }
 
 .brand-block small,
 .eyebrow {
-    color: var(--gold);
+    color: #8ce3ef;
     letter-spacing: 0.14em;
     text-transform: uppercase;
 }
@@ -303,8 +362,8 @@
 }
 
 .nav-pill.active {
-    background: rgba(217, 184, 111, 0.18);
-    border-color: rgba(217, 184, 111, 0.42);
+    background: rgba(80, 204, 220, 0.14);
+    border-color: rgba(80, 204, 220, 0.42);
 }
 
 .nav-pill.active small {
@@ -425,7 +484,7 @@ h1 {
 }
 
 .workflow-card span {
-    color: var(--gold);
+    color: #8ce3ef;
     font-weight: 800;
 }
 
@@ -466,9 +525,9 @@ h1 {
     align-content: center;
     min-height: 220px;
     padding: 1rem;
-    border: 1px dashed rgba(217, 184, 111, 0.5);
+    border: 1px dashed rgba(80, 204, 220, 0.42);
     border-radius: 24px;
-    background: rgba(217, 184, 111, 0.07);
+    background: rgba(80, 204, 220, 0.07);
 }
 
 .training-input {
@@ -500,8 +559,8 @@ textarea.training-input {
 }
 
 .primary-button {
-    background: linear-gradient(135deg, var(--gold), #b88445);
-    color: #16120d;
+    background: linear-gradient(135deg, var(--cyan), var(--green));
+    color: #101316;
     font-weight: 800;
 }
 

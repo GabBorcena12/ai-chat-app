@@ -4,41 +4,34 @@
 @using System.Text.Json
 @inject AIChatApp.Web.Services.AIChatGatewayClient GatewayClient
 @inject AIChatApp.Web.Services.BrowserStorageService BrowserStorage
+@inject AIChatApp.Web.Services.FaqContentService FaqContent
 @inject IJSRuntime JS
 @inject NavigationManager Navigation
 @inject Microsoft.Extensions.Options.IOptions<FrontendOptions> FrontendOptionsAccessor
 
 <PageTitle>Backoffice</PageTitle>
 
-<div class="backoffice-page">
+<div class="backoffice-page backoffice-chat-theme @(isBackofficeSidebarOpen ? "sidebar-open" : null) @(isBackofficeSidebarHidden ? "sidebar-nav-hidden" : null)">
     @if (!string.IsNullOrWhiteSpace(CompletionNotice))
     {
         <div class="completion-toast" role="status" aria-live="polite">@CompletionNotice</div>
     }
 
-    <header class="backoffice-header">
-        <div>
-            <div class="eyebrow">Admin Workspace</div>
-            <h1>Knowledge and Validation Backoffice</h1>
-            <p class="backoffice-copy">Review reported answers, publish validated content, and keep prompts and knowledge in the database instead of code files.</p>
-        </div>
-        <div class="backoffice-session">
-            @if (IsAuthenticated)
-            {
-                <span class="status-pill enabled">Signed in</span>
-                <strong>@CurrentUsernameOrFallback</strong>
-            }
-            else
-            {
-                <span class="status-pill idle">Signed out</span>
-                <strong>Authentication required</strong>
-            }
-        </div>
-    </header>
-
     @if (!initialized)
     {
-        <p class="status-note">Loading backoffice...</p>
+        <section class="backoffice-loading-shell" role="status" aria-live="polite">
+            <div class="backoffice-loading-card">
+                <div class="brand-symbol" aria-hidden="true">
+                    <img src="chat-assistant-logo.png" alt="" />
+                </div>
+                <div>
+                    <div class="eyebrow">Admin Workspace</div>
+                    <h1>Loading Backoffice</h1>
+                    <p>Preparing validation tools, reports, prompts, and knowledge controls.</p>
+                </div>
+                <span class="backoffice-loading-spinner" aria-hidden="true"></span>
+            </div>
+        </section>
     }
     else if (!IsAuthenticated)
     {
@@ -46,37 +39,37 @@
     }
     else
     {
-        @if (!string.IsNullOrWhiteSpace(StatusMessage))
-        {
-            <p class="status-note @(StatusIsError ? "error" : "success")">@StatusMessage</p>
-        }
-
-        <section class="backoffice-help-panel backoffice-workflow-panel">
-            <div>
-                <div class="eyebrow">Feedback Loop</div>
-                <h2>Improve Answers Without Code Changes</h2>
-                <p class="backoffice-copy">Reports become validated answers, approved reviews become training data, and the published ML.NET reviewer checks future LLM responses.</p>
-            </div>
-            <div class="workflow-strip" aria-label="Backoffice improvement workflow">
-                <span>1. User reports</span>
-                <span>2. Admin validates</span>
-                <span>3. Approve candidate</span>
-                <span>4. Build dataset</span>
-                <span>5. Train reviewer</span>
-                <span>6. Publish reviewer</span>
-            </div>
-        </section>
-
         <div class="backoffice-layout">
             <aside class="backoffice-sidebar">
-                <section class="backoffice-nav-group">
+                <div class="brand-card backoffice-brand-card">
+                    <div class="brand-symbol" aria-hidden="true">
+                        <img src="chat-assistant-logo.png" alt="" />
+                    </div>
+                    <div>
+                        <div class="eyebrow">Project Knowledge Base</div>
+                        <h2>Chat Assistant</h2>
+                    </div>
+                    <button type="button" class="ghost-button sidebar-nav-toggle-button nav-image-button" aria-label="Hide side navigation" title="Hide side navigation" @onclick="HideBackofficeSidebar">
+                        <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                            <rect x="3" y="4" width="18" height="16" rx="3" />
+                            <path d="M9 4v16" />
+                            <path d="m15 9-3 3 3 3" />
+                        </svg>
+                    </button>
+                </div>
+
+                <section class="backoffice-nav-group collapsible-sidebar-section @(workspacesNavOpen ? null : "collapsed")">
                     <button type="button"
                             class="backoffice-nav-heading"
                             aria-expanded="@workspacesNavOpen"
-                            @onclick="() => workspacesNavOpen = !workspacesNavOpen">
+                            @onclick="() => ToggleBackofficeNavGroup(BackofficeNavGroup.Workspaces)">
                         <span>Workspaces</span>
                         <small>Move between app areas</small>
-                        <strong>@(workspacesNavOpen ? "Hide" : "Show")</strong>
+                        <strong class="section-toggle-icon" aria-hidden="true">
+                            <svg class="action-icon" viewBox="0 0 24 24">
+                                <path d="m6 9 6 6 6-6" />
+                            </svg>
+                        </strong>
                     </button>
                     @if (workspacesNavOpen)
                     {
@@ -94,21 +87,25 @@
                             <span>ML Training</span>
                             <small>Train reviewer</small>
                         </a>
-                        <button type="button" class="backoffice-nav-button app-faq" @onclick='() => Navigation.NavigateTo("/faqs")'>
+                        <button type="button" class="backoffice-nav-button app-faq @(ShowFaqModal ? "active" : null)" @onclick="OpenFaqModalAsync">
                             <span>FAQs</span>
                             <small>User guide</small>
                         </button>
                     }
                 </section>
 
-                <section class="backoffice-nav-group">
+                <section class="backoffice-nav-group collapsible-sidebar-section @(validationNavOpen ? null : "collapsed")">
                     <button type="button"
                             class="backoffice-nav-heading"
                             aria-expanded="@validationNavOpen"
-                            @onclick="() => validationNavOpen = !validationNavOpen">
+                            @onclick="() => ToggleBackofficeNavGroup(BackofficeNavGroup.Validation)">
                         <span>Validation</span>
                         <small>Improve answer quality</small>
-                        <strong>@(validationNavOpen ? "Hide" : "Show")</strong>
+                        <strong class="section-toggle-icon" aria-hidden="true">
+                            <svg class="action-icon" viewBox="0 0 24 24">
+                                <path d="m6 9 6 6 6-6" />
+                            </svg>
+                        </strong>
                     </button>
                     @if (validationNavOpen)
                     {
@@ -120,142 +117,269 @@
                         </button>
                         <button type="button"
                                 class="backoffice-nav-button @(ActiveSection == BackofficeSection.Reports ? "active" : null)"
-                                @onclick="() => SetSection(BackofficeSection.Reports)">
+                                @onclick="OpenReportsManagementModalAsync">
                             <span>Reported Responses</span>
                             <small>Validate and promote reported answers</small>
                         </button>
                         <button type="button"
                                 class="backoffice-nav-button @(ActiveSection == BackofficeSection.Prompts ? "active" : null)"
-                                @onclick="() => SetSection(BackofficeSection.Prompts)">
+                                @onclick="OpenPromptsManagementModalAsync">
                             <span>Prompt Templates</span>
                             <small>Control assistant behavior</small>
                         </button>
                         <button type="button"
                                 class="backoffice-nav-button @(ActiveSection == BackofficeSection.Knowledge ? "active" : null)"
-                                @onclick="() => SetSection(BackofficeSection.Knowledge)">
+                                @onclick="OpenKnowledgeManagementModalAsync">
                             <span>Knowledge Entries</span>
                             <small>Manage quick answers and references</small>
                         </button>
                     }
                 </section>
 
-                <section class="backoffice-nav-group">
+                <section class="backoffice-nav-group collapsible-sidebar-section @(administrationNavOpen ? null : "collapsed")">
                     <button type="button"
                             class="backoffice-nav-heading"
                             aria-expanded="@administrationNavOpen"
-                            @onclick="() => administrationNavOpen = !administrationNavOpen">
+                            @onclick="() => ToggleBackofficeNavGroup(BackofficeNavGroup.Administration)">
                         <span>Administration</span>
                         <small>People and profile settings</small>
-                        <strong>@(administrationNavOpen ? "Hide" : "Show")</strong>
+                        <strong class="section-toggle-icon" aria-hidden="true">
+                            <svg class="action-icon" viewBox="0 0 24 24">
+                                <path d="m6 9 6 6 6-6" />
+                            </svg>
+                        </strong>
                     </button>
                     @if (administrationNavOpen)
                     {
                         <button type="button"
-                                class="backoffice-nav-button @(ActiveSection == BackofficeSection.Profile ? "active" : null)"
-                                @onclick="() => SetSection(BackofficeSection.Profile)">
+                                class="backoffice-nav-button @(ShowProfileManagementModal ? "active" : null)"
+                                @onclick="OpenProfileManagementModal">
                             <span>Profile Management</span>
                             <small>Change chat display name and avatar</small>
                         </button>
                         <button type="button"
-                                class="backoffice-nav-button @(ActiveSection == BackofficeSection.Users ? "active" : null)"
-                                @onclick="() => SetSection(BackofficeSection.Users)">
+                                class="backoffice-nav-button @(ShowUserManagementModal ? "active" : null)"
+                                @onclick="OpenUserManagementModal">
                             <span>User Management</span>
                             <small>Create users and manage backoffice roles</small>
                         </button>
                     }
                 </section>
+
+                <button type="button"
+                        class="ghost-button sidebar-logout-button backoffice-sidebar-logout-button"
+                        @onclick="LogoutAsync">
+                    <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M10 17 15 12l-5-5" />
+                        <path d="M15 12H3" />
+                        <path d="M21 19V5a2 2 0 0 0-2-2h-6" />
+                    </svg>
+                    <span>Logout</span>
+                </button>
             </aside>
 
             <section class="backoffice-content">
+                <header class="backoffice-header">
+                    <button type="button"
+                            class="ghost-button sidebar-toggle-button nav-image-button backoffice-sidebar-toggle"
+                            aria-label="@(isBackofficeSidebarHidden ? "Show side navigation" : "Open side navigation")"
+                            @onclick="ToggleBackofficeSidebar">
+                        <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                            @if (isBackofficeSidebarHidden)
+                            {
+                                <rect x="3" y="4" width="18" height="16" rx="3" />
+                                <path d="M9 4v16" />
+                                <path d="m12 9 3 3-3 3" />
+                            }
+                            else
+                            {
+                                <path d="M4 7h16" />
+                                <path d="M4 12h16" />
+                                <path d="M4 17h16" />
+                            }
+                        </svg>
+                    </button>
+                    <div class="backoffice-title-block">
+                        <div class="eyebrow">Admin Workspace</div>
+                        <h1>@ActiveSectionTitle</h1>
+                    </div>
+                </header>
+
+                @if (StatusIsError && !string.IsNullOrWhiteSpace(StatusMessage))
+                {
+                    <p class="status-note @(StatusIsError ? "error" : "success")">@StatusMessage</p>
+                }
+
                 @if (ActiveSection == BackofficeSection.Workflow)
                 {
-                    <section class="backoffice-section">
-                        <div class="backoffice-section-header">
+                    <section class="backoffice-section workflow-dashboard-section">
+                        <div class="workflow-dashboard-header">
                             <div>
                                 <h2>Answer Improvement Workflow</h2>
-                                <p>Follow this path when a response is wrong, incomplete, too long, or repetitive.</p>
+                                <p>Follow this path to create AI-accurate, consistent, and high-quality answers.</p>
                             </div>
-                            <div class="backoffice-toolbar">
-                                <button type="button" class="ghost-button" @onclick="LoadAllAsync" disabled="@isBusy">Refresh</button>
+                            <div class="workflow-dashboard-actions">
+                                <button type="button" class="ghost-button" @onclick="LoadAllAsync" disabled="@isBusy">
+                                    <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path d="M20 11a8.1 8.1 0 0 0-15.5-2" />
+                                        <path d="M4 4v5h5" />
+                                        <path d="M4 13a8.1 8.1 0 0 0 15.5 2" />
+                                        <path d="M20 20v-5h-5" />
+                                    </svg>
+                                    Refresh
+                                </button>
                                 <a class="ghost-button backoffice-external-link"
                                    href="@MlTrainingUrl"
                                    target="_blank"
                                    rel="noopener noreferrer">
-                                    Open ML Training
+                                    <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path d="m8 5 11 7-11 7Z" />
+                                    </svg>
+                                    Open with Tour
                                 </a>
                             </div>
                         </div>
 
                         <div class="workflow-metrics">
-                            <article>
-                                <strong>@WorkflowSummary.PendingReports</strong>
-                                <span>Needs review</span>
+                            <article class="metric-blue">
+                                <div>
+                                    <strong>@WorkflowSummary.PendingReports</strong>
+                                    <span>Needs review</span>
+                                </div>
+                                <div class="metric-icon" aria-hidden="true">
+                                    <svg class="action-icon" viewBox="0 0 24 24">
+                                        <rect x="8" y="4" width="8" height="4" rx="1" />
+                                        <path d="M8 6H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-2" />
+                                        <path d="M9 13h6" />
+                                        <path d="M9 17h4" />
+                                    </svg>
+                                </div>
+                                <span class="metric-progress"><span style="width: 28%"></span></span>
                             </article>
-                            <article>
-                                <strong>@WorkflowSummary.ApprovedReports</strong>
-                                <span>Approved fixes</span>
+                            <article class="metric-green">
+                                <div>
+                                    <strong>@WorkflowSummary.ApprovedReports</strong>
+                                    <span>Approved fixes</span>
+                                </div>
+                                <div class="metric-icon" aria-hidden="true">
+                                    <svg class="action-icon" viewBox="0 0 24 24">
+                                        <circle cx="12" cy="12" r="9" />
+                                        <path d="m8.5 12.5 2.2 2.2 4.8-5.2" />
+                                    </svg>
+                                </div>
+                                <span class="metric-progress"><span style="width: 88%"></span></span>
                             </article>
-                            <article>
-                                <strong>@WorkflowSummary.TrainingCandidates</strong>
-                                <span>Training candidates</span>
+                            <article class="metric-purple">
+                                <div>
+                                    <strong>@WorkflowSummary.TrainingCandidates</strong>
+                                    <span>Training candidates</span>
+                                </div>
+                                <div class="metric-icon" aria-hidden="true">
+                                    <svg class="action-icon" viewBox="0 0 24 24">
+                                        <path d="M22 10 12 5 2 10l10 5 10-5Z" />
+                                        <path d="M6 12.5V16c0 1.7 2.7 3 6 3s6-1.3 6-3v-3.5" />
+                                    </svg>
+                                </div>
+                                <span class="metric-progress"><span style="width: 92%"></span></span>
                             </article>
-                            <article>
-                                <strong>@WorkflowSummary.PublishedKnowledgeEntries</strong>
-                                <span>Live knowledge</span>
-                            </article>
-                        </div>
-
-                        <div class="reviewer-action-panel">
-                            <div>
-                                <div class="eyebrow">ML.NET Reviewer</div>
-                                <h3>Manual train and publish controls</h3>
-                                <p>The reviewer model classifies response quality. It does not generate answers.</p>
-                            </div>
-                            <div class="reviewer-state-grid">
-                                <span>@ReviewerState.ApprovedExamples approved example(s)</span>
-                                <span>@ReviewerState.DatasetCount dataset(s)</span>
-                                <span>@ReviewerState.JobCount training job(s)</span>
-                                <span>@(string.IsNullOrWhiteSpace(ReviewerState.PublishedModelVersion) ? "No reviewer published" : $"Published {ReviewerState.PublishedModelVersion}")</span>
-                            </div>
-                            <div class="backoffice-toolbar">
-                                <button type="button" class="ghost-button" @onclick="BuildReviewerDatasetAsync" disabled="@isBusy">Build Dataset</button>
-                                <button type="button" class="ghost-button" @onclick="TrainReviewerAsync" disabled="@isBusy">Train Model</button>
-                                <button type="button" class="primary-action slim" @onclick="PublishLatestReviewerAsync" disabled="@isBusy">Publish Reviewer</button>
-                            </div>
-                        </div>
-
-                        <div class="workflow-board">
-                            <article class="workflow-card">
-                                <span class="workflow-number">1</span>
-                                <h3>Report bad answer</h3>
-                                <p>User clicks Report on an assistant message. The original prompt and response are saved for review.</p>
-                                <button type="button" class="ghost-button" @onclick="() => SetSection(BackofficeSection.Reports)">Open reports</button>
-                            </article>
-                            <article class="workflow-card">
-                                <span class="workflow-number">2</span>
-                                <h3>Validate correction</h3>
-                                <p>Admin writes the correct answer, selects issue category, and sets status to Approved.</p>
-                            </article>
-                            <article class="workflow-card">
-                                <span class="workflow-number">3</span>
-                                <h3>Publish knowledge</h3>
-                                <p>Optional: promote the corrected answer as live knowledge so future matching questions can answer faster.</p>
-                                <button type="button" class="ghost-button" @onclick="() => SetSection(BackofficeSection.Knowledge)">Open knowledge</button>
-                            </article>
-                            <article class="workflow-card">
-                                <span class="workflow-number">4</span>
-                                <h3>Build and train</h3>
-                                <p>Approved reviews with a category feed Build Dataset and Train Model for the ML.NET reviewer.</p>
-                            </article>
-                            <article class="workflow-card pending">
-                                <span class="workflow-number">5</span>
-                                <h3>Publish quality gate</h3>
-                                <p>Publish Reviewer makes the API load the ML.NET reviewer before returning future answers.</p>
+                            <article class="metric-cyan">
+                                <div>
+                                    <strong>@WorkflowSummary.PublishedKnowledgeEntries</strong>
+                                    <span>In knowledge</span>
+                                </div>
+                                <div class="metric-icon" aria-hidden="true">
+                                    <svg class="action-icon" viewBox="0 0 24 24">
+                                        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                                        <path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15Z" />
+                                    </svg>
+                                </div>
+                                <span class="metric-progress"><span style="width: 94%"></span></span>
                             </article>
                         </div>
 
-                        <section class="backoffice-section">
-                            <div class="backoffice-section-header">
+                        <div class="workflow-controls-panel">
+                            <div class="workflow-controls-header">
+                                <div>
+                                    <h3>Manual tests and publish controls</h3>
+                                    <p>Run and review manual checks to maintain quality before publishing answers.</p>
+                                </div>
+                                <div class="workflow-stepper" aria-label="Reviewer publish path">
+                                    <span class="active">1. Approved responses</span>
+                                    <span>2. Evaluated</span>
+                                    <span>3. Training passed</span>
+                                    <span>4. In knowledge</span>
+                                    <span>5. Build status</span>
+                                    <span>6. Published</span>
+                                </div>
+                            </div>
+
+                            <div class="workflow-control-grid">
+                                <article class="workflow-card control-card green">
+                                    <span class="control-icon" aria-hidden="true">
+                                        <svg class="action-icon" viewBox="0 0 24 24">
+                                            <rect x="5" y="5" width="14" height="14" rx="2" />
+                                            <path d="m9 12 2 2 4-5" />
+                                        </svg>
+                                    </span>
+                                    <h3>Import test answer</h3>
+                                    <p>Import the latest export of reviewed answers. This keeps manual tests aligned with recent changes.</p>
+                                    <button type="button" class="ghost-button" @onclick="OpenReportsManagementModalAsync">Open import</button>
+                                </article>
+                                <article class="workflow-card control-card green">
+                                    <span class="control-icon" aria-hidden="true">
+                                        <svg class="action-icon" viewBox="0 0 24 24">
+                                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
+                                            <path d="m9 12 2 2 4-5" />
+                                        </svg>
+                                    </span>
+                                    <h3>Validate correction</h3>
+                                    <p>Scan for format, content, and structure issues before evaluation. Only valid items move to Approved.</p>
+                                    <button type="button" class="ghost-button" @onclick="OpenReportsManagementModalAsync">Open validation</button>
+                                </article>
+                                <article class="workflow-card control-card purple">
+                                    <span class="control-icon" aria-hidden="true">
+                                        <svg class="action-icon" viewBox="0 0 24 24">
+                                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
+                                            <path d="M14 2v6h6" />
+                                            <path d="M8 13h8" />
+                                            <path d="M8 17h6" />
+                                        </svg>
+                                    </span>
+                                    <h3>Publish knowledge</h3>
+                                    <p>Approved answers are published to the knowledge base and become available for training.</p>
+                                    <button type="button" class="ghost-button" @onclick="OpenKnowledgeManagementModalAsync">Open knowledge</button>
+                                </article>
+                                <article class="workflow-card control-card blue">
+                                    <span class="control-icon" aria-hidden="true">
+                                        <svg class="action-icon" viewBox="0 0 24 24">
+                                            <path d="M4 19V9" />
+                                            <path d="M10 19V5" />
+                                            <path d="M16 19v-8" />
+                                            <path d="M22 19H2" />
+                                        </svg>
+                                    </span>
+                                    <h3>Build and train</h3>
+                                    <p>Prepare data and models using the published content. Check build status and start training.</p>
+                                    <div class="control-card-actions">
+                                        <button type="button" class="ghost-button" @onclick="BuildReviewerDatasetAsync" disabled="@isBusy">Build dataset</button>
+                                        <button type="button" class="ghost-button" @onclick="TrainReviewerAsync" disabled="@isBusy">Train model</button>
+                                    </div>
+                                </article>
+                                <article class="workflow-card control-card cyan">
+                                    <span class="control-icon" aria-hidden="true">
+                                        <svg class="action-icon" viewBox="0 0 24 24">
+                                            <path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.8 1-6.1-4.4-4.3 6.1-.9L12 3Z" />
+                                        </svg>
+                                    </span>
+                                    <h3>Publish quality gate</h3>
+                                    <p>Final quality review and approval. Only items that pass the gate are available in the NLU engine.</p>
+                                    <button type="button" class="ghost-button" @onclick="PublishLatestReviewerAsync" disabled="@isBusy">Open quality gate</button>
+                                </article>
+                            </div>
+                        </div>
+
+                        <section class="training-candidates-panel">
+                            <div class="training-candidates-header">
                                 <div>
                                     <h2>Training Candidates</h2>
                                     <p>These come from approved reports with a validated answer and issue category.</p>
@@ -264,25 +388,106 @@
 
                             @if (TrainingCandidates.Count == 0)
                             {
-                                <p class="backoffice-empty">No training candidates yet. Approve a report, choose a category, and save it.</p>
+                                <div class="candidate-checklist">
+                                    <article>
+                                        <span class="candidate-icon" aria-hidden="true">
+                                            <svg class="action-icon" viewBox="0 0 24 24">
+                                                <path d="M10 6H6v4" />
+                                                <path d="m6 6 6 6" />
+                                                <path d="M14 18h4v-4" />
+                                                <path d="m18 18-6-6" />
+                                            </svg>
+                                        </span>
+                                        <div>
+                                            <strong>Ensure all concepts have documentation</strong>
+                                            <p>Verify that every concept used in answers has a knowledge article.</p>
+                                        </div>
+                                        <span class="candidate-status progress">In progress</span>
+                                    </article>
+                                    <article>
+                                        <span class="candidate-icon" aria-hidden="true">
+                                            <svg class="action-icon" viewBox="0 0 24 24">
+                                                <path d="M10 6H6v4" />
+                                                <path d="m6 6 6 6" />
+                                                <path d="M14 18h4v-4" />
+                                                <path d="m18 18-6-6" />
+                                            </svg>
+                                        </span>
+                                        <div>
+                                            <strong>Question that are not matched are already in knowledge</strong>
+                                            <p>Confirm unmatched questions are captured as knowledge articles or excluded from training.</p>
+                                        </div>
+                                        <span class="candidate-status pending">Pending</span>
+                                    </article>
+                                    <article>
+                                        <span class="candidate-icon" aria-hidden="true">
+                                            <svg class="action-icon" viewBox="0 0 24 24">
+                                                <path d="M10 6H6v4" />
+                                                <path d="m6 6 6 6" />
+                                                <path d="M14 18h4v-4" />
+                                                <path d="m18 18-6-6" />
+                                            </svg>
+                                        </span>
+                                        <div>
+                                            <strong>Correct answer AND order is correctly matched in NLU reference</strong>
+                                            <p>Verify that the correct answer and order are matched in the NLU reference for each response.</p>
+                                        </div>
+                                        <span class="candidate-status review">In review</span>
+                                    </article>
+                                </div>
                             }
                             else
                             {
+                                <div class="candidate-checklist">
                                 @foreach (var candidate in TrainingCandidates.Take(8))
                                 {
-                                    <article class="backoffice-card backoffice-list-card">
-                                        <div class="backoffice-card-header">
-                                            <strong>Report #@candidate.ReportId</strong>
-                                            <span>@candidate.IssueType</span>
-                                            <span>@candidate.Intent</span>
-                                            <span>@(candidate.IsPromotedToKnowledge ? "Knowledge promoted" : "Not promoted")</span>
+                                    <article>
+                                        <span class="candidate-icon" aria-hidden="true">
+                                            <svg class="action-icon" viewBox="0 0 24 24">
+                                                <path d="M10 6H6v4" />
+                                                <path d="m6 6 6 6" />
+                                                <path d="M14 18h4v-4" />
+                                                <path d="m18 18-6-6" />
+                                            </svg>
+                                        </span>
+                                        <div>
+                                            <strong>Report #@candidate.ReportId - @candidate.IssueType</strong>
+                                            <p>@candidate.Question</p>
                                         </div>
-                                        <p class="backoffice-list-summary"><strong>Question:</strong> @candidate.Question</p>
-                                        <p class="backoffice-list-summary"><strong>Correct answer:</strong> @candidate.CorrectAnswer</p>
+                                        <span class="candidate-status @(candidate.IsPromotedToKnowledge ? "progress" : "pending")">
+                                            @(candidate.IsPromotedToKnowledge ? "In knowledge" : "Pending")
+                                        </span>
                                     </article>
                                 }
+                                </div>
                             }
                         </section>
+
+                        <div class="workflow-important-note">
+                            <div>
+                                <span class="note-icon" aria-hidden="true">
+                                    <svg class="action-icon" viewBox="0 0 24 24">
+                                        <circle cx="12" cy="12" r="10" />
+                                        <path d="M12 8h.01" />
+                                        <path d="M11 12h1v4h1" />
+                                    </svg>
+                                </span>
+                                <div>
+                                    <strong>Important</strong>
+                                    <p>The training process is sequential. Please complete each step in order to maintain data quality and accuracy.</p>
+                                </div>
+                            </div>
+                            <a class="ghost-button backoffice-external-link"
+                               href="@MlTrainingUrl"
+                               target="_blank"
+                               rel="noopener noreferrer">
+                                <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                                    <path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15Z" />
+                                </svg>
+                                View Documentation
+                            </a>
+                        </div>
                     </section>
                 }
                 else if (ActiveSection == BackofficeSection.Reports)
@@ -535,80 +740,648 @@
                         else
                         {
                             <p class="backoffice-results-meta">
-                                Showing @FilteredUsers.Count user@(FilteredUsers.Count == 1 ? string.Empty : "s")
+                                Showing @UserPageStart-@UserPageEnd of @FilteredUsers.Count user@(FilteredUsers.Count == 1 ? string.Empty : "s")
                             </p>
 
-                            @foreach (var user in FilteredUsers)
-                            {
-                                <article class="backoffice-card backoffice-list-card">
-                                    <div class="backoffice-card-header">
-                                        <strong>@user.Username</strong>
-                                        <span>@user.Email</span>
-                                        <span>@(user.IsDisabled ? "Disabled" : "Active")</span>
-                                        <span>@(user.IsConfirmed ? "Confirmed" : "Unconfirmed")</span>
-                                        <span>@(user.TwoFactorEnabled ? "2FA enabled" : "2FA off")</span>
-                                    </div>
-                                    <div class="backoffice-inline-options">
-                                        @foreach (var role in user.Roles.OrderBy(role => role))
-                                        {
-                                            <span class="backoffice-tag">@role</span>
-                                        }
-                                    </div>
-                                    <div class="backoffice-actions">
-                                        <button type="button" class="ghost-button" @onclick="() => OpenEditUserModal(user)">Manage</button>
-                                    </div>
-                                </article>
-                            }
+                            <div class="user-management-list">
+                                @foreach (var user in PagedUsers)
+                                {
+                                    <button type="button"
+                                            class="backoffice-card backoffice-list-card user-management-card user-management-row-button"
+                                            aria-label="Manage user @user.Username"
+                                            @onclick="() => OpenEditUserModal(user)">
+                                        <span class="user-management-row-content">
+                                            <strong>@user.Username</strong>
+                                            <span>@user.Email</span>
+                                        </span>
+                                        <svg class="action-icon user-management-row-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                            <path d="m9 18 6-6-6-6" />
+                                        </svg>
+                                    </button>
+                                }
+                            </div>
                         }
                     </section>
                 }
             </section>
         </div>
 
+        @if (ShowProfileManagementModal)
+        {
+            <div class="backoffice-modal-backdrop" @onclick="CloseProfileManagementModal">
+                <div class="backoffice-modal admin-management-modal profile-management-modal" @onclick:stopPropagation="true">
+                    <div class="backoffice-modal-header">
+                        <div>
+                            <div class="eyebrow">Account</div>
+                            <h2>Profile Management</h2>
+                            <p>Control how your user appears in chat without changing the authenticated account.</p>
+                        </div>
+                        <button type="button" class="ghost-button modal-close-icon" aria-label="Close profile management" @onclick="CloseProfileManagementModal">
+                            <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M18 6 6 18" />
+                                <path d="m6 6 12 12" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    <div class="profile-management-grid">
+                        <div class="profile-form-panel">
+                            <div class="backoffice-grid">
+                                <label>
+                                    <span>Display name</span>
+                                    <input class="text-input"
+                                           @bind="displayNameDraft"
+                                           @bind:event="oninput"
+                                           maxlength="40"
+                                           placeholder="Name shown in chat" />
+                                </label>
+                                <label>
+                                    <span>Avatar label</span>
+                                    <input class="text-input"
+                                           @bind="avatarLabelDraft"
+                                           @bind:event="oninput"
+                                           maxlength="4"
+                                           placeholder="You, GB, G" />
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="backoffice-modal-actions">
+                        <button type="button" class="ghost-button" @onclick="ResetChatProfileAsync" disabled="@isBusy">Reset</button>
+                        <button type="button" class="primary-action slim" @onclick="SaveChatProfileAsync" disabled="@isBusy">Save profile</button>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @if (ShowReportsManagementModal)
+        {
+            <div class="backoffice-modal-backdrop" @onclick="CloseReportsManagementModal">
+                <div class="backoffice-modal admin-management-modal listing-management-modal" @onclick:stopPropagation="true">
+                    <div class="backoffice-modal-header">
+                        <div>
+                            <div class="eyebrow">Validation</div>
+                            <h2>Reported Responses</h2>
+                            <p>Validate reported answers and promote the useful fixes into reusable knowledge.</p>
+                        </div>
+                        <div class="modal-header-actions">
+                            <button type="button" class="ghost-button modal-refresh-button icon-label-button" @onclick="LoadReportsAsync" disabled="@isBusy">
+                                <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M20 11a8.1 8.1 0 0 0-15.5-2" />
+                                    <path d="M4 4v5h5" />
+                                    <path d="M4 13a8.1 8.1 0 0 0 15.5 2" />
+                                    <path d="M20 20v-5h-5" />
+                                </svg>
+                                Refresh
+                            </button>
+                            <button type="button" class="ghost-button modal-close-icon" aria-label="Close reported responses" @onclick="CloseReportsManagementModal">
+                                <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M18 6 6 18" />
+                                    <path d="m6 6 12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="listing-modal-body">
+                        <section class="listing-filter-panel @(ReportsFiltersOpen ? null : "collapsed")">
+                            <button type="button"
+                                    class="listing-filter-toggle"
+                                    aria-expanded="@ReportsFiltersOpen"
+                                    @onclick="() => ReportsFiltersOpen = !ReportsFiltersOpen">
+                                <span>Filters</span>
+                                <small>@GetReportFilterSummary()</small>
+                                <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="m6 9 6 6 6-6" />
+                                </svg>
+                            </button>
+                            @if (ReportsFiltersOpen)
+                            {
+                                <div class="listing-modal-tools">
+                                    <select class="text-input"
+                                            value="@ReportStatusFilter"
+                                            @onchange="OnReportStatusFilterChanged"
+                                            title="Limit the list to one report status.">
+                                        @foreach (var option in ReportStatusFilterOptions)
+                                        {
+                                            <option value="@option.Value">@option.Label</option>
+                                        }
+                                    </select>
+                                </div>
+                            }
+                        </section>
+
+                        @if (FilteredReports.Count == 0)
+                        {
+                            <p class="backoffice-empty">No reported responses found for this filter.</p>
+                        }
+                        else
+                        {
+                            <p class="backoffice-results-meta">Showing @ReportPageStart-@ReportPageEnd of @FilteredReports.Count reports</p>
+                            <div class="compact-listing-list">
+                                @foreach (var report in PagedReports)
+                                {
+                                    <button type="button"
+                                            class="compact-listing-card compact-listing-row-button"
+                                            aria-label="Review @GetReportTitle(report)"
+                                            @onclick="() => OpenReviewModal(report)">
+                                        <div>
+                                            <strong>@GetReportTitle(report)</strong>
+                                        </div>
+                                    </button>
+                                }
+                            </div>
+                        }
+
+                        @if (ReportTotalPages > 1)
+                        {
+                            <div class="listing-modal-pagination">
+                                <button type="button" class="ghost-button" disabled="@(ReportPage <= 1)" @onclick="PreviousReportPage">Previous</button>
+                                <span>Page @ReportPage of @ReportTotalPages</span>
+                                <button type="button" class="ghost-button" disabled="@(ReportPage >= ReportTotalPages)" @onclick="NextReportPage">Next</button>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+
+        @if (ShowPromptsManagementModal)
+        {
+            <div class="backoffice-modal-backdrop" @onclick="ClosePromptsManagementModal">
+                <div class="backoffice-modal admin-management-modal listing-management-modal" @onclick:stopPropagation="true">
+                    <div class="backoffice-modal-header">
+                        <div>
+                            <div class="eyebrow">Validation</div>
+                            <h2>Prompt Templates</h2>
+                            <p>Edit the published prompt scaffolding stored in the database.</p>
+                        </div>
+                        <div class="modal-header-actions">
+                            <button type="button" class="ghost-button modal-refresh-button icon-label-button" @onclick="LoadPromptTemplatesAsync" disabled="@isBusy">
+                                <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M20 11a8.1 8.1 0 0 0-15.5-2" />
+                                    <path d="M4 4v5h5" />
+                                    <path d="M4 13a8.1 8.1 0 0 0 15.5 2" />
+                                    <path d="M20 20v-5h-5" />
+                                </svg>
+                                Refresh
+                            </button>
+                            <button type="button" class="ghost-button modal-close-icon" aria-label="Close prompt templates" @onclick="ClosePromptsManagementModal">
+                                <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M18 6 6 18" />
+                                    <path d="m6 6 12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="listing-modal-body">
+                        <p class="backoffice-results-meta">Showing @PromptPageStart-@PromptPageEnd of @PromptTemplates.Count templates</p>
+                        <div class="compact-listing-list">
+                            @foreach (var template in PagedPromptTemplates)
+                            {
+                                <button type="button"
+                                        class="compact-listing-card prompt-template-card compact-listing-row-button"
+                                        aria-label="Edit @template.TemplateName"
+                                        @onclick="() => OpenEditPromptModal(template)">
+                                    <div>
+                                        <strong>@template.TemplateName</strong>
+                                    </div>
+                                </button>
+                            }
+                        </div>
+
+                        @if (PromptTotalPages > 1)
+                        {
+                            <div class="listing-modal-pagination">
+                                <button type="button" class="ghost-button" disabled="@(PromptPage <= 1)" @onclick="PreviousPromptPage">Previous</button>
+                                <span>Page @PromptPage of @PromptTotalPages</span>
+                                <button type="button" class="ghost-button" disabled="@(PromptPage >= PromptTotalPages)" @onclick="NextPromptPage">Next</button>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+
+        @if (ShowKnowledgeManagementModal)
+        {
+            <div class="backoffice-modal-backdrop" @onclick="CloseKnowledgeManagementModal">
+                <div class="backoffice-modal admin-management-modal listing-management-modal" @onclick:stopPropagation="true">
+                    <div class="backoffice-modal-header">
+                        <div>
+                            <div class="eyebrow">Validation</div>
+                            <h2>Knowledge Entries</h2>
+                            <p>Manage quick answers, topics, and reference content read by the assistant.</p>
+                        </div>
+                        <div class="modal-header-actions">
+                            <button type="button" class="ghost-button modal-refresh-button icon-label-button" @onclick="LoadKnowledgeEntriesAsync" disabled="@isBusy">
+                                <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M20 11a8.1 8.1 0 0 0-15.5-2" />
+                                    <path d="M4 4v5h5" />
+                                    <path d="M4 13a8.1 8.1 0 0 0 15.5 2" />
+                                    <path d="M20 20v-5h-5" />
+                                </svg>
+                                Refresh
+                            </button>
+                            <button type="button" class="ghost-button modal-close-icon" aria-label="Close knowledge entries" @onclick="CloseKnowledgeManagementModal">
+                                <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M18 6 6 18" />
+                                    <path d="m6 6 12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="listing-modal-body">
+                        <section class="listing-filter-panel @(KnowledgeFiltersOpen ? null : "collapsed")">
+                            <button type="button"
+                                    class="listing-filter-toggle"
+                                    aria-expanded="@KnowledgeFiltersOpen"
+                                    @onclick="() => KnowledgeFiltersOpen = !KnowledgeFiltersOpen">
+                                <span>
+                                    Filters
+                                    @if (KnowledgeActiveFilterCount > 0)
+                                    {
+                                        <strong class="filter-count-pill">@KnowledgeActiveFilterCount</strong>
+                                    }
+                                </span>
+                                <small>@GetKnowledgeFilterSummary()</small>
+                                <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="m6 9 6 6 6-6" />
+                                </svg>
+                            </button>
+                            @if (KnowledgeFiltersOpen)
+                            {
+                                <div class="listing-filter-content">
+                                    <div class="listing-filter-grid">
+                                        <label class="filter-field search-field">
+                                            <span>Search</span>
+                                            <span class="filter-input-shell">
+                                                <input class="text-input"
+                                                       title="Search by title, source, type, summary, or content."
+                                                       placeholder="Search knowledge..."
+                                                       value="@KnowledgeSearchTerm"
+                                                       @oninput="OnKnowledgeSearchChanged" />
+                                                <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                                    <circle cx="11" cy="11" r="7" />
+                                                    <path d="m21 21-4.3-4.3" />
+                                                </svg>
+                                            </span>
+                                        </label>
+                                        <label class="filter-field">
+                                            <span>Type</span>
+                                            <select class="text-input"
+                                                    value="@KnowledgeTypeFilter"
+                                                    @onchange="OnKnowledgeTypeFilterChanged"
+                                                    title="Limit the list to one knowledge entry type.">
+                                                <option value="">All types</option>
+                                                <option value="QuickAnswer">QuickAnswer</option>
+                                                <option value="Topic">Topic</option>
+                                                <option value="Reference">Reference</option>
+                                            </select>
+                                        </label>
+                                        <label class="filter-field">
+                                            <span>Status</span>
+                                            <select class="text-input"
+                                                    value="@KnowledgeStatusFilter"
+                                                    @onchange="OnKnowledgeStatusFilterChanged"
+                                                    title="Limit the list by publish status.">
+                                                @foreach (var option in KnowledgeStatusFilterOptions)
+                                                {
+                                                    <option value="@option.Value">@option.Label</option>
+                                                }
+                                            </select>
+                                        </label>
+                                        <label class="filter-field">
+                                            <span>Updated</span>
+                                            <select class="text-input"
+                                                    value="@KnowledgeUpdatedFilter"
+                                                    @onchange="OnKnowledgeUpdatedFilterChanged"
+                                                    title="Limit the list by last updated date.">
+                                                @foreach (var option in KnowledgeUpdatedFilterOptions)
+                                                {
+                                                    <option value="@option.Value">@option.Label</option>
+                                                }
+                                            </select>
+                                        </label>
+                                    </div>
+                                    <div class="listing-filter-actions">
+                                        <button type="button" class="ghost-button clear-filter-button icon-label-button" @onclick="ClearKnowledgeFilters" disabled="@(KnowledgeActiveFilterCount == 0)">
+                                            <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                                <path d="M20 11a8.1 8.1 0 0 0-15.5-2" />
+                                                <path d="M4 4v5h5" />
+                                            </svg>
+                                            Clear all
+                                        </button>
+                                        <button type="button" class="primary-action slim icon-label-button new-entry-button" @onclick="OpenCreateKnowledgeModal">
+                                            <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                                <path d="M12 5v14" />
+                                                <path d="M5 12h14" />
+                                            </svg>
+                                            New entry
+                                        </button>
+                                    </div>
+                                </div>
+                            }
+                        </section>
+
+                        @if (FilteredKnowledgeEntries.Count == 0)
+                        {
+                            <p class="backoffice-empty">No knowledge entries found yet.</p>
+                        }
+                        else
+                        {
+                            <p class="backoffice-results-meta">Showing @KnowledgePageStart-@KnowledgePageEnd of @FilteredKnowledgeEntries.Count entries</p>
+                            <div class="compact-listing-list">
+                                @foreach (var entry in PagedKnowledgeEntries)
+                                {
+                                    <button type="button"
+                                            class="compact-listing-card compact-listing-row-button"
+                                            aria-label="Edit @entry.Title"
+                                            @onclick="() => OpenEditKnowledgeModal(entry)">
+                                        <div>
+                                            <strong>@entry.Title</strong>
+                                        </div>
+                                    </button>
+                                }
+                            </div>
+                        }
+
+                        @if (KnowledgeTotalPages > 1)
+                        {
+                            <div class="listing-modal-pagination">
+                                <button type="button" class="ghost-button" disabled="@(KnowledgePage <= 1)" @onclick="PreviousKnowledgePage">Previous</button>
+                                <span>Page @KnowledgePage of @KnowledgeTotalPages</span>
+                                <button type="button" class="ghost-button" disabled="@(KnowledgePage >= KnowledgeTotalPages)" @onclick="NextKnowledgePage">Next</button>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+
+        @if (ShowUserManagementModal)
+        {
+            <div class="backoffice-modal-backdrop" @onclick="CloseUserManagementModal">
+                <div class="backoffice-modal admin-management-modal user-management-modal" @onclick:stopPropagation="true">
+                    <div class="backoffice-modal-header">
+                        <div>
+                            <div class="eyebrow">Administration</div>
+                            <h2>User Management</h2>
+                            <p>Manage admin access, validator permissions, and application users from one place.</p>
+                        </div>
+                        <div class="modal-header-actions">
+                            <button type="button" class="ghost-button modal-refresh-button icon-label-button" @onclick="LoadUsersAsync" disabled="@isBusy">
+                                <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M20 11a8.1 8.1 0 0 0-15.5-2" />
+                                    <path d="M4 4v5h5" />
+                                    <path d="M4 13a8.1 8.1 0 0 0 15.5 2" />
+                                    <path d="M20 20v-5h-5" />
+                                </svg>
+                                Refresh
+                            </button>
+                            <button type="button" class="ghost-button modal-close-icon" aria-label="Close user management" @onclick="CloseUserManagementModal">
+                                <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M18 6 6 18" />
+                                    <path d="m6 6 12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <section class="listing-filter-panel user-management-filter-panel @(UsersFiltersOpen ? null : "collapsed")">
+                        <button type="button"
+                                class="listing-filter-toggle"
+                                aria-expanded="@UsersFiltersOpen"
+                                @onclick="() => UsersFiltersOpen = !UsersFiltersOpen">
+                            <span>
+                                Filters
+                                @if (UserActiveFilterCount > 0)
+                                {
+                                    <strong class="filter-count-pill">@UserActiveFilterCount</strong>
+                                }
+                            </span>
+                            <small>@GetUserFilterSummary()</small>
+                            <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="m6 9 6 6 6-6" />
+                            </svg>
+                        </button>
+                        @if (UsersFiltersOpen)
+                        {
+                            <div class="listing-filter-content">
+                                <div class="listing-filter-grid user-filter-grid">
+                                    <label class="filter-field search-field">
+                                        <span>Search</span>
+                                        <span class="filter-input-shell">
+                                            <input class="text-input"
+                                                   title="Search by username, email, or role."
+                                                   placeholder="Search username, email, or role..."
+                                                   value="@UserSearchTerm"
+                                                   @oninput="OnUserSearchChanged" />
+                                            <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                                <circle cx="11" cy="11" r="7" />
+                                                <path d="m21 21-4.3-4.3" />
+                                            </svg>
+                                        </span>
+                                    </label>
+                                </div>
+                                <div class="listing-filter-actions">
+                                    <button type="button" class="ghost-button clear-filter-button icon-label-button" @onclick="ClearUserFilters" disabled="@(UserActiveFilterCount == 0)">
+                                        <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                            <path d="M20 11a8.1 8.1 0 0 0-15.5-2" />
+                                            <path d="M4 4v5h5" />
+                                        </svg>
+                                        Clear all
+                                    </button>
+                                    <button type="button" class="primary-action slim icon-label-button new-entry-button" @onclick="OpenCreateUserModal">
+                                        <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                            <path d="M12 5v14" />
+                                            <path d="M5 12h14" />
+                                        </svg>
+                                        New user
+                                    </button>
+                                </div>
+                            </div>
+                        }
+                    </section>
+
+                    <div class="user-management-results">
+                        @if (FilteredUsers.Count == 0)
+                        {
+                            <p class="backoffice-empty">No users matched this filter.</p>
+                        }
+                        else
+                        {
+                            <p class="backoffice-results-meta">
+                                Showing @FilteredUsers.Count user@(FilteredUsers.Count == 1 ? string.Empty : "s")
+                            </p>
+
+                            <div class="user-management-list">
+                                @foreach (var user in FilteredUsers)
+                                {
+                                    <button type="button"
+                                            class="backoffice-card backoffice-list-card user-management-card user-management-row-button"
+                                            aria-label="Manage user @user.Username"
+                                            @onclick="() => OpenEditUserModal(user)">
+                                        <span class="user-management-row-content">
+                                            <strong>@user.Username</strong>
+                                            <span>@user.Email</span>
+                                        </span>
+                                        <svg class="action-icon user-management-row-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                            <path d="m9 18 6-6-6-6" />
+                                        </svg>
+                                    </button>
+                                }
+                            </div>
+
+                            @if (UserTotalPages > 1)
+                            {
+                                <div class="listing-modal-pagination user-management-pagination">
+                                    <button type="button" class="ghost-button" disabled="@(UserPage <= 1)" @onclick="PreviousUserPage">Previous</button>
+                                    <span>Page @UserPage of @UserTotalPages</span>
+                                    <button type="button" class="ghost-button" disabled="@(UserPage >= UserTotalPages)" @onclick="NextUserPage">Next</button>
+                                </div>
+                            }
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+
+        @if (ShowPromptModal && SelectedPrompt is not null)
+        {
+            var promptDraft = GetPromptDraft(SelectedPrompt);
+            <div class="backoffice-modal-backdrop" @onclick="ClosePromptModal">
+                <div class="backoffice-modal admin-management-modal prompt-edit-modal" @onclick:stopPropagation="true">
+                    <div class="backoffice-modal-header">
+                        <div>
+                            <div class="eyebrow">Validation</div>
+                            <h2>@SelectedPrompt.TemplateName</h2>
+                            <p>Update the prompt template content used by the documentation assistant.</p>
+                        </div>
+                        <button type="button" class="ghost-button modal-close-icon" aria-label="Close prompt template" @onclick="ClosePromptModal">
+                            <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M18 6 6 18" />
+                                <path d="m6 6 12 12" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    <div class="prompt-edit-modal-body">
+                        <div class="backoffice-grid prompt-edit-grid">
+                            <label>
+                                <span title="Profile this prompt belongs to.">Profile</span>
+                                <input class="text-input" @bind="promptDraft.ProfileId" />
+                            </label>
+                            <label>
+                                <span title="Template name shown to admins.">Template name</span>
+                                <input class="text-input" @bind="promptDraft.TemplateName" />
+                            </label>
+                            <label class="backoffice-wide">
+                                <span title="The prompt instructions stored in the database.">Prompt content</span>
+                                <textarea class="text-input backoffice-textarea prompt-content-textarea" rows="12" @bind="promptDraft.Content"></textarea>
+                            </label>
+                        </div>
+
+                        <div class="backoffice-inline-options prompt-edit-options">
+                            <label title="Published templates are active for the assistant.">
+                                <input type="checkbox" @bind="promptDraft.IsPublished" />
+                                Published
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="backoffice-modal-actions">
+                        <button type="button" class="ghost-button icon-label-button" @onclick="ClosePromptModal">
+                            <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M18 6 6 18" />
+                                <path d="m6 6 12 12" />
+                            </svg>
+                            Cancel
+                        </button>
+                        <button type="button" class="primary-action slim icon-label-button" @onclick="SaveSelectedPromptTemplateAsync" disabled="@isBusy">
+                            <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" />
+                                <path d="M17 21v-8H7v8" />
+                                <path d="M7 3v5h8" />
+                            </svg>
+                            Save template
+                        </button>
+                    </div>
+                </div>
+            </div>
+        }
+
         @if (ShowKnowledgeModal)
         {
             <div class="backoffice-modal-backdrop" @onclick="CloseKnowledgeModal">
-                <div class="backoffice-modal" @onclick:stopPropagation="true">
-                    <div class="backoffice-section-header">
+                <div class="backoffice-modal admin-management-modal knowledge-edit-modal" @onclick:stopPropagation="true">
+                    <div class="backoffice-modal-header">
                         <div>
+                            <div class="eyebrow">Validation</div>
                             <h2>@(EditingKnowledgeId.HasValue ? "Edit Knowledge Entry" : "Create Knowledge Entry")</h2>
                             <p>Update the published assistant knowledge without touching code files.</p>
                         </div>
-                        <button type="button" class="ghost-button" @onclick="CloseKnowledgeModal">Close</button>
+                        <button type="button" class="ghost-button modal-close-icon" aria-label="Close knowledge entry" @onclick="CloseKnowledgeModal">
+                            <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M18 6 6 18" />
+                                <path d="m6 6 12 12" />
+                            </svg>
+                        </button>
                     </div>
 
-                    <div class="backoffice-grid">
-                        <label>
-                            <span title="Choose whether this entry is a quick answer, topic summary, or reference content.">Entry type</span>
-                            <select class="text-input" @bind="KnowledgeModalDraft.EntryType">
-                                <option>QuickAnswer</option>
-                                <option>Topic</option>
-                                <option>Reference</option>
-                            </select>
-                        </label>
-                        <label>
-                            <span title="Logical bucket or source name used to group knowledge entries.">Source name</span>
-                            <input class="text-input" @bind="KnowledgeModalDraft.SourceName" />
-                        </label>
-                        <label class="backoffice-wide">
-                            <span title="Admin-facing title for this knowledge record.">Title</span>
-                            <input class="text-input" @bind="KnowledgeModalDraft.Title" />
-                        </label>
-                        <label class="backoffice-wide">
-                            <span title="Optional short summary, especially useful for topic entries.">Summary</span>
-                            <input class="text-input" @bind="KnowledgeModalDraft.Summary" />
-                        </label>
-                        <label class="backoffice-wide">
-                            <span title="The main reusable content the assistant can read from this entry.">Content</span>
-                            <textarea class="text-input backoffice-textarea" rows="10" @bind="KnowledgeModalDraft.Content"></textarea>
-                        </label>
+                    <div class="knowledge-edit-modal-body">
+                        <div class="backoffice-grid knowledge-edit-grid">
+                            <label>
+                                <span title="Choose whether this entry is a quick answer, topic summary, or reference content.">Entry type</span>
+                                <select class="text-input" @bind="KnowledgeModalDraft.EntryType">
+                                    <option>QuickAnswer</option>
+                                    <option>Topic</option>
+                                    <option>Reference</option>
+                                </select>
+                            </label>
+                            <label>
+                                <span title="Logical bucket or source name used to group knowledge entries.">Source name</span>
+                                <input class="text-input" @bind="KnowledgeModalDraft.SourceName" />
+                            </label>
+                            <label class="backoffice-wide">
+                                <span title="Admin-facing title for this knowledge record.">Title</span>
+                                <input class="text-input" @bind="KnowledgeModalDraft.Title" />
+                            </label>
+                            <label class="backoffice-wide">
+                                <span title="Optional short summary, especially useful for topic entries.">Summary</span>
+                                <input class="text-input" @bind="KnowledgeModalDraft.Summary" />
+                            </label>
+                            <label class="backoffice-wide">
+                                <span title="The main reusable content the assistant can read from this entry.">Content</span>
+                                <textarea class="text-input backoffice-textarea knowledge-content-textarea" rows="10" @bind="KnowledgeModalDraft.Content"></textarea>
+                            </label>
+                        </div>
+
+                        <div class="backoffice-inline-options knowledge-edit-options">
+                            <label title="Published entries are active and available to the assistant.">
+                                <input type="checkbox" @bind="KnowledgeModalDraft.IsPublished" />
+                                Published
+                            </label>
+                        </div>
                     </div>
-                    <div class="backoffice-inline-options">
-                        <label title="Published entries are active and available to the assistant."><input type="checkbox" @bind="KnowledgeModalDraft.IsPublished" /> Published</label>
-                    </div>
-                    <div class="backoffice-actions">
-                        <button type="button" class="ghost-button" @onclick="CloseKnowledgeModal">Cancel</button>
-                        <button type="button" class="primary-action slim" @onclick="SaveKnowledgeModalAsync" disabled="@isBusy">
+
+                    <div class="backoffice-modal-actions">
+                        <button type="button" class="ghost-button icon-label-button" @onclick="CloseKnowledgeModal">
+                            <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M18 6 6 18" />
+                                <path d="m6 6 12 12" />
+                            </svg>
+                            Cancel
+                        </button>
+                        <button type="button" class="primary-action slim icon-label-button" @onclick="SaveKnowledgeModalAsync" disabled="@isBusy">
+                            <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" />
+                                <path d="M17 21v-8H7v8" />
+                                <path d="M7 3v5h8" />
+                            </svg>
                             @(EditingKnowledgeId.HasValue ? "Save entry" : "Create entry")
                         </button>
                     </div>
@@ -620,121 +1393,191 @@
         {
             var draft = GetReviewDraft(SelectedReport);
             <div class="backoffice-modal-backdrop" @onclick="CloseReportModal">
-                <div class="backoffice-modal" @onclick:stopPropagation="true">
-                    <div class="backoffice-section-header">
+                <div class="backoffice-modal admin-management-modal report-review-modal" @onclick:stopPropagation="true">
+                    <div class="backoffice-modal-header">
                         <div>
+                            <div class="eyebrow">Validation</div>
                             <h2>Review Report #@SelectedReport.Id</h2>
                             <p>Validate the answer, classify the issue, and optionally promote the fix into reusable knowledge.</p>
                         </div>
-                        <button type="button" class="ghost-button" @onclick="CloseReportModal">Close</button>
+                        <button type="button" class="ghost-button modal-close-icon" aria-label="Close report review" @onclick="CloseReportModal">
+                            <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M18 6 6 18" />
+                                <path d="m6 6 12 12" />
+                            </svg>
+                        </button>
                     </div>
 
-                    <div class="backoffice-card backoffice-review-source">
-                        <div class="backoffice-card-header">
-                            <strong>@SelectedReport.Username</strong>
-                            <span>@GetReportStatusLabel(SelectedReport)</span>
-                            @if (!string.IsNullOrWhiteSpace(SelectedReport.ReviewCategory))
-                            {
-                                <span>@SelectedReport.ReviewCategory</span>
-                            }
-                            <span>@FormatReportTimestamp(SelectedReport)</span>
-                        </div>
-                        <p class="backoffice-list-summary"><strong>Original prompt:</strong> @SelectedReport.UserPrompt</p>
-                        <p class="backoffice-list-summary"><strong>Original response:</strong> @SelectedReport.AssistantResponse</p>
-                    </div>
-
-                    <div class="review-workflow-guide">
-                        <div class="review-workflow-step active">
-                            <strong>1. Correct</strong>
-                            <span>Write the answer that should have been returned.</span>
-                        </div>
-                        <div class="review-workflow-step @(CanPromoteToKnowledge(draft) ? "active" : null)">
-                            <strong>2. Classify</strong>
-                            <span>Approved + category turns this into training data.</span>
-                        </div>
-                        <div class="review-workflow-step @(draft.PromoteToKnowledge ? "active" : null)">
-                            <strong>3. Reuse</strong>
-                            <span>Publish as knowledge so future matches answer faster.</span>
-                        </div>
-                    </div>
-
-                    <div class="backoffice-grid">
-                        <label>
-                            <span title="The cleaned or corrected user question you want to keep as the reviewed version.">User prompt</span>
-                            <textarea class="text-input backoffice-textarea" rows="2" @bind="draft.ValidatedQuestion"></textarea>
-                        </label>
-                        <label>
-                            <span title="The corrected answer that you consider acceptable for this report.">Validated response</span>
-                            <textarea class="text-input backoffice-textarea" rows="6" @bind="draft.ValidatedResponse"></textarea>
-                        </label>
-                        <label>
-                            <span title="Approved means this corrected response is trusted and can become ML training data.">Review status</span>
-                            <select class="text-input"
-                                    value="@draft.ReviewStatus"
-                                    @onchange="args => OnReviewStatusChanged(draft, args.Value?.ToString())">
-                                @foreach (var status in ReviewStatusOptions)
+                    <div class="report-review-body">
+                        <div class="backoffice-card backoffice-review-source">
+                            <div class="report-source-meta">
+                                <span class="report-source-user">
+                                    <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path d="M20 21a8 8 0 0 0-16 0" />
+                                        <circle cx="12" cy="7" r="4" />
+                                    </svg>
+                                    @SelectedReport.Username
+                                </span>
+                                <span class="source-dot">•</span>
+                                <span class="report-status-chip">@GetReportStatusLabel(SelectedReport)</span>
+                                @if (!string.IsNullOrWhiteSpace(SelectedReport.ReviewCategory))
                                 {
-                                    <option value="@status">@status</option>
+                                    <span class="source-dot">•</span>
+                                    <span>@SelectedReport.ReviewCategory</span>
                                 }
-                            </select>
-                        </label>
-                        <label>
-                            <span title="This is the issue label used for future quality analysis and ML training examples.">Category</span>
-                            <select class="text-input" @bind="draft.ReviewCategory">
-                                @foreach (var category in ReviewCategoryOptions)
-                                {
-                                    <option value="@category">@((string.IsNullOrWhiteSpace(category) ? "None" : category))</option>
-                                }
-                            </select>
-                        </label>
-                        <label class="backoffice-wide">
-                            <span title="Optional notes for why the answer was wrong or how it was fixed.">Review notes</span>
-                            <textarea class="text-input backoffice-textarea" rows="3" @bind="draft.ReviewNotes"></textarea>
-                        </label>
-                    </div>
-                    <div class="backoffice-inline-options">
-                        <label title="Create a reusable knowledge entry from this reviewed fix.">
-                            <input type="checkbox"
-                                   checked="@draft.PromoteToKnowledge"
-                                   disabled="@(!CanPromoteToKnowledge(draft))"
-                                   @onchange="args => OnPromoteToKnowledgeChanged(draft, args.Value)" />
-                            Promote to knowledge
-                        </label>
-                        <label title="If promoted, make the new knowledge live right away.">
-                            <input type="checkbox"
-                                   checked="@draft.PublishKnowledge"
-                                   disabled="@(!CanPublishKnowledge(draft))"
-                                   @onchange="args => OnPublishKnowledgeChanged(draft, args.Value)" />
-                            Publish immediately
-                        </label>
-                    </div>
-                    <p class="backoffice-results-meta">
-                        Training-ready rule: set status to Approved, choose a category, and keep a validated response.
-                    </p>
-                    @if (draft.PromoteToKnowledge)
-                    {
-                        <div class="backoffice-grid">
+                                <span class="source-dot">•</span>
+                                <span class="report-source-date">
+                                    <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path d="M8 2v4" />
+                                        <path d="M16 2v4" />
+                                        <rect x="3" y="4" width="18" height="18" rx="2" />
+                                        <path d="M3 10h18" />
+                                    </svg>
+                                    @FormatReportTimestamp(SelectedReport)
+                                </span>
+                            </div>
+                            <p class="backoffice-list-summary"><strong>Original prompt:</strong> @SelectedReport.UserPrompt</p>
+                            <p class="backoffice-list-summary"><strong>Original response:</strong> @SelectedReport.AssistantResponse</p>
+                        </div>
+
+                        <div class="review-workflow-guide">
+                            <div class="review-workflow-step active">
+                                <span class="workflow-step-marker"></span>
+                                <span class="workflow-step-copy">
+                                    <strong>1. Correct</strong>
+                                    <span>Write the answer that should have been returned.</span>
+                                </span>
+                                <span class="workflow-step-icon">
+                                    <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path d="M20 6 9 17l-5-5" />
+                                    </svg>
+                                </span>
+                            </div>
+                            <div class="review-workflow-step @(CanPromoteToKnowledge(draft) ? "active" : null)">
+                                <span class="workflow-step-marker"></span>
+                                <span class="workflow-step-copy">
+                                    <strong>2. Classify</strong>
+                                    <span>Approved + category turns this into training data.</span>
+                                </span>
+                                <span class="workflow-step-icon">
+                                    <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
+                                        <path d="M14 2v6h6" />
+                                        <path d="M9 15h6" />
+                                        <path d="M9 11h2" />
+                                    </svg>
+                                </span>
+                            </div>
+                            <div class="review-workflow-step @(draft.PromoteToKnowledge ? "active" : null)">
+                                <span class="workflow-step-marker"></span>
+                                <span class="workflow-step-copy">
+                                    <strong>3. Reuse</strong>
+                                    <span>Publish as knowledge so future matches answer faster.</span>
+                                </span>
+                                <span class="workflow-step-icon">
+                                    <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                                        <path d="M4 4v15.5" />
+                                        <path d="M20 22V6a2 2 0 0 0-2-2H6.5A2.5 2.5 0 0 0 4 6.5" />
+                                    </svg>
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="backoffice-grid report-review-form-grid">
                             <label>
-                                <span title="Choose what kind of reusable knowledge this review should become.">Entry type</span>
-                                <select class="text-input" @bind="draft.KnowledgeEntryType">
-                                    <option>QuickAnswer</option>
-                                    <option>Topic</option>
-                                    <option>Reference</option>
+                                <span title="The cleaned or corrected user question you want to keep as the reviewed version.">User prompt</span>
+                                <textarea class="text-input backoffice-textarea compact-textarea" rows="3" @bind="draft.ValidatedQuestion"></textarea>
+                            </label>
+                            <label>
+                                <span title="The corrected answer that you consider acceptable for this report.">Validated response</span>
+                                <textarea class="text-input backoffice-textarea compact-textarea" rows="3" @bind="draft.ValidatedResponse"></textarea>
+                            </label>
+                            <label>
+                                <span title="Approved means this corrected response is trusted and can become ML training data.">Review status</span>
+                                <select class="text-input"
+                                        value="@draft.ReviewStatus"
+                                        @onchange="args => OnReviewStatusChanged(draft, args.Value?.ToString())">
+                                    @foreach (var status in ReviewStatusOptions)
+                                    {
+                                        <option value="@status">@status</option>
+                                    }
                                 </select>
                             </label>
                             <label>
-                                <span title="Logical group or source bucket for this knowledge entry.">Source name</span>
-                                <input class="text-input" @bind="draft.KnowledgeSourceName" />
+                                <span title="This is the issue label used for future quality analysis and ML training examples.">Category</span>
+                                <select class="text-input" @bind="draft.ReviewCategory">
+                                    @foreach (var category in ReviewCategoryOptions)
+                                    {
+                                        <option value="@category">@((string.IsNullOrWhiteSpace(category) ? "None" : category))</option>
+                                    }
+                                </select>
                             </label>
                             <label class="backoffice-wide">
-                                <span title="Admin-facing title for the promoted knowledge entry.">Knowledge title</span>
-                                <input class="text-input" @bind="draft.KnowledgeTitle" />
+                                <span title="Optional notes for why the answer was wrong or how it was fixed.">Review notes</span>
+                                <textarea class="text-input backoffice-textarea notes-textarea" rows="3" @bind="draft.ReviewNotes"></textarea>
                             </label>
                         </div>
-                    }
-                    <div class="backoffice-actions">
-                        <button type="button" class="ghost-button" @onclick="CloseReportModal">Cancel</button>
-                        <button type="button" class="primary-action slim" @onclick="SaveSelectedReportReviewAsync" disabled="@isBusy">Save review</button>
+                        <div class="backoffice-inline-options">
+                            <label title="Create a reusable knowledge entry from this reviewed fix.">
+                                <input type="checkbox"
+                                       checked="@draft.PromoteToKnowledge"
+                                       disabled="@(!CanPromoteToKnowledge(draft))"
+                                       @onchange="args => OnPromoteToKnowledgeChanged(draft, args.Value)" />
+                                Promote to knowledge
+                            </label>
+                            <label title="If promoted, make the new knowledge live right away.">
+                                <input type="checkbox"
+                                       checked="@draft.PublishKnowledge"
+                                       disabled="@(!CanPublishKnowledge(draft))"
+                               @onchange="args => OnPublishKnowledgeChanged(draft, args.Value)" />
+                                Publish immediately
+                            </label>
+                        </div>
+                        @if (draft.PromoteToKnowledge)
+                        {
+                            <div class="backoffice-grid report-review-form-grid promoted-knowledge-grid">
+                                <label>
+                                    <span title="Choose what kind of reusable knowledge this review should become.">Entry type</span>
+                                    <select class="text-input" @bind="draft.KnowledgeEntryType">
+                                        <option>QuickAnswer</option>
+                                        <option>Topic</option>
+                                        <option>Reference</option>
+                                    </select>
+                                </label>
+                                <label>
+                                    <span title="Logical group or source bucket for this knowledge entry.">Source name</span>
+                                    <input class="text-input" @bind="draft.KnowledgeSourceName" />
+                                </label>
+                                <label class="backoffice-wide">
+                                    <span title="Admin-facing title for the promoted knowledge entry.">Knowledge title</span>
+                                    <input class="text-input" @bind="draft.KnowledgeTitle" />
+                                </label>
+                            </div>
+                        }
+                    </div>
+                    <div class="backoffice-modal-actions review-modal-footer">
+                        <div class="review-ready-note">
+                            <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <circle cx="12" cy="12" r="10" />
+                                <path d="M12 16v-4" />
+                                <path d="M12 8h.01" />
+                            </svg>
+                            Training-ready rule: set status to Approved, choose a category, and keep a validated response.
+                        </div>
+                        <button type="button" class="ghost-button icon-label-button" @onclick="CloseReportModal">
+                            <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M18 6 6 18" />
+                                <path d="m6 6 12 12" />
+                            </svg>
+                            Cancel
+                        </button>
+                        <button type="button" class="primary-action slim icon-label-button" @onclick="SaveSelectedReportReviewAsync" disabled="@isBusy">
+                            <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M20 6 9 17l-5-5" />
+                            </svg>
+                            Save review
+                        </button>
                     </div>
                 </div>
             </div>
@@ -743,64 +1586,178 @@
         @if (ShowUserModal)
         {
             <div class="backoffice-modal-backdrop" @onclick="CloseUserModal">
-                <div class="backoffice-modal" @onclick:stopPropagation="true">
-                    <div class="backoffice-section-header">
+                <div class="backoffice-modal admin-management-modal create-user-modal" @onclick:stopPropagation="true">
+                    <div class="backoffice-modal-header">
                         <div>
+                            <div class="eyebrow">Administration</div>
                             <h2>@(EditingUserId is null ? "Create User" : "Manage User")</h2>
                             <p>Assign roles, control access, and manage who can review data or administer the app.</p>
                         </div>
-                        <button type="button" class="ghost-button" @onclick="CloseUserModal">Close</button>
+                        <button type="button" class="ghost-button modal-close-icon" aria-label="Close user form" @onclick="CloseUserModal">
+                            <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M18 6 6 18" />
+                                <path d="m6 6 12 12" />
+                            </svg>
+                        </button>
                     </div>
 
-                    <div class="backoffice-grid">
-                        <label>
-                            <span>Username</span>
-                            <input class="text-input" @bind="UserModalDraft.Username" disabled="@(EditingUserId is not null)" />
-                        </label>
-                        <label>
-                            <span>Email</span>
-                            <input class="text-input" @bind="UserModalDraft.Email" />
-                        </label>
-                        @if (EditingUserId is null)
-                        {
-                            <label class="backoffice-wide">
-                                <span>Password</span>
-                                <input class="text-input" type="password" @bind="UserModalDraft.Password" />
-                            </label>
-                        }
-                    </div>
-
-                    <div class="backoffice-inline-options">
-                        <label><input type="checkbox" @bind="UserModalDraft.IsConfirmed" /> Confirmed</label>
-                        <label><input type="checkbox" @bind="UserModalDraft.IsDisabled" /> Disabled</label>
-                        @if (EditingUserId is not null)
-                        {
-                            <span>@(SelectedUser?.TwoFactorEnabled == true ? "2FA is enabled for this user." : "2FA is not enabled for this user.")</span>
-                        }
-                    </div>
-
-                    <div class="backoffice-role-stack">
-                        <span>Roles</span>
-                        <div class="backoffice-inline-options">
-                            @foreach (var role in BackofficeRoleOptions)
-                            {
+                    <div class="create-user-modal-body">
+                        <section class="create-user-panel">
+                            <h3>Account Details</h3>
+                            <div class="backoffice-grid">
                                 <label>
-                                    <input type="checkbox"
-                                           checked="@UserHasRole(UserModalDraft, role)"
-                                           @onchange="args => OnUserRoleChanged(role, args.Value)" />
-                                    @role
+                                    <span>Username</span>
+                                    <input class="text-input" @bind="UserModalDraft.Username" disabled="@(EditingUserId is not null)" />
                                 </label>
-                            }
-                        </div>
+                                <label>
+                                    <span>Email</span>
+                                    <input class="text-input" @bind="UserModalDraft.Email" />
+                                </label>
+                                @if (EditingUserId is null)
+                                {
+                                    <label class="backoffice-wide">
+                                        <span>Password</span>
+                                        <input class="text-input" type="password" @bind="UserModalDraft.Password" />
+                                    </label>
+                                }
+                            </div>
+                        </section>
+
+                        <section class="create-user-panel">
+                            <h3>Access Settings</h3>
+                            <div class="user-access-options">
+                                <label><input type="checkbox" @bind="UserModalDraft.IsConfirmed" /> Confirmed</label>
+                                <label><input type="checkbox" @bind="UserModalDraft.IsDisabled" /> Disabled</label>
+                                @if (EditingUserId is not null)
+                                {
+                                    <span>@(SelectedUser?.TwoFactorEnabled == true ? "2FA is enabled for this user." : "2FA is not enabled for this user.")</span>
+                                }
+                            </div>
+                        </section>
+
+                        <section class="create-user-panel create-user-roles-panel">
+                            <h3>Roles</h3>
+                            <div class="user-role-options">
+                                @foreach (var role in BackofficeRoleOptions)
+                                {
+                                    <label>
+                                        <input type="checkbox"
+                                               checked="@UserHasRole(UserModalDraft, role)"
+                                               @onchange="args => OnUserRoleChanged(role, args.Value)" />
+                                        @role
+                                    </label>
+                                }
+                            </div>
+                        </section>
                     </div>
 
-                    <div class="backoffice-actions">
+                    <div class="backoffice-modal-actions">
                         <button type="button" class="ghost-button" @onclick="CloseUserModal">Cancel</button>
                         <button type="button" class="primary-action slim" @onclick="SaveUserModalAsync" disabled="@isBusy">
                             @(EditingUserId is null ? "Create user" : "Save user")
                         </button>
                     </div>
                 </div>
+            </div>
+        }
+
+        @if (ShowFaqModal)
+        {
+            <div class="backoffice-modal-backdrop" role="presentation" @onclick="CloseFaqModal">
+                <section class="backoffice-modal admin-management-modal faq-modal backoffice-faq-modal" role="dialog" aria-modal="true" aria-labelledby="backoffice-faq-modal-title" @onclick:stopPropagation="true">
+                    <header class="backoffice-modal-header">
+                        <div>
+                            <div class="eyebrow">Knowledge Base</div>
+                            <h2 id="backoffice-faq-modal-title">Frequently Asked Questions</h2>
+                            <p>Browse common setup, authentication, gateway, Docker, EF Core, and troubleshooting answers.</p>
+                        </div>
+                        <button type="button" class="ghost-button modal-close-icon" aria-label="Close FAQ dialog" @onclick="CloseFaqModal">
+                            <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M18 6 6 18" />
+                                <path d="m6 6 12 12" />
+                            </svg>
+                        </button>
+                    </header>
+
+                    <div class="faq-modal-body">
+                        <div class="faq-modal-summary">
+                            <div>
+                                <strong>@FilteredFaqItems.Count questions</strong>
+                                <span>Showing @FaqPageStart-@FaqPageEnd</span>
+                            </div>
+                            <div class="faq-filter-wrap">
+                                <button type="button"
+                                        class="ghost-button faq-filter-button @(isFaqFilterOpen || HasFaqFilter ? "active" : null)"
+                                        aria-expanded="@isFaqFilterOpen"
+                                        @onclick="ToggleFaqFilter">
+                                    <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path d="M3 5h18" />
+                                        <path d="M6 12h12" />
+                                        <path d="M10 19h4" />
+                                    </svg>
+                                    <span>Filter</span>
+                                </button>
+
+                                @if (isFaqFilterOpen)
+                                {
+                                    <div class="faq-filter-popover">
+                                        <label for="backoffice-faq-filter-input">Search questions</label>
+                                        <input id="backoffice-faq-filter-input"
+                                               class="text-input"
+                                               placeholder="Type keyword..."
+                                               value="@FaqSearchTerm"
+                                               @oninput="OnFaqSearchChanged" />
+                                        @if (HasFaqFilter)
+                                        {
+                                            <button type="button" class="ghost-button" @onclick="ClearFaqFilter">Clear filter</button>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </div>
+
+                        <section class="faq-modal-list" aria-label="Frequently asked questions">
+                            @if (FilteredFaqItems.Count == 0)
+                            {
+                                <div class="faq-modal-empty">
+                                    <strong>No questions found</strong>
+                                    <span>Try another keyword.</span>
+                                </div>
+                            }
+                            else
+                            {
+                                @foreach (var item in PagedFaqItems)
+                                {
+                                    <details class="faq-modal-item" open="@IsFaqItemExpanded(item)">
+                                        <summary @onclick:preventDefault="true" @onclick="() => ToggleFaqItem(item)">
+                                            <span>@item.Question</span>
+                                            <small>@item.Category</small>
+                                        </summary>
+                                        <p>@item.Answer</p>
+                                    </details>
+                                }
+                            }
+                        </section>
+
+                        @if (FaqTotalPages > 1)
+                        {
+                            <nav class="faq-modal-pagination" aria-label="FAQ pagination">
+                                <button type="button" class="ghost-button" disabled="@(FaqSafeCurrentPage == 1)" @onclick="PreviousFaqPage">Previous</button>
+                                <div class="faq-page-dots">
+                                    @foreach (var pageNumber in VisibleFaqPages)
+                                    {
+                                        <button type="button"
+                                                class="faq-page-number @(pageNumber == FaqSafeCurrentPage ? "active" : null)"
+                                                @onclick="() => GoToFaqPage(pageNumber)">
+                                            @pageNumber
+                                        </button>
+                                    }
+                                </div>
+                                <button type="button" class="ghost-button" disabled="@(FaqSafeCurrentPage == FaqTotalPages)" @onclick="NextFaqPage">Next</button>
+                            </nav>
+                        }
+                    </div>
+                </section>
             </div>
         }
     }
@@ -811,10 +1768,13 @@
     private const string UserStorageKey = "aichatapp.web.username";
     private const string DisplayNameStorageKey = "aichatapp.web.displayName";
     private const string AvatarLabelStorageKey = "aichatapp.web.avatarLabel";
+    private const int DefaultFaqPageSize = 5;
     private bool initialized;
     private bool isBusy;
+    private bool isBackofficeSidebarOpen;
+    private bool isBackofficeSidebarHidden;
     private bool workspacesNavOpen;
-    private bool validationNavOpen;
+    private bool validationNavOpen = true;
     private bool administrationNavOpen;
     private string? token;
     private string? currentUsername;
@@ -827,14 +1787,33 @@
     private string UserSearchTerm { get; set; } = string.Empty;
     private string KnowledgeSearchTerm { get; set; } = string.Empty;
     private string KnowledgeTypeFilter { get; set; } = string.Empty;
+    private string KnowledgeStatusFilter { get; set; } = string.Empty;
+    private string KnowledgeUpdatedFilter { get; set; } = string.Empty;
     private int KnowledgePage { get; set; } = 1;
     private BackofficeSection ActiveSection { get; set; } = BackofficeSection.Workflow;
     private bool ShowKnowledgeModal { get; set; }
     private bool ShowReportModal { get; set; }
+    private bool ShowPromptModal { get; set; }
+    private bool ShowReportsManagementModal { get; set; }
+    private bool ShowPromptsManagementModal { get; set; }
+    private bool ShowKnowledgeManagementModal { get; set; }
+    private bool ShowProfileManagementModal { get; set; }
+    private bool ShowUserManagementModal { get; set; }
     private bool ShowUserModal { get; set; }
+    private bool ShowFaqModal { get; set; }
+    private bool ReportsFiltersOpen { get; set; }
+    private bool KnowledgeFiltersOpen { get; set; }
+    private bool UsersFiltersOpen { get; set; }
+    private IReadOnlyList<FaqItemViewModel> FaqItems { get; set; } = [];
+    private int CurrentFaqPage { get; set; } = 1;
+    private int CurrentFaqPageSize { get; set; } = DefaultFaqPageSize;
+    private string? expandedFaqQuestion;
+    private string FaqSearchTerm { get; set; } = string.Empty;
+    private bool isFaqFilterOpen;
     private int? EditingKnowledgeId { get; set; }
     private string? EditingUserId { get; set; }
     private int? SelectedReportId { get; set; }
+    private int? SelectedPromptId { get; set; }
     private string? CompletionNotice;
     private string MlTrainingUrl => FrontendOptionsAccessor.Value.MlTrainingUrl;
     private List<BackofficeReportViewModel> Reports { get; set; } = [];
@@ -857,6 +1836,19 @@
         ("Rejected", "Rejected"),
         ("", "All statuses")
     ];
+    private static readonly (string Value, string Label)[] KnowledgeStatusFilterOptions =
+    [
+        ("", "All statuses"),
+        ("Published", "Published"),
+        ("Draft", "Draft")
+    ];
+    private static readonly (string Value, string Label)[] KnowledgeUpdatedFilterOptions =
+    [
+        ("", "Any time"),
+        ("7", "Last 7 days"),
+        ("30", "Last 30 days"),
+        ("90", "Last 90 days")
+    ];
     private static readonly string[] ReviewCategoryOptions = ["", "Incorrect", "Incomplete", "PromptLeak", "Repetitive", "OffTopic", "TooLong", "Other"];
     private SaveKnowledgeEntryPayload KnowledgeModalDraft { get; set; } = new()
     {
@@ -869,8 +1861,46 @@
     private bool StatusIsError { get; set; }
     private string CurrentUsernameOrFallback => string.IsNullOrWhiteSpace(currentUsername) ? "Unknown user" : currentUsername;
     private string CurrentDisplayNameOrFallback => string.IsNullOrWhiteSpace(currentDisplayName) ? CurrentUsernameOrFallback : currentDisplayName;
-    private string CurrentAvatarLabel => string.IsNullOrWhiteSpace(currentAvatar) ? BuildDefaultAvatarLabel(CurrentDisplayNameOrFallback) : currentAvatar;
+    private string CurrentAvatarLabel => BuildAvatarLabel(currentAvatar, CurrentDisplayNameOrFallback);
+    private bool HasFaqFilter => !string.IsNullOrWhiteSpace(FaqSearchTerm);
+    private List<FaqItemViewModel> FilteredFaqItems => FaqItems
+        .Where(MatchesFaqSearch)
+        .ToList();
+    private int FaqPageSize => Math.Max(1, CurrentFaqPageSize);
+    private int FaqTotalPages => Math.Max(1, (int)Math.Ceiling(FilteredFaqItems.Count / (double)FaqPageSize));
+    private int FaqSafeCurrentPage => Math.Clamp(CurrentFaqPage, 1, FaqTotalPages);
+    private int FaqPageStart => FilteredFaqItems.Count == 0 ? 0 : ((FaqSafeCurrentPage - 1) * FaqPageSize) + 1;
+    private int FaqPageEnd => FilteredFaqItems.Count == 0 ? 0 : Math.Min(FaqSafeCurrentPage * FaqPageSize, FilteredFaqItems.Count);
+    private List<FaqItemViewModel> PagedFaqItems => FilteredFaqItems
+        .Skip((FaqSafeCurrentPage - 1) * FaqPageSize)
+        .Take(FaqPageSize)
+        .ToList();
+    private IEnumerable<int> VisibleFaqPages
+    {
+        get
+        {
+            var start = Math.Max(1, FaqSafeCurrentPage - 2);
+            var end = Math.Min(FaqTotalPages, start + 4);
+            start = Math.Max(1, end - 4);
+
+            for (var page = start; page <= end; page++)
+            {
+                yield return page;
+            }
+        }
+    }
+    private string ActiveSectionTitle => ActiveSection switch
+    {
+        BackofficeSection.Workflow => "Workflow",
+        BackofficeSection.Reports => "Reported Responses",
+        BackofficeSection.Prompts => "Prompt Templates",
+        BackofficeSection.Knowledge => "Knowledge Entries",
+        BackofficeSection.Profile => "Profile Management",
+        BackofficeSection.Users => "User Management",
+        _ => "Backoffice"
+    };
     private BackofficeReportViewModel? SelectedReport => SelectedReportId.HasValue ? Reports.FirstOrDefault(report => report.Id == SelectedReportId.Value) : null;
+    private PromptTemplateViewModel? SelectedPrompt => SelectedPromptId.HasValue ? PromptTemplates.FirstOrDefault(prompt => prompt.Id == SelectedPromptId.Value) : null;
     private BackofficeUserViewModel? SelectedUser => !string.IsNullOrWhiteSpace(EditingUserId) ? Users.FirstOrDefault(user => string.Equals(user.Id, EditingUserId, StringComparison.Ordinal)) : null;
     private List<BackofficeReportViewModel> FilteredReports => Reports
         .Where(MatchesReportStatusFilter)
@@ -879,7 +1909,10 @@
         .Where(MatchesUserFilter)
         .ToList();
     private SaveBackofficeUserPayload UserModalDraft { get; set; } = CreateDefaultUserDraft();
-    private const int KnowledgePageSize = 8;
+    private int BackofficeModalPageSize { get; set; } = 5;
+    private int ReportPage { get; set; } = 1;
+    private int PromptPage { get; set; } = 1;
+    private int UserPage { get; set; } = 1;
     private List<KnowledgeEntryViewModel> KnowledgeEntriesOrdered => KnowledgeEntries
         .OrderByDescending(entry => entry.UpdatedAt == default ? entry.CreatedAt : entry.UpdatedAt)
         .ThenByDescending(entry => entry.CreatedAt)
@@ -887,13 +1920,39 @@
     private List<KnowledgeEntryViewModel> FilteredKnowledgeEntries => KnowledgeEntriesOrdered
         .Where(MatchesKnowledgeFilter)
         .ToList();
-    private int KnowledgeTotalPages => Math.Max(1, (int)Math.Ceiling(FilteredKnowledgeEntries.Count / (double)KnowledgePageSize));
-    private List<KnowledgeEntryViewModel> PagedKnowledgeEntries => FilteredKnowledgeEntries
-        .Skip((Math.Clamp(KnowledgePage, 1, KnowledgeTotalPages) - 1) * KnowledgePageSize)
-        .Take(KnowledgePageSize)
+    private int ReportTotalPages => Math.Max(1, (int)Math.Ceiling(FilteredReports.Count / (double)BackofficeModalPageSize));
+    private List<BackofficeReportViewModel> PagedReports => FilteredReports
+        .Skip((Math.Clamp(ReportPage, 1, ReportTotalPages) - 1) * BackofficeModalPageSize)
+        .Take(BackofficeModalPageSize)
         .ToList();
-    private int KnowledgePageStart => FilteredKnowledgeEntries.Count == 0 ? 0 : ((Math.Clamp(KnowledgePage, 1, KnowledgeTotalPages) - 1) * KnowledgePageSize) + 1;
-    private int KnowledgePageEnd => FilteredKnowledgeEntries.Count == 0 ? 0 : Math.Min(Math.Clamp(KnowledgePage, 1, KnowledgeTotalPages) * KnowledgePageSize, FilteredKnowledgeEntries.Count);
+    private int ReportPageStart => FilteredReports.Count == 0 ? 0 : ((Math.Clamp(ReportPage, 1, ReportTotalPages) - 1) * BackofficeModalPageSize) + 1;
+    private int ReportPageEnd => FilteredReports.Count == 0 ? 0 : Math.Min(Math.Clamp(ReportPage, 1, ReportTotalPages) * BackofficeModalPageSize, FilteredReports.Count);
+    private int PromptTotalPages => Math.Max(1, (int)Math.Ceiling(PromptTemplates.Count / (double)BackofficeModalPageSize));
+    private List<PromptTemplateViewModel> PagedPromptTemplates => PromptTemplates
+        .Skip((Math.Clamp(PromptPage, 1, PromptTotalPages) - 1) * BackofficeModalPageSize)
+        .Take(BackofficeModalPageSize)
+        .ToList();
+    private int PromptPageStart => PromptTemplates.Count == 0 ? 0 : ((Math.Clamp(PromptPage, 1, PromptTotalPages) - 1) * BackofficeModalPageSize) + 1;
+    private int PromptPageEnd => PromptTemplates.Count == 0 ? 0 : Math.Min(Math.Clamp(PromptPage, 1, PromptTotalPages) * BackofficeModalPageSize, PromptTemplates.Count);
+    private int UserTotalPages => Math.Max(1, (int)Math.Ceiling(FilteredUsers.Count / (double)BackofficeModalPageSize));
+    private List<BackofficeUserViewModel> PagedUsers => FilteredUsers
+        .Skip((Math.Clamp(UserPage, 1, UserTotalPages) - 1) * BackofficeModalPageSize)
+        .Take(BackofficeModalPageSize)
+        .ToList();
+    private int UserPageStart => FilteredUsers.Count == 0 ? 0 : ((Math.Clamp(UserPage, 1, UserTotalPages) - 1) * BackofficeModalPageSize) + 1;
+    private int UserPageEnd => FilteredUsers.Count == 0 ? 0 : Math.Min(Math.Clamp(UserPage, 1, UserTotalPages) * BackofficeModalPageSize, FilteredUsers.Count);
+    private int KnowledgeTotalPages => Math.Max(1, (int)Math.Ceiling(FilteredKnowledgeEntries.Count / (double)BackofficeModalPageSize));
+    private List<KnowledgeEntryViewModel> PagedKnowledgeEntries => FilteredKnowledgeEntries
+        .Skip((Math.Clamp(KnowledgePage, 1, KnowledgeTotalPages) - 1) * BackofficeModalPageSize)
+        .Take(BackofficeModalPageSize)
+        .ToList();
+    private int KnowledgePageStart => FilteredKnowledgeEntries.Count == 0 ? 0 : ((Math.Clamp(KnowledgePage, 1, KnowledgeTotalPages) - 1) * BackofficeModalPageSize) + 1;
+    private int KnowledgePageEnd => FilteredKnowledgeEntries.Count == 0 ? 0 : Math.Min(Math.Clamp(KnowledgePage, 1, KnowledgeTotalPages) * BackofficeModalPageSize, FilteredKnowledgeEntries.Count);
+
+    protected override void OnInitialized()
+    {
+        FaqItems = FaqContent.LoadQuickAnswers();
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -940,6 +1999,216 @@
         {
             KnowledgePage = 1;
         }
+    }
+
+    private void ToggleBackofficeNavGroup(BackofficeNavGroup group)
+    {
+        var shouldOpen = group switch
+        {
+            BackofficeNavGroup.Workspaces => !workspacesNavOpen,
+            BackofficeNavGroup.Validation => !validationNavOpen,
+            BackofficeNavGroup.Administration => !administrationNavOpen,
+            _ => false
+        };
+
+        workspacesNavOpen = shouldOpen && group == BackofficeNavGroup.Workspaces;
+        validationNavOpen = shouldOpen && group == BackofficeNavGroup.Validation;
+        administrationNavOpen = shouldOpen && group == BackofficeNavGroup.Administration;
+    }
+
+    private void ToggleBackofficeSidebar()
+    {
+        if (isBackofficeSidebarHidden)
+        {
+            isBackofficeSidebarHidden = false;
+            isBackofficeSidebarOpen = true;
+            return;
+        }
+
+        if (!isBackofficeSidebarOpen)
+        {
+            isBackofficeSidebarOpen = true;
+        }
+    }
+
+    private void HideBackofficeSidebar()
+    {
+        isBackofficeSidebarHidden = true;
+        isBackofficeSidebarOpen = false;
+    }
+
+    private async Task OpenReportsManagementModalAsync()
+    {
+        await SyncBackofficeModalPageSizeAsync("reports");
+        ReportPage = 1;
+        ShowReportsManagementModal = true;
+    }
+
+    private void CloseReportsManagementModal()
+        => ShowReportsManagementModal = false;
+
+    private async Task OpenPromptsManagementModalAsync()
+    {
+        await SyncBackofficeModalPageSizeAsync("prompts");
+        PromptPage = 1;
+        ShowPromptsManagementModal = true;
+    }
+
+    private void ClosePromptsManagementModal()
+        => ShowPromptsManagementModal = false;
+
+    private async Task OpenKnowledgeManagementModalAsync()
+    {
+        await SyncBackofficeModalPageSizeAsync("knowledge");
+        KnowledgePage = 1;
+        KnowledgeFiltersOpen = false;
+        ShowKnowledgeManagementModal = true;
+    }
+
+    private void CloseKnowledgeManagementModal()
+        => ShowKnowledgeManagementModal = false;
+
+    private string GetReportFilterSummary()
+    {
+        var selected = ReportStatusFilterOptions.FirstOrDefault(option => string.Equals(option.Value, ReportStatusFilter, StringComparison.Ordinal));
+        return string.IsNullOrWhiteSpace(selected.Label) ? "All statuses" : selected.Label;
+    }
+
+    private string GetKnowledgeFilterSummary()
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(KnowledgeSearchTerm))
+        {
+            parts.Add($"Search: {KnowledgeSearchTerm.Trim()}");
+        }
+
+        parts.Add(string.IsNullOrWhiteSpace(KnowledgeTypeFilter) ? "All types" : KnowledgeTypeFilter);
+        if (!string.IsNullOrWhiteSpace(KnowledgeStatusFilter))
+        {
+            parts.Add(KnowledgeStatusFilter);
+        }
+
+        if (!string.IsNullOrWhiteSpace(KnowledgeUpdatedFilter))
+        {
+            var selected = KnowledgeUpdatedFilterOptions.FirstOrDefault(option => string.Equals(option.Value, KnowledgeUpdatedFilter, StringComparison.Ordinal));
+            parts.Add(string.IsNullOrWhiteSpace(selected.Label) ? "Any time" : selected.Label);
+        }
+
+        return string.Join(" / ", parts);
+    }
+
+    private string GetUserFilterSummary()
+        => string.IsNullOrWhiteSpace(UserSearchTerm) ? "All users" : $"Search: {UserSearchTerm.Trim()}";
+
+    private int KnowledgeActiveFilterCount =>
+        (string.IsNullOrWhiteSpace(KnowledgeSearchTerm) ? 0 : 1)
+        + (string.IsNullOrWhiteSpace(KnowledgeTypeFilter) ? 0 : 1)
+        + (string.IsNullOrWhiteSpace(KnowledgeStatusFilter) ? 0 : 1)
+        + (string.IsNullOrWhiteSpace(KnowledgeUpdatedFilter) ? 0 : 1);
+
+    private int UserActiveFilterCount => string.IsNullOrWhiteSpace(UserSearchTerm) ? 0 : 1;
+
+    private void OnReportStatusFilterChanged(ChangeEventArgs args)
+    {
+        ReportStatusFilter = args.Value?.ToString() ?? string.Empty;
+        ReportPage = 1;
+    }
+
+    private void OnUserSearchChanged(ChangeEventArgs args)
+    {
+        UserSearchTerm = args.Value?.ToString() ?? string.Empty;
+        UserPage = 1;
+    }
+
+    private void ClearUserFilters()
+    {
+        UserSearchTerm = string.Empty;
+        UserPage = 1;
+    }
+
+    private void OnKnowledgeSearchChanged(ChangeEventArgs args)
+    {
+        KnowledgeSearchTerm = args.Value?.ToString() ?? string.Empty;
+        KnowledgePage = 1;
+    }
+
+    private void OnKnowledgeTypeFilterChanged(ChangeEventArgs args)
+    {
+        KnowledgeTypeFilter = args.Value?.ToString() ?? string.Empty;
+        KnowledgePage = 1;
+    }
+
+    private void OnKnowledgeStatusFilterChanged(ChangeEventArgs args)
+    {
+        KnowledgeStatusFilter = args.Value?.ToString() ?? string.Empty;
+        KnowledgePage = 1;
+    }
+
+    private void OnKnowledgeUpdatedFilterChanged(ChangeEventArgs args)
+    {
+        KnowledgeUpdatedFilter = args.Value?.ToString() ?? string.Empty;
+        KnowledgePage = 1;
+    }
+
+    private void ClearKnowledgeFilters()
+    {
+        KnowledgeSearchTerm = string.Empty;
+        KnowledgeTypeFilter = string.Empty;
+        KnowledgeStatusFilter = string.Empty;
+        KnowledgeUpdatedFilter = string.Empty;
+        KnowledgePage = 1;
+    }
+
+    private async Task SyncBackofficeModalPageSizeAsync(string modalType)
+    {
+        try
+        {
+            BackofficeModalPageSize = Math.Clamp(await JS.InvokeAsync<int>("aiChatUi.getBackofficeModalPageSize", modalType), 5, 10);
+        }
+        catch (JSException)
+        {
+            BackofficeModalPageSize = 5;
+        }
+    }
+
+    private void OpenProfileManagementModal()
+    {
+        SyncProfileDrafts();
+        ShowProfileManagementModal = true;
+    }
+
+    private void CloseProfileManagementModal()
+    {
+        ShowProfileManagementModal = false;
+        SyncProfileDrafts();
+    }
+
+    private void OpenUserManagementModal()
+    {
+        UsersFiltersOpen = false;
+        UserPage = 1;
+        ShowUserManagementModal = true;
+    }
+
+    private void CloseUserManagementModal()
+    {
+        ShowUserManagementModal = false;
+        CloseUserModal();
+    }
+
+    private async Task LogoutAsync()
+    {
+        token = null;
+        currentUsername = null;
+        currentDisplayName = null;
+        currentAvatar = null;
+
+        await BrowserStorage.RemoveAsync(TokenStorageKey);
+        await BrowserStorage.RemoveAsync(UserStorageKey);
+        await BrowserStorage.RemoveAsync(DisplayNameStorageKey);
+        await BrowserStorage.RemoveAsync(AvatarLabelStorageKey);
+
+        Navigation.NavigateTo("/chat");
     }
 
     private async Task SaveChatProfileAsync()
@@ -1005,6 +2274,84 @@
         {
             KnowledgePage++;
         }
+    }
+
+    private async Task OpenFaqModalAsync()
+    {
+        workspacesNavOpen = true;
+        validationNavOpen = false;
+        administrationNavOpen = false;
+        CurrentFaqPage = 1;
+        expandedFaqQuestion = null;
+        await UpdateFaqPageSizeAsync();
+        ShowFaqModal = true;
+    }
+
+    private void CloseFaqModal()
+    {
+        ShowFaqModal = false;
+        isFaqFilterOpen = false;
+        expandedFaqQuestion = null;
+    }
+
+    private void PreviousFaqPage()
+    {
+        CurrentFaqPage = Math.Max(1, FaqSafeCurrentPage - 1);
+        expandedFaqQuestion = null;
+    }
+
+    private void NextFaqPage()
+    {
+        CurrentFaqPage = Math.Min(FaqTotalPages, FaqSafeCurrentPage + 1);
+        expandedFaqQuestion = null;
+    }
+
+    private void GoToFaqPage(int page)
+    {
+        CurrentFaqPage = Math.Clamp(page, 1, FaqTotalPages);
+        expandedFaqQuestion = null;
+    }
+
+    private void ToggleFaqFilter()
+        => isFaqFilterOpen = !isFaqFilterOpen;
+
+    private void OnFaqSearchChanged(ChangeEventArgs args)
+    {
+        FaqSearchTerm = args.Value?.ToString() ?? string.Empty;
+        CurrentFaqPage = 1;
+        expandedFaqQuestion = null;
+    }
+
+    private void ClearFaqFilter()
+    {
+        FaqSearchTerm = string.Empty;
+        CurrentFaqPage = 1;
+        expandedFaqQuestion = null;
+    }
+
+    private bool MatchesFaqSearch(FaqItemViewModel item)
+    {
+        if (string.IsNullOrWhiteSpace(FaqSearchTerm))
+        {
+            return true;
+        }
+
+        return item.Question.Contains(FaqSearchTerm, StringComparison.OrdinalIgnoreCase)
+               || item.Answer.Contains(FaqSearchTerm, StringComparison.OrdinalIgnoreCase)
+               || item.Category.Contains(FaqSearchTerm, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool IsFaqItemExpanded(FaqItemViewModel item)
+        => string.Equals(expandedFaqQuestion, item.Question, StringComparison.Ordinal);
+
+    private void ToggleFaqItem(FaqItemViewModel item)
+        => expandedFaqQuestion = IsFaqItemExpanded(item) ? null : item.Question;
+
+    private async Task UpdateFaqPageSizeAsync()
+    {
+        var pageSize = await JS.InvokeAsync<int>("aiChatUi.getFaqModalPageSize");
+        CurrentFaqPageSize = Math.Clamp(pageSize, 2, DefaultFaqPageSize);
+        CurrentFaqPage = Math.Clamp(CurrentFaqPage, 1, FaqTotalPages);
     }
 
     private Task LoadReportsAsync() => RunBusyAsync(async cancellationToken =>
@@ -1129,6 +2476,13 @@
         await ShowCompletionNotificationAsync(successMessage);
     });
 
+    private void OpenEditPromptModal(PromptTemplateViewModel template)
+    {
+        SelectedPromptId = template.Id;
+        GetPromptDraft(template);
+        ShowPromptModal = true;
+    }
+
     private void OpenCreateKnowledgeModal()
     {
         EditingKnowledgeId = null;
@@ -1200,6 +2554,12 @@
         SelectedReportId = null;
     }
 
+    private void ClosePromptModal()
+    {
+        ShowPromptModal = false;
+        SelectedPromptId = null;
+    }
+
     private void CloseUserModal()
     {
         ShowUserModal = false;
@@ -1236,6 +2596,17 @@
         }
 
         return SaveReviewAsync(SelectedReport, GetReviewDraft(SelectedReport));
+    }
+
+    private async Task SaveSelectedPromptTemplateAsync()
+    {
+        if (SelectedPrompt is null)
+        {
+            return;
+        }
+
+        await SavePromptTemplateAsync(SelectedPrompt, GetPromptDraft(SelectedPrompt));
+        ClosePromptModal();
     }
 
     private Task SaveUserModalAsync() => RunBusyAsync(async cancellationToken =>
@@ -1289,6 +2660,54 @@
         if (SelectedReportId.HasValue && Reports.All(report => report.Id != SelectedReportId.Value))
         {
             CloseReportModal();
+        }
+    }
+
+    private void PreviousReportPage()
+    {
+        if (ReportPage > 1)
+        {
+            ReportPage--;
+        }
+    }
+
+    private void NextReportPage()
+    {
+        if (ReportPage < ReportTotalPages)
+        {
+            ReportPage++;
+        }
+    }
+
+    private void PreviousPromptPage()
+    {
+        if (PromptPage > 1)
+        {
+            PromptPage--;
+        }
+    }
+
+    private void NextPromptPage()
+    {
+        if (PromptPage < PromptTotalPages)
+        {
+            PromptPage++;
+        }
+    }
+
+    private void PreviousUserPage()
+    {
+        if (UserPage > 1)
+        {
+            UserPage--;
+        }
+    }
+
+    private void NextUserPage()
+    {
+        if (UserPage < UserTotalPages)
+        {
+            UserPage++;
         }
     }
 
@@ -1483,6 +2902,27 @@
             return false;
         }
 
+        if (!string.IsNullOrWhiteSpace(KnowledgeStatusFilter))
+        {
+            var isPublishedFilter = string.Equals(KnowledgeStatusFilter, "Published", StringComparison.OrdinalIgnoreCase);
+            if (entry.IsPublished != isPublishedFilter)
+            {
+                return false;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(KnowledgeUpdatedFilter)
+            && int.TryParse(KnowledgeUpdatedFilter, out var updatedDays))
+        {
+            var created = entry.CreatedAt == default ? entry.UpdatedAt : entry.CreatedAt;
+            var updated = entry.UpdatedAt == default ? created : entry.UpdatedAt;
+            var effective = updated >= created ? updated : created;
+            if (effective < DateTime.UtcNow.AddDays(-updatedDays))
+            {
+                return false;
+            }
+        }
+
         if (string.IsNullOrWhiteSpace(KnowledgeSearchTerm))
         {
             return true;
@@ -1608,6 +3048,13 @@
         Users
     }
 
+    private enum BackofficeNavGroup
+    {
+        Workspaces,
+        Validation,
+        Administration
+    }
+
     private static SaveBackofficeUserPayload CreateDefaultUserDraft()
         => new()
         {
@@ -1630,6 +3077,37 @@
             .ToArray();
 
         return parts.Length == 0 ? "You" : new string(parts);
+    }
+
+    private static string BuildAvatarLabel(string? savedAvatar, string displayName)
+    {
+        if (!string.IsNullOrWhiteSpace(savedAvatar))
+        {
+            var normalizedSavedAvatar = NormalizeAvatarLabel(savedAvatar, fallback: string.Empty);
+            if (normalizedSavedAvatar.Length >= 2)
+            {
+                return normalizedSavedAvatar;
+            }
+
+            if (string.Equals(normalizedSavedAvatar, "A", StringComparison.Ordinal))
+            {
+                return "GB";
+            }
+        }
+
+        return BuildDefaultAvatarLabel(displayName);
+    }
+
+    private static string NormalizeAvatarLabel(string value, string fallback)
+    {
+        var letters = value
+            .Trim()
+            .Where(char.IsLetterOrDigit)
+            .Take(2)
+            .Select(char.ToUpperInvariant)
+            .ToArray();
+
+        return letters.Length == 0 ? fallback : new string(letters);
     }
 
     private static SaveBackofficeUserPayload NormalizeUserDraft(SaveBackofficeUserPayload draft)

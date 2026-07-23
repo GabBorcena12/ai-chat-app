@@ -54,30 +54,12 @@ else
     <div class="training-shell">
         <aside class="training-sidebar">
             <div class="brand-block">
-                <span>ML</span>
+                <img class="training-logo app-logo" src="/brand-logo.svg" alt="AIChatApp logo" />
                 <div>
                     <small>AIChatApp</small>
                     <strong>Training Lab</strong>
                 </div>
             </div>
-
-            <section class="training-sidebar-group @(accountSectionOpen ? null : "collapsed")">
-                <button type="button"
-                        class="training-sidebar-toggle"
-                        aria-expanded="@accountSectionOpen"
-                        @onclick="() => accountSectionOpen = !accountSectionOpen">
-                    <span>Account</span>
-                    <strong>@(accountSectionOpen ? "Hide" : "Show")</strong>
-                </button>
-                @if (accountSectionOpen)
-                {
-                    <div class="training-user-card">
-                        <small>Signed in as</small>
-                        <strong>@currentUsername</strong>
-                        <button class="secondary-button" @onclick="SignOutAsync">Sign out</button>
-                    </div>
-                }
-            </section>
 
             <section class="training-sidebar-group @(workspacesSectionOpen ? null : "collapsed")">
                 <button type="button"
@@ -89,20 +71,20 @@ else
                 </button>
                 @if (workspacesSectionOpen)
                 {
-                    <nav class="training-workspace-nav vertical" aria-label="Workspace navigation">
-                        <a class="app-chat" href="/chat">
+                    <nav class="training-workspace-nav workspace-nav vertical" aria-label="Workspace navigation">
+                        <a class="workspace-nav-link app-chat" href="/chat">
                             <span>Chat</span>
                             <small>Main assistant</small>
                         </a>
-                        <a class="app-backoffice" href="/backoffice">
+                        <a class="workspace-nav-link app-backoffice" href="/backoffice">
                             <span>Backoffice</span>
                             <small>Validate answers</small>
                         </a>
-                        <a class="app-ml active" href="/ml-training">
+                        <a class="workspace-nav-link app-ml active" href="/ml-training">
                             <span>ML Training</span>
                             <small>Reviewer model</small>
                         </a>
-                        <a class="app-faq" href="/faqs">
+                        <a class="workspace-nav-link app-faq" href="/faqs">
                             <span>FAQs</span>
                             <small>User guide</small>
                         </a>
@@ -140,6 +122,10 @@ else
                     </nav>
                 }
             </section>
+
+            <button type="button" class="secondary-button training-logout-button" @onclick="SignOutAsync">
+                Logout
+            </button>
         </aside>
 
         <main class="training-main">
@@ -303,7 +289,6 @@ else
     private int? latestDatasetId;
     private bool isTraining;
     private bool authInitialized;
-    private bool accountSectionOpen;
     private bool workspacesSectionOpen;
     private bool trainingFlowSectionOpen;
     private string? authToken;

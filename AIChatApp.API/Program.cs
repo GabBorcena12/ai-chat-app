@@ -18,7 +18,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using Microsoft.OpenApi.Models;
+using Microsoft.OpenApi;
 using System.Text;
 using AIChatApp.Core.Agents;
 
@@ -207,18 +207,11 @@ builder.Services.AddSwaggerGen(c =>
         Description = "Enter JWT token as: Bearer {your token}"
     });
 
-    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    c.AddSecurityRequirement(document => new OpenApiSecurityRequirement
     {
         {
-            new OpenApiSecurityScheme
-            {
-                Reference = new OpenApiReference
-                {
-                    Type = ReferenceType.SecurityScheme,
-                    Id = "Bearer"
-                }
-            },
-            new string[] { }
+            new OpenApiSecuritySchemeReference("Bearer", document, null),
+            new List<string>()
         }
     });
 });
@@ -268,6 +261,7 @@ using (var scope = app.Services.CreateScope())
     {
         var db = services.GetRequiredService<AppDbContext>();
         db.Database.Migrate();
+        await EnsureCoreDataFilesTableAsync(db);
         await EnsureRolesAndBackofficeSeedAsync(services);
         Console.WriteLine("API: EF Core Migrations applied for AIChatAppDb.");
     }
@@ -354,4 +348,51 @@ static async Task EnsureRolesAndBackofficeSeedAsync(IServiceProvider services)
 
     await coreDataImportService.ImportCoreDataJsonAsync();
     await assistantContentService.SeedProfileContentAsync("Documentation");
+}
+
+static async Task EnsureCoreDataFilesTableAsync(AppDbContext db)
+{
+    await db.Database.ExecuteSqlRawAsync("""
+        IF OBJECT_ID(N'[dbo].[CoreDataFiles]', N'U') IS NULL
+        BEGIN
+            CREATE TABLE [dbo].[CoreDataFiles] (
+                [Id] int NOT NULL IDENTITY,
+                [RelativePath] nvarchar(450) NOT NULL,
+                [ContentKey] nvarchar(450) NOT NULL,
+                [Area] nvarchar(max) NOT NULL,
+                [ProfileId] nvarchar(max) NULL,
+                [ContentType] nvarchar(max) NOT NULL,
+                [FileName] nvarchar(max) NOT NULL,
+                [RawJson] nvarchar(max) NOT NULL,
+                [Content] nvarchar(max) NULL,
+                [StructuredJson] nvarchar(max) NULL,
+                [IsPublished] bit NOT NULL,
+                [CreatedAt] datetime2 NOT NULL,
+                [UpdatedAt] datetime2 NOT NULL,
+                CONSTRAINT [PK_CoreDataFiles] PRIMARY KEY ([Id])
+            );
+        END;
+
+        IF NOT EXISTS (
+            SELECT 1
+            FROM sys.indexes
+            WHERE [name] = N'IX_CoreDataFiles_ContentKey'
+              AND [object_id] = OBJECT_ID(N'[dbo].[CoreDataFiles]')
+        )
+        BEGIN
+            CREATE INDEX [IX_CoreDataFiles_ContentKey]
+            ON [dbo].[CoreDataFiles] ([ContentKey]);
+        END;
+
+        IF NOT EXISTS (
+            SELECT 1
+            FROM sys.indexes
+            WHERE [name] = N'IX_CoreDataFiles_RelativePath'
+              AND [object_id] = OBJECT_ID(N'[dbo].[CoreDataFiles]')
+        )
+        BEGIN
+            CREATE UNIQUE INDEX [IX_CoreDataFiles_RelativePath]
+            ON [dbo].[CoreDataFiles] ([RelativePath]);
+        END;
+        """);
 }
