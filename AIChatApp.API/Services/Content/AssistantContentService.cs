@@ -96,10 +96,23 @@ namespace AIChatApp.API.Services.Content
                 return _paths.LoadAssistantQuickAnswers(profileId);
             }
 
-            return published.Select(x => new JsonQuickAnswerEntry
+            return published.Select(x =>
             {
-                Aliases = DeserializeList(x.AliasesJson),
-                Answer = x.Content ?? string.Empty
+                var aliases = DeserializeList(x.AliasesJson);
+                if (!string.IsNullOrWhiteSpace(x.Title))
+                {
+                    aliases.Add(x.Title.Trim());
+                }
+
+                return new JsonQuickAnswerEntry
+                {
+                    Title = x.Title,
+                    Aliases = aliases.Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
+                    Keywords = DeserializeList(x.KeywordsJson),
+                    SourceName = x.SourceName,
+                    Summary = x.Summary ?? string.Empty,
+                    Answer = x.Content ?? string.Empty
+                };
             }).ToList();
         }
 

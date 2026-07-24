@@ -156,6 +156,12 @@ public class SaveKnowledgeEntryPayload
     public int SortOrder { get; set; }
 }
 
+public class SaveKnowledgeEntryResult
+{
+    public int Id { get; set; }
+    public string Message { get; set; } = string.Empty;
+}
+
 public class BackofficeUserViewModel
 {
     public string Id { get; set; } = string.Empty;

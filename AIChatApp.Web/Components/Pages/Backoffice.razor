@@ -1,11 +1,12 @@
 @page "/backoffice"
 @rendermode InteractiveServer
 @using AIChatApp.Web.Config
+@using System.Globalization
+@using System.Text
 @using System.Text.Json
 @inject AIChatApp.Web.Services.AIChatGatewayClient GatewayClient
 @inject AIChatApp.Web.Services.BrowserStorageService BrowserStorage
 @inject AIChatApp.Web.Services.FaqContentService FaqContent
-@inject TrainingWorkspaceService TrainingWorkspace
 @inject IJSRuntime JS
 @inject NavigationManager Navigation
 
@@ -19,17 +20,16 @@
 
     @if (!initialized)
     {
-        <section class="backoffice-loading-shell" role="status" aria-live="polite">
+        <section class="backoffice-loading-shell" role="status" aria-label="Loading backoffice" aria-live="polite">
             <div class="backoffice-loading-card">
-                <div class="brand-symbol" aria-hidden="true">
-                    <img src="chat-assistant-logo.png" alt="" />
+                <div class="backoffice-premium-loader" aria-hidden="true">
+                    <span class="loader-orbit loader-orbit-large"></span>
+                    <span class="loader-orbit loader-orbit-small"></span>
+                    <span class="loader-glow"></span>
+                    <div class="brand-symbol loader-brand-symbol">
+                        <img src="chat-assistant-logo.png" alt="" />
+                    </div>
                 </div>
-                <div>
-                    <div class="eyebrow">Admin Workspace</div>
-                    <h1>Loading Backoffice</h1>
-                    <p>Preparing validation tools, reports, prompts, and knowledge controls.</p>
-                </div>
-                <span class="backoffice-loading-spinner" aria-hidden="true"></span>
             </div>
         </section>
     }
@@ -155,19 +155,19 @@
                                 class="backoffice-nav-button @(ShowTrainingDataModal ? "active" : null)"
                                 @onclick="OpenTrainingDataModal">
                             <span>Training Data</span>
-                            <small>Review examples and imports</small>
+                            <small>Approved report candidates</small>
                         </button>
                         <button type="button"
                                 class="backoffice-nav-button @(ShowTrainingJobsModal ? "active" : null)"
                                 @onclick="OpenTrainingJobsModal">
                             <span>Training Jobs</span>
-                            <small>Build datasets and run training</small>
+                            <small>Build and train reviewer</small>
                         </button>
                         <button type="button"
                                 class="backoffice-nav-button @(ShowModelRegistryModal ? "active" : null)"
                                 @onclick="OpenModelRegistryModal">
                             <span>Model Registry</span>
-                            <small>Publish reviewer models</small>
+                            <small>Published reviewer status</small>
                         </button>
                     }
                 </section>
@@ -740,6 +740,11 @@
                         </div>
 
                         <div class="backoffice-filters">
+                            <input class="text-input"
+                                   title="Search by report ID, linked knowledge ID, prompt, answer, user, status, or category."
+                                   placeholder="Search report ID, KB ID, prompt, or answer..."
+                                   @bind="ReportSearchTerm"
+                                   @bind:event="oninput" />
                             <select class="text-input" @bind="ReportStatusFilter" title="Limit the list to one report status.">
                                 @foreach (var option in ReportStatusFilterOptions)
                                 {
@@ -763,7 +768,7 @@
                                 <article class="backoffice-card backoffice-list-card">
                                     <div class="backoffice-card-header">
                                         <strong>@GetReportTitle(report)</strong>
-                                        <span>#@report.Id</span>
+                                        <span class="tracking-id">Report #@report.Id</span>
                                         <span>@report.Username</span>
                                         <span>@GetReportStatusLabel(report)</span>
                                         @if (!string.IsNullOrWhiteSpace(report.ReviewCategory))
@@ -774,7 +779,7 @@
                                     </div>
                                     <p class="backoffice-list-summary">@GetReportPreview(report)</p>
                                     <div class="backoffice-inline-options">
-                                        <span>@(report.PromotedKnowledgeEntryId.HasValue ? $"Promoted to knowledge #{report.PromotedKnowledgeEntryId.Value}" : "Not promoted")</span>
+                                        <span>@(report.PromotedKnowledgeEntryId.HasValue ? $"Linked to KB #{report.PromotedKnowledgeEntryId.Value}" : "Not linked to knowledge")</span>
                                         <span>@(IsTrainingCandidate(report) ? "Training candidate" : "Not training-ready")</span>
                                         @if (!string.IsNullOrWhiteSpace(report.ReviewedBy))
                                         {
@@ -865,6 +870,7 @@
                                 <article class="backoffice-card backoffice-list-card">
                                     <div class="backoffice-card-header">
                                         <strong>@entry.Title</strong>
+                                        <span class="tracking-id">KB #@entry.Id</span>
                                         <span>@entry.EntryType</span>
                                         <span>@entry.SourceName</span>
                                         <span>@FormatKnowledgeTimestamp(entry)</span>
@@ -1079,7 +1085,13 @@
                                     class="listing-filter-toggle"
                                     aria-expanded="@ReportsFiltersOpen"
                                     @onclick="() => ReportsFiltersOpen = !ReportsFiltersOpen">
-                                <span>Filters</span>
+                                <span>
+                                    Filters
+                                    @if (ReportActiveFilterCount > 0)
+                                    {
+                                        <strong class="filter-count-pill">@ReportActiveFilterCount</strong>
+                                    }
+                                </span>
                                 <small>@GetReportFilterSummary()</small>
                                 <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
                                     <path d="m6 9 6 6 6-6" />
@@ -1088,6 +1100,11 @@
                             @if (ReportsFiltersOpen)
                             {
                                 <div class="listing-modal-tools">
+                                    <input class="text-input"
+                                           title="Search by report ID, linked knowledge ID, prompt, answer, user, status, or category."
+                                           placeholder="Search Report #, KB #, prompt..."
+                                           value="@ReportSearchTerm"
+                                           @oninput="OnReportSearchChanged" />
                                     <select class="text-input"
                                             value="@ReportStatusFilter"
                                             @onchange="OnReportStatusFilterChanged"
@@ -1116,7 +1133,9 @@
                                             aria-label="Review @GetReportTitle(report)"
                                             @onclick="() => OpenReviewModal(report)">
                                         <div>
+                                            <small class="tracking-id">Report #@report.Id</small>
                                             <strong>@GetReportTitle(report)</strong>
+                                            <small>@GetReportStatusLabel(report)@(report.PromotedKnowledgeEntryId.HasValue ? $" · Linked to KB #{report.PromotedKnowledgeEntryId.Value}" : string.Empty)</small>
                                         </div>
                                     </button>
                                 }
@@ -1166,20 +1185,37 @@
                     </div>
 
                     <div class="listing-modal-body">
-                        <p class="backoffice-results-meta">Showing @PromptPageStart-@PromptPageEnd of @PromptTemplates.Count templates</p>
-                        <div class="compact-listing-list">
-                            @foreach (var template in PagedPromptTemplates)
-                            {
-                                <button type="button"
-                                        class="compact-listing-card prompt-template-card compact-listing-row-button"
-                                        aria-label="Edit @template.TemplateName"
-                                        @onclick="() => OpenEditPromptModal(template)">
-                                    <div>
-                                        <strong>@template.TemplateName</strong>
-                                    </div>
-                                </button>
-                            }
+                        <div class="listing-modal-tools">
+                            <input class="text-input"
+                                   title="Search by prompt ID, template name, profile, or content."
+                                   placeholder="Search Prompt #, template, or content..."
+                                   value="@PromptSearchTerm"
+                                   @oninput="OnPromptSearchChanged" />
                         </div>
+
+                        @if (FilteredPromptTemplates.Count == 0)
+                        {
+                            <p class="backoffice-empty">No prompt templates found for this search.</p>
+                        }
+                        else
+                        {
+                            <p class="backoffice-results-meta">Showing @PromptPageStart-@PromptPageEnd of @FilteredPromptTemplates.Count templates</p>
+                            <div class="compact-listing-list">
+                                @foreach (var template in PagedPromptTemplates)
+                                {
+                                    <button type="button"
+                                            class="compact-listing-card prompt-template-card compact-listing-row-button"
+                                            aria-label="Edit @template.TemplateName"
+                                            @onclick="() => OpenEditPromptModal(template)">
+                                        <div>
+                                            <small class="tracking-id">Prompt #@template.Id</small>
+                                            <strong>@template.TemplateName</strong>
+                                            <small>@template.ProfileId · @(template.IsPublished ? "Published" : "Draft")</small>
+                                        </div>
+                                    </button>
+                                }
+                            </div>
+                        }
 
                         @if (PromptTotalPages > 1)
                         {
@@ -1316,6 +1352,21 @@
                             }
                         </section>
 
+                        <section class="knowledge-matching-guide" aria-label="How quick answer matching works">
+                            <div>
+                                <div class="eyebrow">Answer Matching</div>
+                                <h3>Quick answer matching order</h3>
+                            </div>
+                            <ol>
+                                <li>Exact question</li>
+                                <li>Close wording</li>
+                                <li>Tags or source</li>
+                                <li>Similar meaning</li>
+                                <li>Normal chat</li>
+                            </ol>
+                            <p>The assistant checks safer matches first. If no match is confident, it lets the normal chat model answer.</p>
+                        </section>
+
                         @if (FilteredKnowledgeEntries.Count == 0)
                         {
                             <p class="backoffice-empty">No knowledge entries found yet.</p>
@@ -1331,7 +1382,9 @@
                                             aria-label="Edit @entry.Title"
                                             @onclick="() => OpenEditKnowledgeModal(entry)">
                                         <div>
+                                            <small class="tracking-id">KB #@entry.Id</small>
                                             <strong>@entry.Title</strong>
+                                            <small>@entry.EntryType · @entry.SourceName · @(entry.IsPublished ? "Published" : "Draft")</small>
                                         </div>
                                     </button>
                                 }
@@ -1487,10 +1540,10 @@
                         <div>
                             <div class="eyebrow">Machine Learning</div>
                             <h2>Training Data</h2>
-                            <p>Import reviewed notes, add validated examples, and approve training material for the reviewer.</p>
+                            <p>Approved report corrections that will be included when you build the reviewer dataset.</p>
                         </div>
                         <div class="modal-header-actions">
-                            <button type="button" class="ghost-button modal-refresh-button icon-label-button" @onclick="RefreshTrainingWorkspaceState" disabled="@isBusy">
+                            <button type="button" class="ghost-button modal-refresh-button icon-label-button" @onclick="RefreshTrainingWorkspaceStateAsync" disabled="@isBusy">
                                 <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
                                     <path d="M20 11a8.1 8.1 0 0 0-15.5-2" />
                                     <path d="M4 4v5h5" />
@@ -1509,87 +1562,62 @@
                     </div>
 
                     <div class="ml-training-modal-body">
-                        <section class="ml-training-form-grid">
-                            <article class="backoffice-card ml-training-upload-card">
-                                <div>
-                                    <h3>Import text notes</h3>
-                                    <p>Upload `.txt` notes for draft reviewer examples. Validated Backoffice reports should remain the main training source.</p>
-                                </div>
-                                <div class="ml-training-upload-zone">
-                                    <div class="ml-training-upload-icon" aria-hidden="true">
-                                        <svg class="action-icon" viewBox="0 0 24 24">
-                                            <path d="M12 16V4" />
-                                            <path d="m7 9 5-5 5 5" />
-                                            <path d="M20 16.5v2A1.5 1.5 0 0 1 18.5 20h-13A1.5 1.5 0 0 1 4 18.5v-2" />
-                                        </svg>
-                                    </div>
-                                    <div>
-                                        <strong>Choose a training notes file</strong>
-                                        <span>Plain text only. Imported notes become draft examples.</span>
-                                    </div>
-                                    <InputFile class="ml-training-file-input" OnChange="ImportTrainingTextFileAsync" accept=".txt,text/plain" />
-                                </div>
-                            </article>
-
-                            <article class="backoffice-card ml-training-form-card">
-                                <div>
-                                    <h3>Add reviewed example</h3>
-                                    <p>Create one manually reviewed training example.</p>
-                                </div>
-                                <div class="backoffice-grid">
-                                    <label>
-                                        <span>Reviewed question</span>
-                                        <input class="text-input" @bind="manualTrainingQuestion" placeholder="Question reviewed by admin" />
-                                    </label>
-                                    <label>
-                                        <span>Intent</span>
-                                        <input class="text-input" @bind="manualTrainingIntent" placeholder="DocumentationQuestion" />
-                                    </label>
-                                    <label>
-                                        <span>Issue type</span>
-                                        <input class="text-input" @bind="manualTrainingIssueType" placeholder="Incomplete" />
-                                    </label>
-                                    <label>
-                                        <span>Bad response</span>
-                                        <textarea class="text-input" @bind="manualTrainingBadResponse" placeholder="Original weak response"></textarea>
-                                    </label>
-                                    <label class="span-full">
-                                        <span>Corrected answer</span>
-                                        <textarea class="text-input" @bind="manualTrainingExpectedAnswer" placeholder="Answer that should have been returned"></textarea>
-                                    </label>
-                                </div>
-                                <div class="backoffice-modal-actions compact-actions">
-                                    <button type="button" class="primary-action slim icon-label-button" @onclick="AddReviewedTrainingExample">
-                                        <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                            <path d="M12 5v14" />
-                                            <path d="M5 12h14" />
-                                        </svg>
-                                        Add example
-                                    </button>
-                                </div>
-                            </article>
+                        <section class="backoffice-card ml-training-purpose-note" aria-label="Training data purpose">
+                            <span class="note-icon" aria-hidden="true">
+                                <svg class="action-icon" viewBox="0 0 24 24">
+                                    <circle cx="12" cy="12" r="10" />
+                                    <path d="M12 8h.01" />
+                                    <path d="M11 12h1v4h1" />
+                                </svg>
+                            </span>
+                            <div>
+                                <h3>What this training data does</h3>
+                                <p>
+                                    These approved reports train the ML.NET reviewer to recognize answer quality, such as Incorrect, Incomplete, TooLong, or Good.
+                                    They do not generate the final chat answer by themselves. To make a corrected answer reusable by chat, also promote it to published knowledge.
+                                </p>
+                            </div>
                         </section>
 
                         <section class="backoffice-card ml-training-list-card">
-                            <div class="training-candidates-header">
+                            <div class="training-candidates-header ml-training-candidates-header">
                                 <div>
-                                    <h3>Training examples</h3>
-                                    <p>@TrainingWorkspace.Examples.Count example@(TrainingWorkspace.Examples.Count == 1 ? string.Empty : "s") available, @TrainingApprovedCount approved.</p>
+                                    <h3>Approved reported responses</h3>
+                                    <p>@TrainingCandidates.Count candidate@(TrainingCandidates.Count == 1 ? string.Empty : "s") ready for the next reviewer dataset.</p>
+                                    @if (TrainingCandidates.Count > 0)
+                                    {
+                                        <small>Showing @TrainingCandidatePageStart-@TrainingCandidatePageEnd of @TrainingCandidates.Count</small>
+                                    }
                                 </div>
-                                <button type="button" class="ghost-button ml-training-theme-button" @onclick="ApproveAllTrainingDrafts">Approve all drafts</button>
+                                <button type="button" class="ghost-button ml-training-theme-button" @onclick="RefreshTrainingCandidatesAsync" disabled="@isBusy">Refresh candidates</button>
                             </div>
                             <div class="ml-training-list">
-                                @foreach (var example in TrainingWorkspace.Examples.Take(8))
+                                @if (TrainingCandidates.Count == 0)
                                 {
-                                    <button type="button" class="compact-listing-card compact-listing-row-button ml-training-row" @onclick="() => ApproveTrainingExample(example.Id)">
-                                        <div>
-                                            <strong>@example.Question</strong>
-                                            <small>@example.SourceType / @example.Intent / @example.IssueType</small>
-                                        </div>
-                                        <span class="candidate-status @(example.ApprovedForTraining ? "progress" : "pending")">@example.ReviewStatus</span>
-                                    </button>
+                                    <p class="backoffice-empty">No approved reported responses are training-ready yet. Approve a report with a category and validated response first.</p>
+                                }
+                                else
+                                {
+                                    @foreach (var candidate in PagedTrainingCandidates)
+                                    {
+                                        <article class="compact-listing-card ml-training-row">
+                                            <div>
+                                                <strong>@candidate.Question</strong>
+                                                <small>Report #@candidate.ReportId / @candidate.Intent / @candidate.IssueType</small>
+                                            </div>
+                                            <span class="candidate-status progress">Ready</span>
+                                        </article>
+                                    }
                                 }
                             </div>
+                            @if (TrainingCandidateTotalPages > 1)
+                            {
+                                <div class="listing-modal-pagination ml-training-pagination">
+                                    <button type="button" class="ghost-button" disabled="@(TrainingCandidatePage <= 1)" @onclick="PreviousTrainingCandidatePage">Previous</button>
+                                    <span>Page @TrainingCandidatePage of @TrainingCandidateTotalPages</span>
+                                    <button type="button" class="ghost-button" disabled="@(TrainingCandidatePage >= TrainingCandidateTotalPages)" @onclick="NextTrainingCandidatePage">Next</button>
+                                </div>
+                            }
                         </section>
                     </div>
                 </div>
@@ -1604,7 +1632,7 @@
                         <div>
                             <div class="eyebrow">Machine Learning</div>
                             <h2>Training Jobs</h2>
-                            <p>Build reviewer datasets from approved examples and run ML.NET training jobs.</p>
+                            <p>Build a reviewer dataset from approved reports, then train the ML.NET reviewer model.</p>
                         </div>
                         <button type="button" class="ghost-button modal-close-icon" aria-label="Close training jobs" @onclick="CloseTrainingJobsModal">
                             <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -1618,35 +1646,37 @@
                         <section class="backoffice-card ml-training-job-controls">
                             <div>
                                 <h3>Dataset and training trigger</h3>
-                                <p>Build a dataset from approved examples, then train a reviewer model from the latest dataset.</p>
+                                <p>@ReviewerState.ApprovedExamples approved example@(ReviewerState.ApprovedExamples == 1 ? string.Empty : "s") available in the API training workspace.</p>
                             </div>
                             <div class="ml-training-job-actions">
-                                <input class="text-input" @bind="trainingDatasetName" placeholder="Dataset name" />
-                                <button type="button" class="ghost-button ml-training-theme-button" @onclick="BuildTrainingDataset">Build dataset</button>
-                                <button type="button" class="primary-action slim ml-training-theme-button" @onclick="QueueTrainingJobAsync" disabled="@(latestTrainingDatasetId is null || isTrainingJobRunning)">
-                                    @(isTrainingJobRunning ? "Training..." : "Train model")
-                                </button>
+                                <button type="button" class="ghost-button ml-training-theme-button" @onclick="BuildReviewerDatasetAsync" disabled="@isBusy">Build dataset</button>
+                                <button type="button" class="primary-action slim ml-training-theme-button" @onclick="TrainReviewerAsync" disabled="@isBusy">Train model</button>
                             </div>
                         </section>
 
                         <section class="backoffice-card ml-training-list-card">
                             <div class="training-candidates-header">
                                 <div>
-                                    <h3>Training job history</h3>
-                                    <p>@TrainingWorkspace.Jobs.Count job@(TrainingWorkspace.Jobs.Count == 1 ? string.Empty : "s") queued.</p>
+                                    <h3>Reviewer workflow state</h3>
+                                    <p>Latest API-side counts after building and training.</p>
                                 </div>
                             </div>
-                            <div class="ml-training-list">
-                                @foreach (var job in TrainingWorkspace.Jobs.Take(8))
-                                {
-                                    <article class="compact-listing-card ml-training-job-row">
-                                        <div>
-                                            <strong>Training Job #@job.Id</strong>
-                                            <small>Dataset #@job.DatasetId / @job.Status / @job.QueuedAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</small>
-                                        </div>
-                                        <span>Accuracy: @(job.Accuracy?.ToString("P1") ?? "-") / F1: @(job.F1Score?.ToString("P1") ?? "-")</span>
-                                    </article>
-                                }
+                            <div class="ml-training-model-grid">
+                                <article class="workflow-card control-card green">
+                                    <span class="candidate-status progress">@ReviewerState.ApprovedExamples</span>
+                                    <h3>Approved examples</h3>
+                                    <p>Imported from approved reported responses.</p>
+                                </article>
+                                <article class="workflow-card control-card blue">
+                                    <span class="candidate-status progress">@ReviewerState.DatasetCount</span>
+                                    <h3>Datasets</h3>
+                                    <p>Dataset snapshots built for reviewer training.</p>
+                                </article>
+                                <article class="workflow-card control-card purple">
+                                    <span class="candidate-status progress">@ReviewerState.JobCount</span>
+                                    <h3>Training jobs</h3>
+                                    <p>ML.NET reviewer training runs completed.</p>
+                                </article>
                             </div>
                         </section>
                     </div>
@@ -1662,7 +1692,7 @@
                         <div>
                             <div class="eyebrow">Machine Learning</div>
                             <h2>Model Registry</h2>
-                            <p>Review candidate reviewer models and publish the version used by the API quality gate.</p>
+                            <p>Publish the latest trained reviewer model used by the API quality gate.</p>
                         </div>
                         <button type="button" class="ghost-button modal-close-icon" aria-label="Close model registry" @onclick="CloseModelRegistryModal">
                             <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -1676,23 +1706,19 @@
                         <section class="backoffice-card ml-training-list-card">
                             <div class="training-candidates-header">
                                 <div>
-                                    <h3>Reviewer models</h3>
-                                    <p>@TrainingWorkspace.Models.Count model@(TrainingWorkspace.Models.Count == 1 ? string.Empty : "s") registered, @TrainingPublishedModelCount published.</p>
+                                    <h3>Reviewer model status</h3>
+                                    <p>@ReviewerState.ModelCount model@(ReviewerState.ModelCount == 1 ? string.Empty : "s") registered in the API training workspace.</p>
                                 </div>
                             </div>
                             <div class="ml-training-model-grid">
-                                @foreach (var model in TrainingWorkspace.Models)
-                                {
-                                    <article class="workflow-card control-card @(model.IsPublished ? "green" : "blue")">
-                                        <span class="candidate-status @(model.IsPublished ? "progress" : "pending")">@(model.IsPublished ? "Published" : "Candidate")</span>
-                                        <h3>@model.ModelName @model.Version</h3>
-                                        <p>Created from training job #@model.TrainingJobId.</p>
-                                        @if (!model.IsPublished)
-                                        {
-                                            <button type="button" class="ghost-button ml-training-theme-button" @onclick="() => PublishTrainingModel(model.Id)">Publish</button>
-                                        }
-                                    </article>
-                                }
+                                <article class="workflow-card control-card @(string.IsNullOrWhiteSpace(ReviewerState.PublishedModelVersion) ? "blue" : "green")">
+                                    <span class="candidate-status @(string.IsNullOrWhiteSpace(ReviewerState.PublishedModelVersion) ? "pending" : "progress")">
+                                        @(string.IsNullOrWhiteSpace(ReviewerState.PublishedModelVersion) ? "Not published" : "Published")
+                                    </span>
+                                    <h3>@(string.IsNullOrWhiteSpace(ReviewerState.PublishedModelVersion) ? "No published reviewer" : ReviewerState.PublishedModelVersion)</h3>
+                                    <p>@(string.IsNullOrWhiteSpace(ReviewerState.PublishedModelPath) ? "Train and publish a model before the API can load it." : ReviewerState.PublishedModelPath)</p>
+                                    <button type="button" class="ghost-button ml-training-theme-button" @onclick="PublishLatestReviewerAsync" disabled="@isBusy">Publish latest</button>
+                                </article>
                             </div>
                         </section>
                     </div>
@@ -1709,6 +1735,7 @@
                         <div>
                             <div class="eyebrow">Validation</div>
                             <h2>@SelectedPrompt.TemplateName</h2>
+                            <span class="tracking-id">Prompt #@SelectedPrompt.Id</span>
                             <p>Update the prompt template content used by the documentation assistant.</p>
                         </div>
                         <button type="button" class="ghost-button modal-close-icon" aria-label="Close prompt template" @onclick="ClosePromptModal">
@@ -1772,6 +1799,10 @@
                         <div>
                             <div class="eyebrow">Validation</div>
                             <h2>@(EditingKnowledgeId.HasValue ? "Edit Knowledge Entry" : "Create Knowledge Entry")</h2>
+                            @if (EditingKnowledgeId.HasValue)
+                            {
+                                <span class="tracking-id">KB #@EditingKnowledgeId.Value</span>
+                            }
                             <p>Update the published assistant knowledge without touching code files.</p>
                         </div>
                         <button type="button" class="ghost-button modal-close-icon" aria-label="Close knowledge entry" @onclick="CloseKnowledgeModal">
@@ -1783,31 +1814,101 @@
                     </div>
 
                     <div class="knowledge-edit-modal-body">
+                        @if (IsEditingKnowledgeEntry)
+                        {
+                            <div class="knowledge-edit-lock-note">
+                                Core entry identity fields are locked while editing. Update the reusable answer, aliases, tags, summary, or published state below.
+                            </div>
+                        }
                         <div class="backoffice-grid knowledge-edit-grid">
                             <label>
                                 <span title="Choose whether this entry is a quick answer, topic summary, or reference content.">Entry type</span>
-                                <select class="text-input" @bind="KnowledgeModalDraft.EntryType">
+                                <select class="text-input" @bind="KnowledgeModalDraft.EntryType" disabled="@IsEditingKnowledgeEntry">
                                     <option>QuickAnswer</option>
                                     <option>Topic</option>
                                     <option>Reference</option>
                                 </select>
+                                <small class="field-help">Choose QuickAnswer for FAQ-style answers, Topic for grouped subject notes, or Reference for longer documentation.</small>
                             </label>
                             <label>
                                 <span title="Logical bucket or source name used to group knowledge entries.">Source name</span>
-                                <input class="text-input" @bind="KnowledgeModalDraft.SourceName" />
+                                <select class="text-input" value="@KnowledgeSourceSelection" @onchange="OnKnowledgeSourceChanged" disabled="@IsEditingKnowledgeEntry">
+                                    @foreach (var source in KnowledgeSourceOptions)
+                                    {
+                                        <option value="@source.Value">@source.Label</option>
+                                    }
+                                </select>
+                                <small class="field-help">Use this to group the entry, help filtering, and improve matching by source.</small>
                             </label>
+                            @if (IsCustomKnowledgeSource)
+                            {
+                                <label>
+                                    <span title="Custom source bucket name.">Custom source</span>
+                                    <input class="text-input" @bind="KnowledgeModalDraft.SourceName" placeholder="Example: Operations" disabled="@IsEditingKnowledgeEntry" />
+                                </label>
+                            }
+                            else
+                            {
+                                <label>
+                                    <span title="Selected source bucket used to group knowledge entries.">Selected source</span>
+                                    <input class="text-input" value="@KnowledgeModalDraft.SourceName" disabled />
+                                </label>
+                            }
                             <label class="backoffice-wide">
                                 <span title="Admin-facing title for this knowledge record.">Title</span>
-                                <input class="text-input" @bind="KnowledgeModalDraft.Title" />
+                                <input class="text-input" @bind="KnowledgeModalDraft.Title" disabled="@IsEditingKnowledgeEntry" />
                             </label>
                             <label class="backoffice-wide">
                                 <span title="Optional short summary, especially useful for topic entries.">Summary</span>
                                 <input class="text-input" @bind="KnowledgeModalDraft.Summary" />
                             </label>
+                            @if (string.Equals(KnowledgeModalDraft.EntryType, "QuickAnswer", StringComparison.OrdinalIgnoreCase))
+                            {
+                                <label class="backoffice-wide">
+                                    <span title="Comma-separated ways users may ask this question. Exact and close matches are checked first.">Question aliases</span>
+                                    <input class="text-input"
+                                           value="@string.Join(", ", KnowledgeModalDraft.Aliases ?? [])"
+                                           @onchange="@(args => KnowledgeModalDraft.Aliases = SplitCsv(args.Value?.ToString()))"
+                                           placeholder="Example: How does ML Training improve answers?, What does ML Training do?" />
+                                </label>
+                            }
+                            <label class="backoffice-wide">
+                                <span title="Comma-separated topic tags used after alias matching. Add words admins would search for.">Tags</span>
+                                <div class="knowledge-tags-control">
+                                    <input class="text-input"
+                                           value="@string.Join(", ", KnowledgeModalDraft.Keywords ?? [])"
+                                           @onchange="@(args => KnowledgeModalDraft.Keywords = SplitCsv(args.Value?.ToString()))"
+                                           placeholder="Example: ML Training, reviewer model, future answers, response quality" />
+                                    <button type="button" class="primary-action slim icon-label-button generate-tags-button" @onclick="GenerateKnowledgeModalTags">
+                                        <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                            <path d="M12 3v3" />
+                                            <path d="M12 18v3" />
+                                            <path d="M3 12h3" />
+                                            <path d="M18 12h3" />
+                                            <path d="m5.6 5.6 2.1 2.1" />
+                                            <path d="m16.3 16.3 2.1 2.1" />
+                                            <path d="m18.4 5.6-2.1 2.1" />
+                                            <path d="m7.7 16.3-2.1 2.1" />
+                                            <circle cx="12" cy="12" r="3" />
+                                        </svg>
+                                        Generate tags
+                                    </button>
+                                </div>
+                                <small class="field-help">Tags help match same-thought questions when wording changes.</small>
+                            </label>
                             <label class="backoffice-wide">
                                 <span title="The main reusable content the assistant can read from this entry.">Content</span>
                                 <textarea class="text-input backoffice-textarea knowledge-content-textarea" rows="10" @bind="KnowledgeModalDraft.Content"></textarea>
                             </label>
+                        </div>
+
+                        <div class="knowledge-match-flow" aria-label="Quick answer matching order">
+                            <span>User question</span>
+                            <strong>Exact alias</strong>
+                            <strong>Close wording</strong>
+                            <strong>Tags/source</strong>
+                            <strong>Similar meaning</strong>
+                            <span>Normal chat if no confident match</span>
                         </div>
 
                         <div class="backoffice-inline-options knowledge-edit-options">
@@ -1868,6 +1969,13 @@
                                     </svg>
                                     @SelectedReport.Username
                                 </span>
+                                <span class="source-dot">•</span>
+                                <span class="tracking-id">Report #@SelectedReport.Id</span>
+                                @if (SelectedReport.PromotedKnowledgeEntryId.HasValue)
+                                {
+                                    <span class="source-dot">•</span>
+                                    <span class="tracking-id">Linked to KB #@SelectedReport.PromotedKnowledgeEntryId.Value</span>
+                                }
                                 <span class="source-dot">•</span>
                                 <span class="report-status-chip">@GetReportStatusLabel(SelectedReport)</span>
                                 @if (!string.IsNullOrWhiteSpace(SelectedReport.ReviewCategory))
@@ -1953,6 +2061,7 @@
                                         <option value="@status">@status</option>
                                     }
                                 </select>
+                                <small class="field-help">Use Approved when the corrected answer is trusted and can become training data.</small>
                             </label>
                             <label>
                                 <span title="This is the issue label used for future quality analysis and ML training examples.">Category</span>
@@ -1962,49 +2071,35 @@
                                         <option value="@category">@((string.IsNullOrWhiteSpace(category) ? "None" : category))</option>
                                     }
                                 </select>
+                                <small class="field-help">Pick the issue type the reviewer should learn, such as Incorrect, Incomplete, or TooLong.</small>
                             </label>
                             <label class="backoffice-wide">
                                 <span title="Optional notes for why the answer was wrong or how it was fixed.">Review notes</span>
                                 <textarea class="text-input backoffice-textarea notes-textarea" rows="3" @bind="draft.ReviewNotes"></textarea>
                             </label>
                         </div>
-                        <div class="backoffice-inline-options">
-                            <label title="Create a reusable knowledge entry from this reviewed fix.">
-                                <input type="checkbox"
-                                       checked="@draft.PromoteToKnowledge"
-                                       disabled="@(!CanPromoteToKnowledge(draft))"
-                                       @onchange="args => OnPromoteToKnowledgeChanged(draft, args.Value)" />
-                                Promote to knowledge
-                            </label>
-                            <label title="If promoted, make the new knowledge live right away.">
-                                <input type="checkbox"
-                                       checked="@draft.PublishKnowledge"
-                                       disabled="@(!CanPublishKnowledge(draft))"
-                               @onchange="args => OnPublishKnowledgeChanged(draft, args.Value)" />
-                                Publish immediately
-                            </label>
-                        </div>
-                        @if (draft.PromoteToKnowledge)
-                        {
-                            <div class="backoffice-grid report-review-form-grid promoted-knowledge-grid">
-                                <label>
-                                    <span title="Choose what kind of reusable knowledge this review should become.">Entry type</span>
-                                    <select class="text-input" @bind="draft.KnowledgeEntryType">
-                                        <option>QuickAnswer</option>
-                                        <option>Topic</option>
-                                        <option>Reference</option>
-                                    </select>
-                                </label>
-                                <label>
-                                    <span title="Logical group or source bucket for this knowledge entry.">Source name</span>
-                                    <input class="text-input" @bind="draft.KnowledgeSourceName" />
-                                </label>
-                                <label class="backoffice-wide">
-                                    <span title="Admin-facing title for the promoted knowledge entry.">Knowledge title</span>
-                                    <input class="text-input" @bind="draft.KnowledgeTitle" />
-                                </label>
+                        <div class="report-knowledge-action-card">
+                            <div>
+                                <strong>@(HasLinkedKnowledgeEntry(SelectedReport) ? "Edit reusable knowledge" : "Create reusable knowledge")</strong>
+                                <p>@(HasLinkedKnowledgeEntry(SelectedReport)
+                                    ? $"Open linked KB #{SelectedReport.PromotedKnowledgeEntryId!.Value} with its saved data so you can update aliases, tags, content, or publish state."
+                                    : "Open the Knowledge Entry modal with this report prefilled, including aliases and generated tags.")</p>
+                                @if (!CanOpenKnowledgeEntryFromReport(SelectedReport, draft))
+                                {
+                                    <small>Requires Reviewed or Approved status, a question, a validated response, and a category when Approved.</small>
+                                }
                             </div>
-                        }
+                            <button type="button"
+                                    class="primary-action slim icon-label-button"
+                                    disabled="@(!CanOpenKnowledgeEntryFromReport(SelectedReport, draft) || isBusy)"
+                                    @onclick="() => OpenKnowledgeModalFromReportAsync(SelectedReport, draft)">
+                                <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M12 5v14" />
+                                    <path d="M5 12h14" />
+                                </svg>
+                                @(HasLinkedKnowledgeEntry(SelectedReport) ? "Edit knowledge entry" : "Create knowledge entry")
+                            </button>
+                        </div>
                     </div>
                     <div class="backoffice-modal-actions review-modal-footer">
                         <div class="review-ready-note">
@@ -2219,6 +2314,7 @@
     private const string DisplayNameStorageKey = "aichatapp.web.displayName";
     private const string AvatarLabelStorageKey = "aichatapp.web.avatarLabel";
     private const int DefaultFaqPageSize = 5;
+    private const int TrainingCandidatePageSize = 5;
     private bool initialized;
     private bool isBusy;
     private bool isBackofficeSidebarOpen;
@@ -2235,6 +2331,8 @@
     private string avatarLabelDraft = string.Empty;
     private string? StatusMessage;
     private string ReportStatusFilter { get; set; } = "Pending";
+    private string ReportSearchTerm { get; set; } = string.Empty;
+    private string PromptSearchTerm { get; set; } = string.Empty;
     private string UserSearchTerm { get; set; } = string.Empty;
     private string KnowledgeSearchTerm { get; set; } = string.Empty;
     private string KnowledgeTypeFilter { get; set; } = string.Empty;
@@ -2264,17 +2362,11 @@
     private string? expandedFaqQuestion;
     private string FaqSearchTerm { get; set; } = string.Empty;
     private bool isFaqFilterOpen;
-    private string trainingDatasetName = "DocumentationQuality";
-    private int? latestTrainingDatasetId;
-    private bool isTrainingJobRunning;
-    private string manualTrainingQuestion = string.Empty;
-    private string manualTrainingBadResponse = string.Empty;
-    private string manualTrainingExpectedAnswer = string.Empty;
-    private string manualTrainingIntent = "DocumentationQuestion";
-    private string manualTrainingIssueType = "Incorrect";
+    private int TrainingCandidatePage { get; set; } = 1;
     private int? EditingKnowledgeId { get; set; }
     private string? EditingUserId { get; set; }
     private int? SelectedReportId { get; set; }
+    private int? PromotingReportId { get; set; }
     private int? SelectedPromptId { get; set; }
     private string? CompletionNotice;
     private List<BackofficeReportViewModel> Reports { get; set; } = [];
@@ -2289,6 +2381,71 @@
     private Dictionary<int, SaveKnowledgeEntryPayload> KnowledgeDrafts { get; } = [];
     private static readonly string[] BackofficeRoleOptions = ["Admin", "DataValidator", "AppUser"];
     private static readonly string[] ReviewStatusOptions = ["Pending", "Reviewed", "Approved", "Rejected"];
+    private static readonly HashSet<string> TagStopWords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "about",
+        "after",
+        "again",
+        "answer",
+        "answers",
+        "assistant",
+        "before",
+        "being",
+        "chat",
+        "does",
+        "future",
+        "have",
+        "help",
+        "helps",
+        "how",
+        "into",
+        "like",
+        "make",
+        "more",
+        "that",
+        "the",
+        "their",
+        "them",
+        "this",
+        "what",
+        "when",
+        "where",
+        "which",
+        "will",
+        "with",
+        "work",
+        "works",
+        "would",
+        "your"
+    };
+    private static readonly (string Phrase, string Tag)[] KnownTagPhrases =
+    [
+        ("ml training", "ML Training"),
+        ("machine learning", "machine learning"),
+        ("reviewer model", "reviewer model"),
+        ("response quality", "response quality"),
+        ("quick answer", "quick answer"),
+        ("quick answers", "quick answer"),
+        ("knowledge base", "knowledge base"),
+        ("knowledge entry", "knowledge entry"),
+        ("reported response", "reported response"),
+        ("reported responses", "reported response"),
+        ("future chat answer", "future answers"),
+        ("future chat response", "future answers"),
+        ("chat answer", "chat answers"),
+        ("chat response", "chat responses"),
+        ("prompt template", "prompt template"),
+        ("semantic", "semantic match"),
+        ("embedding", "semantic match"),
+        ("gateway", "gateway"),
+        ("authentication", "authentication"),
+        ("google authenticator", "2FA"),
+        ("2fa", "2FA"),
+        ("docker", "Docker"),
+        ("ef core", "EF Core"),
+        ("database", "database"),
+        ("backoffice", "Backoffice")
+    ];
     private static readonly (string Value, string Label)[] ReportStatusFilterOptions =
     [
         ("Pending", "Needs action"),
@@ -2310,6 +2467,21 @@
         ("30", "Last 30 days"),
         ("90", "Last 90 days")
     ];
+    private const string CustomKnowledgeSourceValue = "__other__";
+    private static readonly (string Value, string Label)[] KnowledgeSourceOptions =
+    [
+        ("QuickAnswers", "Quick answers"),
+        ("Documentation", "Documentation"),
+        ("Architecture", "Architecture"),
+        ("Configuration", "Configuration"),
+        ("Authentication", "Authentication"),
+        ("Gateway", "Gateway"),
+        ("Docker", "Docker"),
+        ("EFCore", "EF Core"),
+        ("MLTraining", "ML Training"),
+        ("Troubleshooting", "Troubleshooting"),
+        (CustomKnowledgeSourceValue, "Other")
+    ];
     private static readonly string[] ReviewCategoryOptions = ["", "Incorrect", "Incomplete", "PromptLeak", "Repetitive", "OffTopic", "TooLong", "Other"];
     private SaveKnowledgeEntryPayload KnowledgeModalDraft { get; set; } = new()
     {
@@ -2317,14 +2489,15 @@
         EntryType = "Reference",
         SourceName = "Architecture"
     };
+    private string KnowledgeSourceSelection { get; set; } = "Architecture";
+    private bool IsCustomKnowledgeSource => string.Equals(KnowledgeSourceSelection, CustomKnowledgeSourceValue, StringComparison.Ordinal);
+    private bool IsEditingKnowledgeEntry => EditingKnowledgeId.HasValue;
 
     private bool IsAuthenticated => !string.IsNullOrWhiteSpace(token);
     private bool StatusIsError { get; set; }
     private string CurrentUsernameOrFallback => string.IsNullOrWhiteSpace(currentUsername) ? "Unknown user" : currentUsername;
     private string CurrentDisplayNameOrFallback => string.IsNullOrWhiteSpace(currentDisplayName) ? CurrentUsernameOrFallback : currentDisplayName;
     private string CurrentAvatarLabel => BuildAvatarLabel(currentAvatar, CurrentDisplayNameOrFallback);
-    private int TrainingApprovedCount => TrainingWorkspace.Examples.Count(example => example.ApprovedForTraining);
-    private int TrainingPublishedModelCount => TrainingWorkspace.Models.Count(model => model.IsPublished);
     private bool HasFaqFilter => !string.IsNullOrWhiteSpace(FaqSearchTerm);
     private List<FaqItemViewModel> FilteredFaqItems => FaqItems
         .Where(MatchesFaqSearch)
@@ -2337,6 +2510,14 @@
     private List<FaqItemViewModel> PagedFaqItems => FilteredFaqItems
         .Skip((FaqSafeCurrentPage - 1) * FaqPageSize)
         .Take(FaqPageSize)
+        .ToList();
+    private int TrainingCandidateTotalPages => Math.Max(1, (int)Math.Ceiling(TrainingCandidates.Count / (double)TrainingCandidatePageSize));
+    private int TrainingCandidateSafePage => Math.Clamp(TrainingCandidatePage, 1, TrainingCandidateTotalPages);
+    private int TrainingCandidatePageStart => TrainingCandidates.Count == 0 ? 0 : ((TrainingCandidateSafePage - 1) * TrainingCandidatePageSize) + 1;
+    private int TrainingCandidatePageEnd => TrainingCandidates.Count == 0 ? 0 : Math.Min(TrainingCandidateSafePage * TrainingCandidatePageSize, TrainingCandidates.Count);
+    private List<TrainingCandidateViewModel> PagedTrainingCandidates => TrainingCandidates
+        .Skip((TrainingCandidateSafePage - 1) * TrainingCandidatePageSize)
+        .Take(TrainingCandidatePageSize)
         .ToList();
     private IEnumerable<int> VisibleFaqPages
     {
@@ -2368,6 +2549,7 @@
     private BackofficeUserViewModel? SelectedUser => !string.IsNullOrWhiteSpace(EditingUserId) ? Users.FirstOrDefault(user => string.Equals(user.Id, EditingUserId, StringComparison.Ordinal)) : null;
     private List<BackofficeReportViewModel> FilteredReports => Reports
         .Where(MatchesReportStatusFilter)
+        .Where(MatchesReportSearchFilter)
         .ToList();
     private List<BackofficeUserViewModel> FilteredUsers => Users
         .Where(MatchesUserFilter)
@@ -2391,13 +2573,16 @@
         .ToList();
     private int ReportPageStart => FilteredReports.Count == 0 ? 0 : ((Math.Clamp(ReportPage, 1, ReportTotalPages) - 1) * BackofficeModalPageSize) + 1;
     private int ReportPageEnd => FilteredReports.Count == 0 ? 0 : Math.Min(Math.Clamp(ReportPage, 1, ReportTotalPages) * BackofficeModalPageSize, FilteredReports.Count);
-    private int PromptTotalPages => Math.Max(1, (int)Math.Ceiling(PromptTemplates.Count / (double)BackofficeModalPageSize));
-    private List<PromptTemplateViewModel> PagedPromptTemplates => PromptTemplates
+    private List<PromptTemplateViewModel> FilteredPromptTemplates => PromptTemplates
+        .Where(MatchesPromptFilter)
+        .ToList();
+    private int PromptTotalPages => Math.Max(1, (int)Math.Ceiling(FilteredPromptTemplates.Count / (double)BackofficeModalPageSize));
+    private List<PromptTemplateViewModel> PagedPromptTemplates => FilteredPromptTemplates
         .Skip((Math.Clamp(PromptPage, 1, PromptTotalPages) - 1) * BackofficeModalPageSize)
         .Take(BackofficeModalPageSize)
         .ToList();
-    private int PromptPageStart => PromptTemplates.Count == 0 ? 0 : ((Math.Clamp(PromptPage, 1, PromptTotalPages) - 1) * BackofficeModalPageSize) + 1;
-    private int PromptPageEnd => PromptTemplates.Count == 0 ? 0 : Math.Min(Math.Clamp(PromptPage, 1, PromptTotalPages) * BackofficeModalPageSize, PromptTemplates.Count);
+    private int PromptPageStart => FilteredPromptTemplates.Count == 0 ? 0 : ((Math.Clamp(PromptPage, 1, PromptTotalPages) - 1) * BackofficeModalPageSize) + 1;
+    private int PromptPageEnd => FilteredPromptTemplates.Count == 0 ? 0 : Math.Min(Math.Clamp(PromptPage, 1, PromptTotalPages) * BackofficeModalPageSize, FilteredPromptTemplates.Count);
     private int UserTotalPages => Math.Max(1, (int)Math.Ceiling(FilteredUsers.Count / (double)BackofficeModalPageSize));
     private List<BackofficeUserViewModel> PagedUsers => FilteredUsers
         .Skip((Math.Clamp(UserPage, 1, UserTotalPages) - 1) * BackofficeModalPageSize)
@@ -2536,8 +2721,15 @@
 
     private string GetReportFilterSummary()
     {
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(ReportSearchTerm))
+        {
+            parts.Add($"Search: {ReportSearchTerm.Trim()}");
+        }
+
         var selected = ReportStatusFilterOptions.FirstOrDefault(option => string.Equals(option.Value, ReportStatusFilter, StringComparison.Ordinal));
-        return string.IsNullOrWhiteSpace(selected.Label) ? "All statuses" : selected.Label;
+        parts.Add(string.IsNullOrWhiteSpace(selected.Label) ? "All statuses" : selected.Label);
+        return string.Join(" / ", parts);
     }
 
     private string GetKnowledgeFilterSummary()
@@ -2574,10 +2766,26 @@
 
     private int UserActiveFilterCount => string.IsNullOrWhiteSpace(UserSearchTerm) ? 0 : 1;
 
+    private int ReportActiveFilterCount =>
+        (string.IsNullOrWhiteSpace(ReportSearchTerm) ? 0 : 1)
+        + (string.IsNullOrWhiteSpace(ReportStatusFilter) ? 0 : 1);
+
     private void OnReportStatusFilterChanged(ChangeEventArgs args)
     {
         ReportStatusFilter = args.Value?.ToString() ?? string.Empty;
         ReportPage = 1;
+    }
+
+    private void OnReportSearchChanged(ChangeEventArgs args)
+    {
+        ReportSearchTerm = args.Value?.ToString() ?? string.Empty;
+        ReportPage = 1;
+    }
+
+    private void OnPromptSearchChanged(ChangeEventArgs args)
+    {
+        PromptSearchTerm = args.Value?.ToString() ?? string.Empty;
+        PromptPage = 1;
     }
 
     private void OnUserSearchChanged(ChangeEventArgs args)
@@ -2662,115 +2870,76 @@
         CloseUserModal();
     }
 
-    private void OpenTrainingDataModal()
-        => ShowTrainingDataModal = true;
+    private async Task OpenTrainingDataModal()
+    {
+        TrainingCandidatePage = 1;
+        ShowTrainingDataModal = true;
+        await LoadReviewerWorkflowAsync();
+    }
 
     private void CloseTrainingDataModal()
         => ShowTrainingDataModal = false;
 
-    private void OpenTrainingJobsModal()
-        => ShowTrainingJobsModal = true;
+    private async Task OpenTrainingJobsModal()
+    {
+        ShowTrainingJobsModal = true;
+        await LoadReviewerWorkflowAsync();
+    }
 
     private void CloseTrainingJobsModal()
         => ShowTrainingJobsModal = false;
 
-    private void OpenModelRegistryModal()
-        => ShowModelRegistryModal = true;
+    private async Task OpenModelRegistryModal()
+    {
+        ShowModelRegistryModal = true;
+        await LoadReviewerWorkflowAsync();
+    }
 
     private void CloseModelRegistryModal()
         => ShowModelRegistryModal = false;
 
-    private void RefreshTrainingWorkspaceState()
-        => SetStatus("ML Training workspace refreshed.");
-
-    private async Task ImportTrainingTextFileAsync(InputFileChangeEventArgs args)
+    private async Task RefreshTrainingWorkspaceStateAsync()
     {
-        var file = args.File;
-        await using var stream = file.OpenReadStream(maxAllowedSize: 1024 * 1024);
-        var imported = await TrainingWorkspace.ImportTextFileAsync(stream, file.Name, CancellationToken.None);
-        SetStatus($"Imported {imported} draft training example(s).");
+        const string message = "ML Training workspace refreshed.";
+        SetStatus(message);
+        await ShowCompletionNotificationAsync(message);
     }
 
-    private void AddReviewedTrainingExample()
+    private Task LoadReviewerWorkflowAsync() => RunBusyAsync(RefreshWorkflowCoreAsync);
+
+    private async Task RefreshTrainingCandidatesAsync()
     {
-        if (string.IsNullOrWhiteSpace(manualTrainingQuestion) || string.IsNullOrWhiteSpace(manualTrainingExpectedAnswer))
+        await ShowCompletionNotificationAsync("Refreshing training candidates...");
+        await LoadReviewerWorkflowAsync();
+        if (StatusIsError)
         {
-            SetStatus("Question and corrected answer are required.", isError: true);
             return;
         }
 
-        TrainingWorkspace.AddReviewedReportExample(
-            manualTrainingQuestion,
-            manualTrainingBadResponse,
-            manualTrainingExpectedAnswer,
-            manualTrainingIssueType,
-            manualTrainingIntent);
-
-        manualTrainingQuestion = string.Empty;
-        manualTrainingBadResponse = string.Empty;
-        manualTrainingExpectedAnswer = string.Empty;
-        SetStatus("Reviewed example added.");
+        var message = $"Training candidates refreshed. {TrainingCandidates.Count} candidate{(TrainingCandidates.Count == 1 ? string.Empty : "s")} ready.";
+        ClampTrainingCandidatePage();
+        SetStatus(message);
+        await ShowCompletionNotificationAsync(message);
     }
 
-    private void ApproveTrainingExample(int id)
+    private void PreviousTrainingCandidatePage()
     {
-        TrainingWorkspace.ApproveExample(id, CurrentUsernameOrFallback);
-        SetStatus("Example approved for training.");
+        if (TrainingCandidatePage > 1)
+        {
+            TrainingCandidatePage--;
+        }
     }
 
-    private void ApproveAllTrainingDrafts()
+    private void NextTrainingCandidatePage()
     {
-        foreach (var example in TrainingWorkspace.Examples.Where(example => !example.ApprovedForTraining))
+        if (TrainingCandidatePage < TrainingCandidateTotalPages)
         {
-            TrainingWorkspace.ApproveExample(example.Id, CurrentUsernameOrFallback);
-        }
-
-        SetStatus("All visible drafts approved.");
-    }
-
-    private void BuildTrainingDataset()
-    {
-        var dataset = TrainingWorkspace.BuildDataset(trainingDatasetName);
-        latestTrainingDatasetId = dataset.Id;
-        SetStatus($"Dataset {dataset.Name} v{dataset.Version} built with {dataset.ExampleCount} approved example(s).");
-    }
-
-    private async Task QueueTrainingJobAsync()
-    {
-        if (latestTrainingDatasetId is null)
-        {
-            SetStatus("Build a dataset before training.", isError: true);
-            return;
-        }
-
-        try
-        {
-            isTrainingJobRunning = true;
-            await TrainingWorkspace.QueueAndRunTrainingAsync(latestTrainingDatasetId.Value, CurrentUsernameOrFallback, CancellationToken.None);
-            SetStatus("Training completed and model version registered.");
-        }
-        catch (Exception ex)
-        {
-            SetStatus(ex.Message, isError: true);
-        }
-        finally
-        {
-            isTrainingJobRunning = false;
+            TrainingCandidatePage++;
         }
     }
 
-    private void PublishTrainingModel(int modelId)
-    {
-        try
-        {
-            TrainingWorkspace.PublishModel(modelId);
-            SetStatus("Model version published.");
-        }
-        catch (Exception ex)
-        {
-            SetStatus(ex.Message, isError: true);
-        }
-    }
+    private void ClampTrainingCandidatePage()
+        => TrainingCandidatePage = Math.Clamp(TrainingCandidatePage, 1, TrainingCandidateTotalPages);
 
     private async Task LogoutAsync()
     {
@@ -3035,6 +3204,11 @@
             draft.Aliases = SplitCsv(draft.ValidatedQuestion);
         }
 
+        if (draft.PromoteToKnowledge && (draft.Keywords is null || draft.Keywords.Count == 0))
+        {
+            draft.Keywords = BuildSuggestedKnowledgeTags(draft);
+        }
+
         var successMessage = await GatewayClient.ReviewReportedResponseAsync(token!, report.Id, draft, cancellationToken);
         await RefreshReportsCoreAsync(cancellationToken);
         await RefreshWorkflowCoreAsync(cancellationToken);
@@ -3062,6 +3236,7 @@
 
     private void OpenCreateKnowledgeModal()
     {
+        PromotingReportId = null;
         EditingKnowledgeId = null;
         KnowledgeModalDraft = new SaveKnowledgeEntryPayload
         {
@@ -3069,25 +3244,69 @@
             EntryType = "Reference",
             SourceName = "Architecture"
         };
+        SetKnowledgeSourceSelection(KnowledgeModalDraft.SourceName);
         ShowKnowledgeModal = true;
+    }
+
+    private Task OpenKnowledgeModalFromReportAsync(BackofficeReportViewModel? report, BackofficeReviewPayload draft)
+    {
+        if (report is null || !CanOpenKnowledgeEntryFromReport(report, draft))
+        {
+            return Task.CompletedTask;
+        }
+
+        return RunBusyAsync(async cancellationToken =>
+        {
+            if (report.PromotedKnowledgeEntryId.HasValue)
+            {
+                var linkedEntry = KnowledgeEntries.FirstOrDefault(entry => entry.Id == report.PromotedKnowledgeEntryId.Value);
+                if (linkedEntry is null)
+                {
+                    await RefreshKnowledgeEntriesCoreAsync(cancellationToken);
+                    linkedEntry = KnowledgeEntries.FirstOrDefault(entry => entry.Id == report.PromotedKnowledgeEntryId.Value);
+                }
+
+                if (linkedEntry is null)
+                {
+                    var missingMessage = "The linked Knowledge Entry could not be found.";
+                    SetStatus(missingMessage, isError: true);
+                    await ShowCompletionNotificationAsync(missingMessage);
+                    return;
+                }
+
+                PromotingReportId = null;
+                EditingKnowledgeId = linkedEntry.Id;
+                KnowledgeModalDraft = BuildKnowledgeDraftFromEntry(linkedEntry);
+                SetKnowledgeSourceSelection(KnowledgeModalDraft.SourceName);
+                ShowReportModal = false;
+                ShowKnowledgeModal = true;
+                SetStatus("Linked Knowledge Entry loaded.");
+                return;
+            }
+
+            draft.PromoteToKnowledge = false;
+            draft.PublishKnowledge = false;
+            await GatewayClient.ReviewReportedResponseAsync(token!, report.Id, draft, cancellationToken);
+
+            var knowledgeDraft = BuildKnowledgeDraftFromReport(report, draft);
+            EditingKnowledgeId = null;
+            PromotingReportId = report.Id;
+            KnowledgeModalDraft = knowledgeDraft;
+            SetKnowledgeSourceSelection(KnowledgeModalDraft.SourceName);
+            ShowReportModal = false;
+            ShowKnowledgeModal = true;
+
+            await RefreshReportsCoreAsync(cancellationToken);
+            SetStatus("Review saved. Complete the Knowledge Entry details, then save it.");
+        });
     }
 
     private void OpenEditKnowledgeModal(KnowledgeEntryViewModel entry)
     {
+        PromotingReportId = null;
         EditingKnowledgeId = entry.Id;
-        KnowledgeModalDraft = new SaveKnowledgeEntryPayload
-        {
-            ProfileId = entry.ProfileId,
-            EntryType = entry.EntryType,
-            SourceName = entry.SourceName,
-            Title = entry.Title,
-            Summary = entry.Summary,
-            Content = DecodeKnowledgeContent(entry),
-            Aliases = DeserializeOptionalList(entry.AliasesJson),
-            Keywords = DeserializeOptionalList(entry.KeywordsJson),
-            IsPublished = entry.IsPublished,
-            SortOrder = entry.SortOrder
-        };
+        KnowledgeModalDraft = BuildKnowledgeDraftFromEntry(entry);
+        SetKnowledgeSourceSelection(KnowledgeModalDraft.SourceName);
         ShowKnowledgeModal = true;
     }
 
@@ -3123,6 +3342,7 @@
     {
         ShowKnowledgeModal = false;
         EditingKnowledgeId = null;
+        PromotingReportId = null;
     }
 
     private void CloseReportModal()
@@ -3146,7 +3366,17 @@
 
     private Task SaveKnowledgeModalAsync() => RunBusyAsync(async cancellationToken =>
     {
+        ApplySelectedKnowledgeSource();
         NormalizeKnowledgeDraft(KnowledgeModalDraft);
+
+        if (!EditingKnowledgeId.HasValue
+            && FindDuplicateKnowledgeEntry(KnowledgeModalDraft) is { } duplicate)
+        {
+            var duplicateMessage = $"Knowledge entry already exists: {duplicate.Title}";
+            SetStatus(duplicateMessage, isError: true);
+            await ShowCompletionNotificationAsync(duplicateMessage);
+            return;
+        }
 
         string successMessage;
         if (EditingKnowledgeId.HasValue)
@@ -3155,10 +3385,18 @@
         }
         else
         {
-            successMessage = await GatewayClient.CreateKnowledgeEntryAsync(token!, KnowledgeModalDraft, cancellationToken);
+            var result = await GatewayClient.CreateKnowledgeEntryWithResultAsync(token!, KnowledgeModalDraft, cancellationToken);
+            successMessage = string.IsNullOrWhiteSpace(result.Message) ? "Knowledge entry created." : result.Message;
+
+            if (PromotingReportId.HasValue && result.Id > 0)
+            {
+                await GatewayClient.LinkReportToKnowledgeEntryAsync(token!, PromotingReportId.Value, result.Id, cancellationToken);
+                successMessage = "Knowledge entry created and linked to the report.";
+            }
         }
 
         CloseKnowledgeModal();
+        await RefreshReportsCoreAsync(cancellationToken);
         await RefreshKnowledgeEntriesCoreAsync(cancellationToken);
         await RefreshWorkflowCoreAsync(cancellationToken);
         SetStatus(successMessage);
@@ -3223,6 +3461,7 @@
         catch (Exception ex)
         {
             SetStatus(ex.Message, isError: true);
+            await ShowCompletionNotificationAsync($"Action failed: {ex.Message}");
         }
         finally
         {
@@ -3293,10 +3532,12 @@
         WorkflowSummary = await GatewayClient.GetBackofficeWorkflowSummaryAsync(token!, cancellationToken);
         TrainingCandidates = await GatewayClient.GetTrainingCandidatesAsync(token!, cancellationToken);
         ReviewerState = await GatewayClient.GetReviewerWorkflowStateAsync(token!, cancellationToken);
+        ClampTrainingCandidatePage();
     }
 
     private Task BuildReviewerDatasetAsync() => RunBusyAsync(async cancellationToken =>
     {
+        await ShowCompletionNotificationAsync("Building reviewer dataset...");
         var message = await GatewayClient.BuildReviewerDatasetAsync(token!, cancellationToken);
         await RefreshWorkflowCoreAsync(cancellationToken);
         SetStatus(message);
@@ -3305,6 +3546,7 @@
 
     private Task TrainReviewerAsync() => RunBusyAsync(async cancellationToken =>
     {
+        await ShowCompletionNotificationAsync("Training reviewer model...");
         var message = await GatewayClient.TrainReviewerAsync(token!, cancellationToken);
         await RefreshWorkflowCoreAsync(cancellationToken);
         SetStatus(message);
@@ -3313,6 +3555,7 @@
 
     private Task PublishLatestReviewerAsync() => RunBusyAsync(async cancellationToken =>
     {
+        await ShowCompletionNotificationAsync("Publishing latest reviewer model...");
         var message = await GatewayClient.PublishLatestReviewerAsync(token!, cancellationToken);
         await RefreshWorkflowCoreAsync(cancellationToken);
         SetStatus(message);
@@ -3327,6 +3570,45 @@
         }
 
         return string.Equals(GetReportStatusLabel(report), ReportStatusFilter, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool MatchesReportSearchFilter(BackofficeReportViewModel report)
+    {
+        if (string.IsNullOrWhiteSpace(ReportSearchTerm))
+        {
+            return true;
+        }
+
+        var term = ReportSearchTerm.Trim();
+        return MatchesTrackingId(term, "report", report.Id)
+               || (report.PromotedKnowledgeEntryId.HasValue && MatchesTrackingId(term, "kb", report.PromotedKnowledgeEntryId.Value))
+               || Contains(term, report.Id.ToString(CultureInfo.InvariantCulture))
+               || (report.PromotedKnowledgeEntryId.HasValue && Contains(term, report.PromotedKnowledgeEntryId.Value.ToString(CultureInfo.InvariantCulture)))
+               || Contains(term, GetReportTitle(report))
+               || Contains(term, report.UserPrompt)
+               || Contains(term, report.AssistantResponse)
+               || Contains(term, report.ValidatedQuestion)
+               || Contains(term, report.ValidatedResponse)
+               || Contains(term, report.Username)
+               || Contains(term, GetReportStatusLabel(report))
+               || Contains(term, report.ReviewCategory);
+    }
+
+    private bool MatchesPromptFilter(PromptTemplateViewModel prompt)
+    {
+        if (string.IsNullOrWhiteSpace(PromptSearchTerm))
+        {
+            return true;
+        }
+
+        var term = PromptSearchTerm.Trim();
+        return MatchesTrackingId(term, "prompt", prompt.Id)
+               || Contains(term, prompt.Id.ToString(CultureInfo.InvariantCulture))
+               || Contains(term, prompt.TemplateName)
+               || Contains(term, prompt.ProfileId)
+               || Contains(term, prompt.Content)
+               || Contains(term, prompt.UpdatedBy)
+               || Contains(term, prompt.IsPublished ? "Published" : "Draft");
     }
 
     private async Task RefreshPromptTemplatesCoreAsync(CancellationToken cancellationToken)
@@ -3350,10 +3632,52 @@
         StatusIsError = isError;
     }
 
+    private void OnKnowledgeSourceChanged(ChangeEventArgs args)
+    {
+        var selected = args.Value?.ToString() ?? "Architecture";
+        KnowledgeSourceSelection = selected;
+        if (!IsCustomKnowledgeSource)
+        {
+            KnowledgeModalDraft.SourceName = selected;
+        }
+        else if (IsKnownKnowledgeSource(KnowledgeModalDraft.SourceName))
+        {
+            KnowledgeModalDraft.SourceName = string.Empty;
+        }
+    }
+
+    private void SetKnowledgeSourceSelection(string? sourceName)
+    {
+        var normalized = string.IsNullOrWhiteSpace(sourceName) ? "Architecture" : sourceName.Trim();
+        var knownSource = GetKnownKnowledgeSourceValue(normalized);
+        KnowledgeSourceSelection = knownSource ?? CustomKnowledgeSourceValue;
+        KnowledgeModalDraft.SourceName = knownSource ?? normalized;
+    }
+
+    private void ApplySelectedKnowledgeSource()
+    {
+        if (!IsCustomKnowledgeSource)
+        {
+            KnowledgeModalDraft.SourceName = KnowledgeSourceSelection;
+        }
+    }
+
+    private static bool IsKnownKnowledgeSource(string? sourceName)
+        => GetKnownKnowledgeSourceValue(sourceName) is not null;
+
+    private static string? GetKnownKnowledgeSourceValue(string? sourceName)
+        => string.IsNullOrWhiteSpace(sourceName)
+            ? null
+            : KnowledgeSourceOptions
+                .Where(option => !string.Equals(option.Value, CustomKnowledgeSourceValue, StringComparison.Ordinal))
+                .Select(option => option.Value)
+                .FirstOrDefault(value => string.Equals(value, sourceName.Trim(), StringComparison.OrdinalIgnoreCase));
+
     private static void NormalizeKnowledgeDraft(SaveKnowledgeEntryPayload draft)
     {
+        draft.SourceName = string.IsNullOrWhiteSpace(draft.SourceName) ? "Architecture" : draft.SourceName.Trim();
         draft.Aliases = draft.EntryType == "QuickAnswer" ? NormalizeList(draft.Aliases ?? []) : null;
-        draft.Keywords = draft.EntryType == "Topic" ? NormalizeList(draft.Keywords ?? []) : null;
+        draft.Keywords = NormalizeList(draft.Keywords ?? []);
         draft.Content = string.Join(Environment.NewLine, SplitLines(draft.Content));
     }
 
@@ -3405,6 +3729,223 @@
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
+    private static SaveKnowledgeEntryPayload BuildKnowledgeDraftFromReport(BackofficeReportViewModel report, BackofficeReviewPayload draft)
+    {
+        var question = string.IsNullOrWhiteSpace(draft.ValidatedQuestion)
+            ? report.UserPrompt
+            : draft.ValidatedQuestion.Trim();
+        var answer = string.IsNullOrWhiteSpace(draft.ValidatedResponse)
+            ? report.AssistantResponse
+            : draft.ValidatedResponse.Trim();
+        var title = string.IsNullOrWhiteSpace(draft.KnowledgeTitle)
+            ? question
+            : draft.KnowledgeTitle.Trim();
+
+        return new SaveKnowledgeEntryPayload
+        {
+            ProfileId = "Documentation",
+            EntryType = "QuickAnswer",
+            SourceName = "QuickAnswers",
+            Title = title,
+            Content = answer,
+            Aliases = SplitCsv(question),
+            Keywords = BuildSuggestedKnowledgeTags(draft),
+            IsPublished = string.Equals(draft.ReviewStatus, "Approved", StringComparison.OrdinalIgnoreCase),
+            SortOrder = 0
+        };
+    }
+
+    private static SaveKnowledgeEntryPayload BuildKnowledgeDraftFromEntry(KnowledgeEntryViewModel entry)
+        => new()
+        {
+            ProfileId = entry.ProfileId,
+            EntryType = entry.EntryType,
+            SourceName = entry.SourceName,
+            Title = entry.Title,
+            Summary = entry.Summary,
+            Content = DecodeKnowledgeContent(entry),
+            Aliases = DeserializeOptionalList(entry.AliasesJson),
+            Keywords = DeserializeOptionalList(entry.KeywordsJson),
+            IsPublished = entry.IsPublished,
+            SortOrder = entry.SortOrder
+        };
+
+    private void GenerateKnowledgeTags(BackofficeReviewPayload draft)
+    {
+        draft.Keywords = BuildSuggestedKnowledgeTags(draft);
+        SetStatus(draft.Keywords.Count == 0
+            ? "No useful tags found. Add tags manually before saving."
+            : $"Generated {draft.Keywords.Count} knowledge tag(s). Review them before saving.");
+    }
+
+    private void GenerateKnowledgeModalTags()
+    {
+        KnowledgeModalDraft.Keywords = BuildSuggestedKnowledgeTags(KnowledgeModalDraft);
+        SetStatus(KnowledgeModalDraft.Keywords.Count == 0
+            ? "No useful tags found. Add tags manually before saving."
+            : $"Generated {KnowledgeModalDraft.Keywords.Count} knowledge tag(s). Review them before saving.");
+    }
+
+    private static List<string> BuildSuggestedKnowledgeTags(SaveKnowledgeEntryPayload draft)
+    {
+        var reviewLikeDraft = new BackofficeReviewPayload
+        {
+            KnowledgeTitle = draft.Title,
+            KnowledgeSummary = draft.Summary,
+            KnowledgeSourceName = draft.SourceName,
+            ReviewCategory = draft.EntryType,
+            ValidatedQuestion = draft.Title,
+            ValidatedResponse = draft.Content
+        };
+
+        return BuildSuggestedKnowledgeTags(reviewLikeDraft);
+    }
+
+    private static List<string> BuildSuggestedKnowledgeTags(BackofficeReviewPayload draft)
+    {
+        var tags = new List<string>();
+        AddTag(tags, draft.KnowledgeSourceName);
+        AddTag(tags, draft.ReviewCategory);
+
+        var combinedText = string.Join(' ', new[]
+        {
+            draft.KnowledgeTitle,
+            draft.ValidatedQuestion,
+            draft.ValidatedResponse,
+            draft.KnowledgeSummary,
+            draft.KnowledgeSourceName,
+            draft.ReviewCategory
+        }.Where(value => !string.IsNullOrWhiteSpace(value)));
+        var normalizedText = NormalizeMatchText(combinedText);
+
+        foreach (var (phrase, tag) in KnownTagPhrases)
+        {
+            if (normalizedText.Contains(phrase, StringComparison.OrdinalIgnoreCase))
+            {
+                AddTag(tags, tag);
+            }
+        }
+
+        foreach (var token in ExtractTagTokens(combinedText))
+        {
+            AddTag(tags, token);
+            if (tags.Count >= 8)
+            {
+                break;
+            }
+        }
+
+        return tags
+            .Where(tag => !string.IsNullOrWhiteSpace(tag))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(8)
+            .ToList();
+    }
+
+    private static IEnumerable<string> ExtractTagTokens(string text)
+    {
+        var tokens = new List<string>();
+        var current = new StringBuilder();
+
+        foreach (var character in text)
+        {
+            if (char.IsLetterOrDigit(character) || character is '#' or '.')
+            {
+                current.Append(character);
+                continue;
+            }
+
+            AddCurrentToken();
+        }
+
+        AddCurrentToken();
+        return tokens;
+
+        void AddCurrentToken()
+        {
+            if (current.Length == 0)
+            {
+                return;
+            }
+
+            var token = current.ToString().Trim();
+            current.Clear();
+
+            if (token.Length < 3 || TagStopWords.Contains(token))
+            {
+                return;
+            }
+
+            tokens.Add(token);
+        }
+    }
+
+    private static void AddTag(List<string> tags, string? value)
+    {
+        var tag = value?.Trim();
+        if (string.IsNullOrWhiteSpace(tag)
+            || string.Equals(tag, "QuickAnswers", StringComparison.OrdinalIgnoreCase)
+            || tags.Contains(tag, StringComparer.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        tags.Add(tag);
+    }
+
+    private static string NormalizeMatchText(string? value)
+        => string.Join(' ', new string((value ?? string.Empty)
+            .ToLowerInvariant()
+            .Select(character => char.IsLetterOrDigit(character) || character is '#' or '.' ? character : ' ')
+            .ToArray())
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
+    private KnowledgeEntryViewModel? FindDuplicateKnowledgeEntry(SaveKnowledgeEntryPayload draft)
+    {
+        var candidateKeys = BuildKnowledgeQuestionKeys(draft.Title, draft.Aliases);
+        if (candidateKeys.Count == 0)
+        {
+            return null;
+        }
+
+        return KnowledgeEntries.FirstOrDefault(entry =>
+            string.Equals(entry.ProfileId, draft.ProfileId, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(entry.EntryType, draft.EntryType, StringComparison.OrdinalIgnoreCase)
+            && BuildKnowledgeQuestionKeys(entry.Title, DeserializeOptionalList(entry.AliasesJson)).Overlaps(candidateKeys));
+    }
+
+    private static HashSet<string> BuildKnowledgeQuestionKeys(string? title, IEnumerable<string>? aliases)
+    {
+        var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        AddKnowledgeQuestionKey(keys, title);
+
+        if (aliases is not null)
+        {
+            foreach (var alias in aliases)
+            {
+                AddKnowledgeQuestionKey(keys, alias);
+            }
+        }
+
+        return keys;
+    }
+
+    private static void AddKnowledgeQuestionKey(HashSet<string> keys, string? value)
+    {
+        var normalized = NormalizeKnowledgeQuestionKey(value);
+        if (!string.IsNullOrWhiteSpace(normalized))
+        {
+            keys.Add(normalized);
+        }
+    }
+
+    private static string NormalizeKnowledgeQuestionKey(string? value)
+        => string.Join(' ', new string((value ?? string.Empty)
+            .ToLowerInvariant()
+            .Select(character => char.IsLetterOrDigit(character) ? character : ' ')
+            .ToArray())
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
     private void OnReviewStatusChanged(BackofficeReviewPayload draft, string? status)
     {
         draft.ReviewStatus = string.IsNullOrWhiteSpace(status) ? "Pending" : status;
@@ -3426,6 +3967,19 @@
     private static bool CanPromoteToKnowledge(BackofficeReviewPayload draft)
         => string.Equals(draft.ReviewStatus, "Reviewed", StringComparison.OrdinalIgnoreCase)
            || string.Equals(draft.ReviewStatus, "Approved", StringComparison.OrdinalIgnoreCase);
+
+    private static bool CanCreateKnowledgeEntryFromReport(BackofficeReviewPayload draft)
+        => CanPromoteToKnowledge(draft)
+           && !string.IsNullOrWhiteSpace(draft.ValidatedQuestion)
+           && !string.IsNullOrWhiteSpace(draft.ValidatedResponse)
+           && (!string.Equals(draft.ReviewStatus, "Approved", StringComparison.OrdinalIgnoreCase)
+               || !string.IsNullOrWhiteSpace(draft.ReviewCategory));
+
+    private static bool CanOpenKnowledgeEntryFromReport(BackofficeReportViewModel? report, BackofficeReviewPayload draft)
+        => HasLinkedKnowledgeEntry(report) || CanCreateKnowledgeEntryFromReport(draft);
+
+    private static bool HasLinkedKnowledgeEntry(BackofficeReportViewModel? report)
+        => report?.PromotedKnowledgeEntryId.HasValue == true;
 
     private static bool CanPublishKnowledge(BackofficeReviewPayload draft)
         => draft.PromoteToKnowledge
@@ -3506,15 +4060,33 @@
         }
 
         var term = KnowledgeSearchTerm.Trim();
-        return Contains(term, entry.Title)
+        return MatchesTrackingId(term, "kb", entry.Id)
+               || MatchesTrackingId(term, "knowledge", entry.Id)
+               || Contains(term, entry.Id.ToString(CultureInfo.InvariantCulture))
+               || Contains(term, entry.Title)
                || Contains(term, entry.SourceName)
                || Contains(term, entry.EntryType)
                || Contains(term, DecodeKnowledgeContent(entry))
-               || Contains(term, entry.Summary);
+               || Contains(term, entry.Summary)
+               || DeserializeOptionalList(entry.KeywordsJson).Any(keyword => Contains(term, keyword))
+               || DeserializeOptionalList(entry.AliasesJson).Any(alias => Contains(term, alias));
     }
 
     private static bool Contains(string term, string? value)
         => !string.IsNullOrWhiteSpace(value) && value.Contains(term, StringComparison.OrdinalIgnoreCase);
+
+    private static bool MatchesTrackingId(string term, string prefix, int id)
+    {
+        var normalizedTerm = NormalizeTrackingSearchTerm(term);
+        var normalizedPrefix = NormalizeTrackingSearchTerm(prefix);
+        var idText = id.ToString(CultureInfo.InvariantCulture);
+
+        return string.Equals(normalizedTerm, idText, StringComparison.OrdinalIgnoreCase)
+               || string.Equals(normalizedTerm, $"{normalizedPrefix}{idText}", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeTrackingSearchTerm(string value)
+        => new(value.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
 
     private bool MatchesUserFilter(BackofficeUserViewModel user)
     {

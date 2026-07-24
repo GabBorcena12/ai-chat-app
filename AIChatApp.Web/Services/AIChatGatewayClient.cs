@@ -376,9 +376,19 @@ public class AIChatGatewayClient(
         SaveKnowledgeEntryPayload payload,
         CancellationToken cancellationToken)
     {
+        var result = await CreateKnowledgeEntryWithResultAsync(token, payload, cancellationToken);
+        return string.IsNullOrWhiteSpace(result.Message) ? "Knowledge entry created." : result.Message;
+    }
+
+    public async Task<SaveKnowledgeEntryResult> CreateKnowledgeEntryWithResultAsync(
+        string token,
+        SaveKnowledgeEntryPayload payload,
+        CancellationToken cancellationToken)
+    {
         using var request = CreateRequest(HttpMethod.Post, "backoffice/knowledge", token);
         request.Content = CreateJsonContent(payload);
-        return await SendTextAsync(request, cancellationToken, "Unable to create the knowledge entry.");
+        return await SendJsonAsync<SaveKnowledgeEntryResult>(request, cancellationToken, "Unable to create the knowledge entry.")
+            ?? new SaveKnowledgeEntryResult { Message = "Knowledge entry created." };
     }
 
     public async Task<string> UpdateKnowledgeEntryAsync(
@@ -390,6 +400,17 @@ public class AIChatGatewayClient(
         using var request = CreateRequest(HttpMethod.Put, $"backoffice/knowledge/{id}", token);
         request.Content = CreateJsonContent(payload);
         return await SendTextAsync(request, cancellationToken, "Unable to update the knowledge entry.");
+    }
+
+    public async Task<string> LinkReportToKnowledgeEntryAsync(
+        string token,
+        int reportId,
+        int knowledgeEntryId,
+        CancellationToken cancellationToken)
+    {
+        using var request = CreateRequest(HttpMethod.Put, $"backoffice/reports/{reportId}/promoted-knowledge/{knowledgeEntryId}", token);
+        request.Content = CreateJsonContent(new { });
+        return await SendTextAsync(request, cancellationToken, "Unable to link the report to the knowledge entry.");
     }
 
     private HttpRequestMessage CreateRequest(HttpMethod method, string path, string? token = null)

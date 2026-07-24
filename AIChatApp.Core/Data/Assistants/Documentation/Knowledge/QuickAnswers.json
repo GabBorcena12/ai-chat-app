@@ -310,8 +310,22 @@
                                         "how does machine learning work in aichatapp",
                                         "tell me more about machine learning in aichatapp",
                                         "what is ml training in aichatapp",
-                                        "how does the ml training project work"
+                                        "how does the ml training project work",
+                                        "how does ml training improve future chat answers in aichatapp",
+                                        "how does ml training improve future chat answers",
+                                        "can the reviewer model make future chat replies better",
+                                        "what does the ml reviewer do for future responses",
+                                        "how is ml training used by the chat app"
                                     ],
+                        "keywords":  [
+                                         "ML Training",
+                                         "reviewer model",
+                                         "future answers",
+                                         "future chat replies",
+                                         "response quality",
+                                         "ML.NET reviewer"
+                                     ],
+                        "sourceName":  "MLTraining",
                         "answer":  "AIChatApp uses the local LLM to generate answers, while ML.NET acts as a reviewer that classifies response quality after admins build, train, and publish a reviewer model from approved reports."
                     },
                     {

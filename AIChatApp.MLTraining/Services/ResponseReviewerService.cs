@@ -92,6 +92,11 @@ public sealed class ResponseReviewerService : IResponseReviewer
             issue = "Incomplete";
             confidence = 0.86f;
         }
+        else if (ContradictsMlTrainingWorkflow(question, answer))
+        {
+            issue = "Incorrect";
+            confidence = 0.91f;
+        }
         else if (answer.Length > 900)
         {
             issue = "TooLong";
@@ -165,6 +170,24 @@ public sealed class ResponseReviewerService : IResponseReviewer
 
         return sentences.Count >= 3 && sentences.GroupBy(sentence => string.Join(' ', sentence.Split(' ').Take(6)))
             .Any(group => group.Count() > 1);
+    }
+
+    private static bool ContradictsMlTrainingWorkflow(string question, string answer)
+    {
+        var normalizedQuestion = question.ToLowerInvariant();
+        if (!normalizedQuestion.Contains("ml training")
+            || (!normalizedQuestion.Contains("improve") && !normalizedQuestion.Contains("future chat")))
+        {
+            return false;
+        }
+
+        var normalizedAnswer = answer.ToLowerInvariant();
+        return normalizedAnswer.Contains("doesn't improve future chat answers")
+               || normalizedAnswer.Contains("does not improve future chat answers")
+               || normalizedAnswer.Contains("ml training isn't used")
+               || normalizedAnswer.Contains("ml training is not used")
+               || normalizedAnswer.Contains("training isn't used")
+               || normalizedAnswer.Contains("training is not used");
     }
 
     private static string InferIntent(string question, string? contextMode)

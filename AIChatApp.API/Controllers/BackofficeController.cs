@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
+using System.Text;
 using System.Text.Json;
 
 namespace AIChatApp.API.Controllers
@@ -387,6 +388,12 @@ namespace AIChatApp.API.Controllers
         [HttpPost("knowledge")]
         public async Task<IActionResult> CreateKnowledge([FromBody] SaveKnowledgeEntryRequest request)
         {
+            var duplicate = await FindDuplicateKnowledgeEntryAsync(request, null);
+            if (duplicate is not null)
+            {
+                return Conflict($"Knowledge entry already exists: {duplicate.Title}");
+            }
+
             var entry = BuildKnowledgeEntry(request);
             entry.CreatedAt = DateTime.UtcNow;
             entry.UpdatedAt = entry.CreatedAt;
@@ -395,7 +402,11 @@ namespace AIChatApp.API.Controllers
 
             _dbContext.AssistantKnowledgeEntries.Add(entry);
             await _dbContext.SaveChangesAsync();
-            return Ok("Knowledge entry created.");
+            return Ok(new SaveKnowledgeEntryResponse
+            {
+                Id = entry.Id,
+                Message = "Knowledge entry created."
+            });
         }
 
         [HttpPut("knowledge/{id:int}")]
@@ -422,6 +433,29 @@ namespace AIChatApp.API.Controllers
 
             await _dbContext.SaveChangesAsync();
             return Ok("Knowledge entry updated.");
+        }
+
+        [HttpPut("reports/{id:int}/promoted-knowledge/{knowledgeEntryId:int}")]
+        public async Task<IActionResult> LinkPromotedKnowledge(int id, int knowledgeEntryId)
+        {
+            var report = await _dbContext.ChatResponseReports.FirstOrDefaultAsync(x => x.Id == id);
+            if (report is null)
+            {
+                return NotFound("Report not found.");
+            }
+
+            var knowledgeExists = await _dbContext.AssistantKnowledgeEntries.AnyAsync(x => x.Id == knowledgeEntryId);
+            if (!knowledgeExists)
+            {
+                return NotFound("Knowledge entry not found.");
+            }
+
+            report.PromotedKnowledgeEntryId = knowledgeEntryId;
+            report.ReviewedBy = User.FindFirstValue(ClaimTypes.Name) ?? "admin";
+            report.ReviewedAt = DateTime.UtcNow;
+
+            await _dbContext.SaveChangesAsync();
+            return Ok("Report linked to knowledge entry.");
         }
 
         private static AssistantKnowledgeEntryEntity BuildKnowledgeEntryFromReview(ChatResponseReportEntity report, ReviewReportedResponseRequest request)
@@ -522,6 +556,84 @@ namespace AIChatApp.API.Controllers
             return cleaned is { Count: > 0 }
                 ? JsonSerializer.Serialize(cleaned, JsonOptions)
                 : null;
+        }
+
+        private async Task<AssistantKnowledgeEntryEntity?> FindDuplicateKnowledgeEntryAsync(SaveKnowledgeEntryRequest request, int? excludedEntryId)
+        {
+            var profileId = string.IsNullOrWhiteSpace(request.ProfileId) ? "Documentation" : request.ProfileId.Trim();
+            var entryType = string.IsNullOrWhiteSpace(request.EntryType) ? "Reference" : request.EntryType.Trim();
+            var candidateKeys = BuildKnowledgeQuestionKeys(request.Title, request.Aliases);
+            if (candidateKeys.Count == 0)
+            {
+                return null;
+            }
+
+            var entries = await _dbContext.AssistantKnowledgeEntries
+                .AsNoTracking()
+                .Where(x => x.ProfileId == profileId && x.EntryType == entryType)
+                .Where(x => !excludedEntryId.HasValue || x.Id != excludedEntryId.Value)
+                .ToListAsync();
+
+            return entries.FirstOrDefault(entry =>
+            {
+                var existingKeys = BuildKnowledgeQuestionKeys(entry.Title, DeserializeOptionalList(entry.AliasesJson));
+                return existingKeys.Overlaps(candidateKeys);
+            });
+        }
+
+        private static HashSet<string> BuildKnowledgeQuestionKeys(string? title, IEnumerable<string>? aliases)
+        {
+            var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            AddKnowledgeQuestionKey(keys, title);
+
+            if (aliases is not null)
+            {
+                foreach (var alias in aliases)
+                {
+                    AddKnowledgeQuestionKey(keys, alias);
+                }
+            }
+
+            return keys;
+        }
+
+        private static void AddKnowledgeQuestionKey(HashSet<string> keys, string? value)
+        {
+            var normalized = NormalizeKnowledgeQuestionKey(value);
+            if (!string.IsNullOrWhiteSpace(normalized))
+            {
+                keys.Add(normalized);
+            }
+        }
+
+        private static string NormalizeKnowledgeQuestionKey(string? value)
+        {
+            var builder = new StringBuilder();
+            foreach (var character in (value ?? string.Empty).ToLowerInvariant())
+            {
+                builder.Append(char.IsLetterOrDigit(character) ? character : ' ');
+            }
+
+            return string.Join(' ', builder
+                .ToString()
+                .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        }
+
+        private static List<string> DeserializeOptionalList(string? json)
+        {
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                return [];
+            }
+
+            try
+            {
+                return JsonSerializer.Deserialize<List<string>>(json) ?? [];
+            }
+            catch (JsonException)
+            {
+                return json.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+            }
         }
 
         private static bool IsTrainingCandidate(ChatResponseReportEntity report)

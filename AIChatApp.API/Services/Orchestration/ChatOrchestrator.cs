@@ -303,8 +303,8 @@ namespace AIChatApp.API.Services.Orchestration
             var retryPrompt = await _promptBuilder.RebuildPromptWithIncompleteResponseAsync(request.ChatId, request.User, request.Prompt, incompleteResponse, request.ContextMode);
             if (retryPrompt.Length > 5000)
             {
-                _logger.LogWarning("Retry prompt too large, skipping retry.");
-                return incompleteResponse;
+                _logger.LogWarning("Retry prompt too large, using compact repair prompt.");
+                retryPrompt = BuildCompactRepairPrompt(request, incompleteResponse);
             }
 
             // Get LLM stream (or single output)
@@ -365,6 +365,39 @@ namespace AIChatApp.API.Services.Orchestration
             return cleaned;
         }
 
+        private static string BuildCompactRepairPrompt(ChatRequest request, string badResponse)
+        {
+            var safeBadResponse = badResponse.Length > 1400
+                ? badResponse[..1400]
+                : badResponse;
+
+            var safeQuestion = request.Prompt.Length > 900
+                ? request.Prompt[..900]
+                : request.Prompt;
+
+            var context = string.Equals(request.ContextMode, "documentation", StringComparison.OrdinalIgnoreCase)
+                ? "Use only the AIChatApp project context. Be specific and correct."
+                : "Answer the user's question directly and correctly.";
+
+            return $"""
+System: You are repairing a low-quality assistant response.
+{context}
+
+User question:
+{safeQuestion}
+
+Bad assistant response:
+{safeBadResponse}
+
+Write a corrected final answer.
+Rules:
+- Do not say the previous answer was bad.
+- Do not include labels like User, Assistant, Response, or Answer.
+- Keep it concise, practical, and complete.
+- If the question is about AIChatApp ML Training, explain that it trains a response-quality reviewer, not the original answer generator.
+""";
+        }
+
         private bool ShouldRetryResponse(ChatRequest request, string response, CancellationToken token)
         {
             if (token.IsCancellationRequested)
@@ -395,7 +428,7 @@ namespace AIChatApp.API.Services.Orchestration
                 return false;
             }
 
-            return review.IssueType is "Incomplete" or "Repetitive" or "PromptLeak" or "TooLong";
+            return review.IssueType is "Incorrect" or "Incomplete" or "Repetitive" or "PromptLeak" or "TooLong";
         }
 
         private bool ShouldStopGeneration(StringBuilder buffer, string user, string? contextMode)
@@ -520,6 +553,12 @@ namespace AIChatApp.API.Services.Orchestration
                 return answer;
             }
 
+            var matchedAnswer = await TryGetMatchedFastDocumentationAnswerAsync(_assistantProfile.ProfileId, normalized);
+            if (!string.IsNullOrWhiteSpace(matchedAnswer))
+            {
+                return matchedAnswer;
+            }
+
             var topicSummary = await TryGetTopicSummaryAnswerAsync(_assistantProfile.ProfileId, normalized);
             if (!string.IsNullOrWhiteSpace(topicSummary))
             {
@@ -589,6 +628,243 @@ namespace AIChatApp.API.Services.Orchestration
             }
 
             return answers;
+        }
+
+        private async Task<string?> TryGetMatchedFastDocumentationAnswerAsync(string profileId, string normalizedPrompt)
+        {
+            try
+            {
+                var bestMatch = (Answer: (string?)null, Score: 0, Method: string.Empty);
+                var entries = await _assistantContentService.LoadQuickAnswersAsync(profileId);
+                foreach (var entry in entries)
+                {
+                    var match = ScoreQuickAnswerEntry(entry, normalizedPrompt);
+                    if (match.Score > bestMatch.Score)
+                    {
+                        bestMatch = (entry.Answer, match.Score, match.Method);
+                    }
+                }
+
+                if (bestMatch.Score >= 78)
+                {
+                    _logger.LogInformation("Fast documentation answer matched by {Method} ({Score}%).", bestMatch.Method, bestMatch.Score);
+                    return bestMatch.Answer;
+                }
+
+                _logger.LogInformation(
+                    "No fast documentation answer match across {EntryCount} quick answer(s). Best score: {Score}%.",
+                    entries.Count,
+                    bestMatch.Score);
+                return null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static (int Score, string Method) ScoreQuickAnswerEntry(JsonQuickAnswerEntry entry, string normalizedPrompt)
+        {
+            var normalizedAliases = entry.Aliases
+                .Concat([entry.Title])
+                .Select(NormalizePrompt)
+                .Where(alias => !string.IsNullOrWhiteSpace(alias))
+                .ToList();
+
+            var exactScore = normalizedAliases.Any(alias => string.Equals(alias, normalizedPrompt, StringComparison.OrdinalIgnoreCase))
+                ? 100
+                : 0;
+            if (exactScore > 0)
+            {
+                return (exactScore, "exact alias");
+            }
+
+            var fuzzyScore = normalizedAliases
+                .Select(alias => ScoreQuickAnswerAlias(alias, normalizedPrompt))
+                .DefaultIfEmpty(0)
+                .Max();
+            if (fuzzyScore >= 85)
+            {
+                return (fuzzyScore, "close wording");
+            }
+
+            var tagScore = ScoreQuickAnswerTags(entry, normalizedPrompt);
+            if (tagScore >= 82)
+            {
+                return (tagScore, "tags");
+            }
+
+            var semanticScore = ScoreQuickAnswerSemantic(entry, normalizedPrompt);
+            return semanticScore >= 78 ? (semanticScore, "similar meaning") : (0, string.Empty);
+        }
+
+        private static int ScoreQuickAnswerAlias(string normalizedAlias, string normalizedPrompt)
+        {
+            if (string.IsNullOrWhiteSpace(normalizedAlias) || string.IsNullOrWhiteSpace(normalizedPrompt))
+            {
+                return 0;
+            }
+
+            if (string.Equals(normalizedAlias, normalizedPrompt, StringComparison.OrdinalIgnoreCase))
+            {
+                return 100;
+            }
+
+            if (normalizedAlias.Contains(normalizedPrompt, StringComparison.OrdinalIgnoreCase)
+                || normalizedPrompt.Contains(normalizedAlias, StringComparison.OrdinalIgnoreCase))
+            {
+                return 95;
+            }
+
+            var aliasTokens = GetMeaningfulMatchTokens(normalizedAlias);
+            var promptTokens = GetMeaningfulMatchTokens(normalizedPrompt);
+            if (aliasTokens.Count < 3 || promptTokens.Count < 3)
+            {
+                return 0;
+            }
+
+            var overlap = aliasTokens.Count(promptTokens.Contains);
+            var promptCoverage = overlap / (double)promptTokens.Count;
+            var aliasCoverage = overlap / (double)aliasTokens.Count;
+
+            return promptCoverage >= 0.85 && aliasCoverage >= 0.65
+                ? (int)Math.Round((promptCoverage * 60) + (aliasCoverage * 40))
+                : 0;
+        }
+
+        private static int ScoreQuickAnswerTags(JsonQuickAnswerEntry entry, string normalizedPrompt)
+        {
+            var tagTexts = entry.Keywords
+                .Concat([entry.SourceName, entry.Summary])
+                .Select(NormalizePrompt)
+                .Where(tag => !string.IsNullOrWhiteSpace(tag))
+                .ToList();
+
+            if (tagTexts.Count == 0)
+            {
+                return 0;
+            }
+
+            if (tagTexts.Any(tag => normalizedPrompt.Contains(tag, StringComparison.OrdinalIgnoreCase)))
+            {
+                return 94;
+            }
+
+            var promptTokens = GetMeaningfulMatchTokens(normalizedPrompt);
+            var tagTokens = tagTexts
+                .SelectMany(GetMeaningfulMatchTokens)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            if (tagTokens.Count == 0 || promptTokens.Count == 0)
+            {
+                return 0;
+            }
+
+            var overlap = tagTokens.Count(promptTokens.Contains);
+            var tagCoverage = overlap / (double)tagTokens.Count;
+            return tagCoverage >= 0.75 ? (int)Math.Round(tagCoverage * 90) : 0;
+        }
+
+        private static int ScoreQuickAnswerSemantic(JsonQuickAnswerEntry entry, string normalizedPrompt)
+        {
+            var promptConcepts = BuildSemanticConcepts(normalizedPrompt);
+            var entryConcepts = entry.Aliases
+                .Concat(entry.Keywords)
+                .Concat([entry.Title, entry.SourceName, entry.Summary, entry.Answer])
+                .SelectMany(value => BuildSemanticConcepts(NormalizePrompt(value)))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            if (promptConcepts.Count < 3 || entryConcepts.Count < 3)
+            {
+                return 0;
+            }
+
+            var overlap = promptConcepts.Count(entryConcepts.Contains);
+            var precision = overlap / (double)promptConcepts.Count;
+            var recall = overlap / (double)entryConcepts.Count;
+            var harmonic = precision + recall == 0 ? 0 : (2 * precision * recall) / (precision + recall);
+
+            return (int)Math.Round(harmonic * 100);
+        }
+
+        private static HashSet<string> BuildSemanticConcepts(string value)
+        {
+            var concepts = GetMeaningfulMatchTokens(value)
+                .Select(NormalizeConcept)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var concept in concepts.ToList())
+            {
+                foreach (var related in ExpandRelatedConcepts(concept))
+                {
+                    concepts.Add(related);
+                }
+            }
+
+            if (value.Contains("machine learning", StringComparison.OrdinalIgnoreCase))
+            {
+                concepts.Add("ml");
+            }
+
+            if (value.Contains("ml training", StringComparison.OrdinalIgnoreCase))
+            {
+                concepts.Add("reviewer");
+                concepts.Add("quality");
+            }
+
+            if (value.Contains("reviewer model", StringComparison.OrdinalIgnoreCase))
+            {
+                concepts.Add("ml");
+                concepts.Add("training");
+                concepts.Add("quality");
+            }
+
+            return concepts;
+        }
+
+        private static string NormalizeConcept(string token)
+        {
+            if (token.EndsWith("ies", StringComparison.OrdinalIgnoreCase) && token.Length > 4)
+            {
+                return $"{token[..^3]}y";
+            }
+
+            if (token.EndsWith("ing", StringComparison.OrdinalIgnoreCase) && token.Length > 5)
+            {
+                return token[..^3];
+            }
+
+            if (token.EndsWith("ed", StringComparison.OrdinalIgnoreCase) && token.Length > 4)
+            {
+                return token[..^2];
+            }
+
+            return token.EndsWith('s') && token.Length > 3 ? token[..^1] : token;
+        }
+
+        private static IReadOnlyList<string> ExpandRelatedConcepts(string concept)
+            => concept switch
+            {
+                "answer" or "response" or "reply" => ["answer", "response", "reply"],
+                "improve" or "improvement" or "better" or "quality" => ["improve", "better", "quality"],
+                "future" or "later" => ["future", "later"],
+                "train" or "training" => ["train", "training"],
+                "review" or "reviewer" or "classify" or "classification" => ["review", "reviewer", "classify", "quality"],
+                "ml" or "machine" or "learning" => ["ml", "machine", "learning"],
+                _ => []
+            };
+
+        private static HashSet<string> GetMeaningfulMatchTokens(string value)
+        {
+            var stopWords = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "a", "an", "and", "are", "can", "do", "does", "for", "how", "in", "is", "it", "of", "on", "or", "the", "to", "what", "when", "where", "why", "with"
+            };
+
+            return value
+                .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Where(token => token.Length > 1 && !stopWords.Contains(token))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
         }
 
         private async Task<string?> TryGetTopicSummaryAnswerAsync(string profileId, string normalizedPrompt)

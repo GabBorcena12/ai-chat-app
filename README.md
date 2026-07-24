@@ -1,423 +1,273 @@
 # AIChatApp
 
-Last updated: May 5, 2026
+Last updated: July 24, 2026
 
-A local AI chat application built on .NET 9, LLamaSharp, SQL Server, JWT authentication, Google Authenticator-style TOTP 2FA, and a Blazor frontend.
+AIChatApp is a local .NET 10 documentation chat platform. It combines a Blazor Web UI, ASP.NET Core API, YARP Gateway, SQL Server persistence, JWT authentication, Google Authenticator-compatible 2FA, local GGUF model inference through LLamaSharp, Backoffice knowledge management, and an ML.NET response-quality reviewer workflow.
 
-AIChatApp is a full-stack AI chat platform built with Blazor, ASP.NET Core, YARP, SQL Server, JWT authentication, Google Authenticator 2FA, and local GGUF model inference through LLamaSharp. The solution supports streaming chat over Server-Sent Events, continuation handling for cut-off responses, JSON-seeded prompt and knowledge configuration mirrored into SQL, assistant-profile-driven behavior, browser-persisted conversations, response reporting, backoffice validation, an ML.NET response reviewer workflow, a Web-hosted FAQ page, and Docker-based local deployment.
+The app is designed for a project knowledge base: users ask documentation questions in Chat, admins validate reported answers in Backoffice, and approved knowledge can be reused by the assistant without editing code files.
 
-## Overview
+## Projects
 
-This solution contains six main projects:
+- `AIChatApp.Web`
+  - Blazor frontend for Chat, Backoffice, FAQs, login, 2FA setup, profile/account modals, and responsive workspace navigation.
+  - Routes include `/chat`, `/backoffice`, and `/faqs`.
+  - Backoffice includes Validation, Machine Learning, and Administration workflows.
+- `AIChatApp.API`
+  - ASP.NET Core backend for authentication, chat orchestration, chat history, response reporting, backoffice APIs, prompt/knowledge storage, and local LLM access.
+  - Runs EF Core migrations at startup.
+- `AIChatApp.Gateway`
+  - YARP reverse proxy for API access.
+  - Applies API key checks, rate limiting, and route forwarding.
+- `AIChatApp.Core`
+  - Shared configuration, entities, DbContext, middleware, content path helpers, and assistant JSON models.
+- `AIChatApp.MLTraining`
+  - ML.NET response reviewer trainer, runtime reviewer service, model options, and Backoffice training workflow services.
+- `AIChatApp.Console`
+  - Local console client for direct model testing.
+- `AIChatApp.Tests`
+  - Unit tests, including response reviewer quality tests.
 
-- `AIChatApp.API`: backend for authentication, chat orchestration, chat history, and LLM access
-- `AIChatApp.Gateway`: reverse proxy entry point with API key validation and rate limiting
-- `AIChatApp.Core`: shared config, middleware, data access, and model path helpers
-- `AIChatApp.Console`: local console chat client for direct model testing
-- `AIChatApp.Web`: Blazor frontend for login, 2FA management, chat UI, FAQ page, backoffice navigation, Backoffice Machine Learning modals, and streaming chat
-- `AIChatApp.MLTraining`: ML.NET reviewer models, trainer, runtime reviewer service, and Backoffice training workflow services
+## Current Features
 
-## Key Features
+- Local GGUF chat model inference with LLamaSharp.
+- Streaming chat through Server-Sent Events.
+- Non-streaming JSON chat endpoint.
+- Continuation endpoint for cut-off answers.
+- JWT login and Google Authenticator-compatible TOTP 2FA.
+- Gateway API key validation and rate limiting.
+- Browser-persisted conversations with rename, delete, timestamps, copy, read-aloud, report, and continue actions.
+- Dark graphite and royal-blue responsive UI theme.
+- Responsive Chat and Backoffice side navigation with collapsible groups.
+- Backoffice modals for reported responses, prompt templates, knowledge entries, profile management, user management, FAQs, and Machine Learning tools.
+- Visible tracking IDs for Reports, Knowledge Entries, and Prompt Templates.
+- Search by visible IDs such as `Report #9`, `KB #63`, or `Prompt #4`.
+- Knowledge duplicate protection for new entries and report-created knowledge entries.
+- Knowledge Entry edit mode locks identity fields and allows safe updates to reusable content, aliases, tags, summary, and published state.
+- Published SQL knowledge overrides bundled JSON seed data.
+- ML.NET reviewer model can classify generated answer quality after training and publishing.
+- Rule-based reviewer fallback catches obvious issues even without a published ML.NET model.
 
-- Local LLM inference using GGUF models configured through `LocalModel:FileName` and `LocalModel:ContextSize`
-- Streaming chat with `ask-stream` over Server-Sent Events
-- Non-streaming JSON chat with `ask-ai`
-- Continuation flow with `ask-continue` for cut-off responses
-- JWT-authenticated API access with Google Authenticator TOTP 2FA
-- Gateway-side API key checks, route forwarding, and rate limiting with YARP
-- Assistant-profile-based prompt and knowledge loading
-- JSON-based prompt templates, quick answers, topic knowledge, and console/shared context files imported into SQL for centralized tracking
-- Retrieval-style documentation context selection from focused knowledge sources
-- Browser-persisted conversation workspace with rename, delete, timestamps, copy, read-aloud, continue, and report actions
-- Unified Web workspace routes for Chat, Backoffice, and FAQs, with ML Training inside Backoffice > Machine Learning
-- Responsive workspace sidebars with collapsible groups and app-themed navigation colors
-- Response reporting pipeline for saving bad or suspicious AI answers for later investigation
-- Admin backoffice for reviewing reported answers, validating fixes, managing prompt templates, and maintaining assistant knowledge in SQL
-- ML.NET reviewer workflow for training a response-quality classifier from approved backoffice reports
-- Runtime response-quality review before answers are returned, with rule fallback when no ML.NET model is published
-- Docker-ready local deployment for API, gateway, and web application workflows
+## Assistant Knowledge
 
-## Resume Summary
+Assistant behavior comes from two places:
 
-Built a full-stack AI chat platform in .NET with a Blazor frontend, ASP.NET Core API, YARP-based gateway, SQL Server persistence, JWT authentication, Google Authenticator 2FA, and local LLM inference using GGUF models through LLamaSharp. Designed a profile-driven assistant architecture with JSON-based prompt and knowledge configuration, retrieval-style documentation context loading, streaming chat via Server-Sent Events, continuation handling for truncated responses, browser-persisted conversation state, response reporting, and Docker-based local deployment support.
+- Bundled JSON seed files under `AIChatApp.Core/Data/Assistants/Documentation`.
+- Published SQL rows managed in Backoffice.
 
-## Backoffice Guide
+The API prefers published SQL data. If no published SQL data exists for a source, it falls back to the bundled JSON files.
 
-The backoffice is the admin workflow for improving assistant quality without editing code files directly.
+Main knowledge types:
 
-### What It Is For
+- `QuickAnswer`
+  - Best for FAQ-style questions with a direct reusable answer.
+  - Supports question aliases and tags.
+  - Used for fast answers before the normal model is asked.
+- `Topic`
+  - Best for grouped subject notes and summaries.
+  - Useful when the user asks about a broader area.
+- `Reference`
+  - Best for longer documentation content.
+  - Used as supporting context for the assistant.
 
-- reviewing reported bad answers from real user chats
-- validating corrected question and response pairs
-- promoting validated fixes into reusable assistant knowledge
-- editing published prompt templates that shape assistant behavior
-- managing published knowledge entries such as quick answers, topics, and references
-- managing users and assigning backoffice roles such as `Admin`, `DataValidator`, and `AppUser`
-- building, training, and publishing the ML.NET reviewer from approved report examples
+## Quick Answer Matching
 
-### Main Workflow
+When a user asks a question, the assistant checks reusable knowledge before using the normal chat model.
 
-1. A user reports a bad or suspicious response from the chat UI.
-2. The backend saves the report with the original prompt, assistant response, and metadata.
-3. An admin opens `/backoffice` and reviews the report in `Reported Responses`.
-4. The admin updates the validated question and validated response, then chooses a review status and category.
-5. If the fix should improve future answers, the admin checks `Promote to knowledge`.
-6. If the new knowledge should become live right away, the admin also checks `Publish immediately`.
-7. Approved reports with a category become training candidates.
-8. In `Machine Learning`, the admin opens `Training Data` to review or approve training examples.
-9. In `Training Jobs`, the admin builds a dataset and trains the ML.NET reviewer classifier.
-10. In `Model Registry`, the admin publishes the reviewer model that should become active.
-11. The API loads the published reviewer and classifies generated answers before they are returned.
+User-friendly flow:
 
-### ML.NET Reviewer Workflow
+```text
+User question
+  -> exact saved question match
+  -> close wording match
+  -> matching tags or source
+  -> similar meaning match
+  -> normal AI chat answer
+```
 
-The ML.NET reviewer does not generate chat answers. Qwen/Llama still generates responses. The reviewer checks the generated answer and predicts whether it looks `Good`, `Incomplete`, `Repetitive`, `PromptLeak`, `TooLong`, or `Incorrect`.
+What each step means:
 
-High-level flow:
+- Exact saved question match
+  - The user question matches a saved question or alias after basic cleanup.
+  - Example: saved alias `What ports does the Gateway use locally?`
+- Close wording match
+  - The words are very similar even if not identical.
+  - Example: `Which local ports does the Gateway use?`
+- Matching tags or source
+  - The question includes tags or source words added by admins.
+  - Example tags: `gateway`, `ports`, `local development`, `docker`.
+- Similar meaning match
+  - The app compares meaningful concepts and related words such as `answer`, `response`, `reply`, `improve`, `better`, `quality`, `training`, and `reviewer`.
+  - This is currently a lightweight in-app meaning-similarity matcher, not an external embedding service.
+  - A real embedding model can replace or extend this step later.
+- Normal AI chat answer
+  - If no knowledge entry is confident enough, the request goes through the normal prompt-building and LLM generation flow.
 
-1. User reports a bad response.
-2. Admin validates the response in Backoffice.
-3. Approved reports become training candidates.
-4. Admin builds a dataset from approved examples.
-5. Admin trains the ML.NET reviewer.
-6. Admin checks the accuracy/F1 result.
-7. Admin publishes the reviewer model.
-8. API uses the published reviewer before returning future LLM answers.
+Backoffice shows this workflow in plain language so admins understand why aliases, tags, and summaries matter.
 
-What gets generated:
+## Backoffice
 
-- training jobs create candidate ML.NET model files under `AIChatApp.MLTraining/ReviewerModels/Candidates`
-- candidate files are named like `DocumentationQualityReviewer-v1-job1.zip`
-- publishing copies the selected candidate to `AIChatApp.MLTraining/ReviewerModels/published-response-reviewer.zip`
-- the published `.zip` is the model package loaded by the API through `ml.Model.Load(path, out _)`
+Backoffice is the admin workspace for improving the assistant without editing code files directly.
 
-How the API uses it:
+Main sections:
 
-- `ResponseReviewer:PublishedModelPath` points to the published reviewer zip
-- `ResponseReviewerService` loads that zip when the file exists
-- generated chat answers are converted into text features with the question, answer, and context mode
-- the model predicts a quality label such as `Good`, `Incomplete`, `PromptLeak`, `Repetitive`, or `TooLong`
-- deterministic rule checks still run, so obvious risky answers are caught even without a published model
-
-Reviewer behavior:
-
-- if a published ML.NET model exists, the API uses it for response-quality classification
-- if no model is published yet, the API still uses rule-based fallback checks
-- risky documentation answers can be retried or cleaned before the user sees them
-- the reviewer is a quality gate, not a response generator
-
-### Backoffice Sections
-
-- Sidebar groups
-  - `Workspaces`: links to Chat, Backoffice, and FAQs
-  - `Validation`: workflow, reported responses, prompt templates, and knowledge entries
-  - `Machine Learning`: training data, training jobs, and model registry modals
-  - `Administration`: profile and user management
-  - groups are collapsible so the page stays easier to scan
 - `Workflow`
-  - shows the full improvement loop from reported answer to published reviewer
-  - displays counts for pending reports, approved fixes, training candidates, and live knowledge
-  - lists training candidates created from approved reviewed reports
+  - Shows the improvement loop and current counts.
+  - Opens reported responses, prompt templates, knowledge entries, and ML Training.
 - `Reported Responses`
-  - list view of reported answers
-  - filter by status such as needs action, reviewed, approved, or rejected
-  - open a review popup to validate and optionally promote corrections
+  - Lists user-reported answers.
+  - Search by `Report #ID`, linked `KB #ID`, prompt, response, user, status, or category.
+  - Review modal lets admins set validated question, validated response, review status, category, and notes.
+  - Linked knowledge entries can be opened from the report.
 - `Prompt Templates`
-  - database-backed assistant behavior rules such as system context, answer style, retry template, and continuation template
+  - Lists database-backed prompt templates.
+  - Search by `Prompt #ID`, template name, profile, content, or status.
+  - Edit modal shows `Prompt #ID`.
 - `Knowledge Entries`
-  - database-backed quick answers, topics, and reference content used by the assistant
+  - Lists quick answers, topics, and references.
+  - Search by `KB #ID`, title, source, type, summary, content, aliases, or tags.
+  - Create and edit modals use the same theme and responsive layout.
+  - New entries are checked for duplicate questions and aliases.
 - `Machine Learning`
-  - `Training Data`: import text notes, add reviewed examples, and approve examples for training
-  - `Training Jobs`: build datasets from approved examples and train reviewer models
-  - `Model Registry`: see candidate reviewer models and publish the one the API should use
-- `Profile Management`
-  - update the chat display name and avatar label
-- `User Management`
-  - create users from the backoffice
-  - assign `Admin`, `DataValidator`, and `AppUser` roles
-  - enable or disable users and manage confirmation state
+  - Contains Training Data, Training Jobs, and Model Registry.
+  - These replaced the separate ML Training web area.
+- `Administration`
+  - Profile Management and User Management open in modals.
+  - User list shows concise user details and opens row details in a modal.
 
-### Roles
+## Report To Knowledge Flow
+
+Recommended flow:
+
+1. User reports a bad or suspicious answer from Chat.
+2. Admin opens the report in Backoffice.
+3. Admin writes the corrected question and answer.
+4. Admin sets review status and category.
+5. If the corrected answer should be reused in future chat, admin creates or edits a linked Knowledge Entry.
+6. If the Knowledge Entry is published, the chat assistant can use it for future matching.
+7. If the report is approved with a category and validated response, it can also become reviewer training data.
+
+Rules:
+
+- A reported response can be reviewed without creating knowledge.
+- Creating knowledge makes the corrected answer reusable for future chat.
+- Publishing knowledge makes it live for matching.
+- Approved reports with a category are training candidates for the reviewer model.
+- Duplicate questions and aliases are blocked for new Knowledge Entries.
+- Existing linked Knowledge Entries can be updated safely.
+
+## ML Training
+
+ML Training is for the response-quality reviewer. It does not generate the main chat answer.
+
+The normal flow is:
+
+1. The local GGUF model generates an answer.
+2. The response reviewer checks the generated answer.
+3. The reviewer classifies the answer as `Good`, `Incorrect`, `Incomplete`, `TooLong`, `PromptLeak`, or `Repetitive`.
+4. If the answer looks risky, the chat flow can retry or repair the answer.
+
+Training workflow:
+
+1. Admin approves reviewed report examples.
+2. Training Data imports approved examples.
+3. Training Jobs builds a dataset and trains an ML.NET reviewer model.
+4. Model Registry publishes the selected model.
+5. The API loads the published `.zip` model if it exists.
+
+Generated model files:
+
+```text
+AIChatApp.MLTraining/ReviewerModels/Candidates
+AIChatApp.MLTraining/ReviewerModels/published-response-reviewer.zip
+```
+
+Important notes:
+
+- Training data teaches the reviewer how to judge answer quality.
+- Training data does not directly become a final chat answer.
+- To make a corrected answer reusable by Chat, create and publish a Knowledge Entry.
+- The reviewer uses ML.NET when a published model exists.
+- The reviewer still uses rules when no model exists or when a rule catches an obvious issue.
+
+## Authentication And Roles
+
+Authentication uses JWT. Optional 2FA uses Google Authenticator-compatible TOTP codes.
+
+Backoffice roles:
 
 - `Admin`
-  - full backoffice access including prompt templates, knowledge, reports, and user management
+  - Full backoffice access.
 - `DataValidator`
-  - intended for review and validation workflows in the backoffice
+  - Intended for report review and validation workflows.
 - `AppUser`
-  - default application user role for normal chat usage
+  - Normal chat user role.
 
-### Default Admin Seeding
+Default admin seeding is controlled by configuration, but real usernames, emails, and passwords should not be committed to source control.
 
-On a fresh project startup, the API can seed a default admin account and required roles automatically.
-
-Relevant API config keys:
-
-```json
-"Backoffice": {
-  "AdminUsernames": ["gabrielborcena12"],
-  "SeedDefaultAdmin": true,
-  "DefaultAdminUsername": "admin",
-  "DefaultAdminEmail": "admin@localhost",
-  "DefaultAdminPassword": "Admin123!"
-}
-```
-
-Change the default admin password before using the project outside local development.
-
-### Promote Vs Publish
-
-- `Promote to knowledge`
-  - creates a reusable knowledge entry from a reviewed report
-- `Publish immediately`
-  - makes that new knowledge entry active right away
-- `Published`
-  - means a prompt template or knowledge entry is live and available to the assistant
-
-## Requirements
-
-- .NET 9 SDK and runtime
-- SQL Server, either local or containerized
-- A compatible GGUF model file for local inference
-- A client such as Postman, Bruno, or the included Blazor frontend for calling the API
-
-## Setup
-
-### 1. Download a GGUF model
-
-Download the GGUF model used by this project from Hugging Face:
-
-- [Qwen2.5-3B-Instruct-GGUF](https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF)
-
-Use this file name in the project:
-
-- `qwen2.5-3b-instruct-q4_k_m.gguf`
-
-### 2. Place the model file
-
-Copy the `.gguf` file into:
-
-```text
-AIChatApp/AIChatApp.Core/Models
-```
-
-### 3. Configure the application
-
-Review the API, gateway, and web configuration files:
-
-```text
-AIChatApp.API/appsettings.json
-AIChatApp.API/appsettings.Development.json
-AIChatApp.Gateway/appsettings.json
-AIChatApp.Gateway/appsettings.Development.json
-AIChatApp.Web/appsettings.json
-AIChatApp.Web/appsettings.Development.json
-```
-
-Committed `appsettings` files keep non-sensitive defaults in source control and use dummy placeholders for sensitive values. Load real secrets through ASP.NET Core user secrets for local development and environment variables for Docker or production.
-
-Recommended split:
-
-- keep non-sensitive structure and defaults in `appsettings.json`
-- keep developer-local overrides in `appsettings.Development.json`
-- keep real secrets out of source control
-
-Important secret settings include:
-
-- `JwtSettings:SecretKey`
-- `ApiKey.Settings:Keys:0`
-- `ConnectionStrings:DefaultConnection` when it includes SQL credentials
-- `ConnectionStrings:InventoryAppDb` when it includes SQL credentials
-- `EmailSettings:AppPassword`
-- `Backoffice:DefaultAdminPassword` if you override it with a real value
-
-These values are usually safe to keep in committed config:
-
-- `AppSettings:BaseUrl`
-- `JwtSettings:Issuer`
-- `JwtSettings:Audience`
-- `ApiKey.Settings:ClientName`
-- `Backoffice:AdminUsernames`
-- `Backoffice:SeedDefaultAdmin`
-- `Backoffice:DefaultAdminUsername`
-- `Backoffice:DefaultAdminEmail`
-- `EmailSettings:SmtpServer`
-- `EmailSettings:Port`
-- local development connection strings that do not contain passwords
-
-The local model is configured in API config:
-
-- `LocalModel:FileName`
-- `LocalModel:ContextSize`
-
-Example:
-
-```json
-"LocalModel": {
-  "FileName": "qwen2.5-3b-instruct-q4_k_m.gguf",
-  "ContextSize": 5000
-}
-```
-
-This README assumes `qwen2.5-3b-instruct-q4_k_m.gguf` is the default local model. Keep the file under `AIChatApp.Core/Models` and point `LocalModel:FileName` at that exact filename.
-
-The assistant prompt and knowledge system is now stored as JSON under:
-
-```text
-AIChatApp.Core/Data/Assistants/<ProfileId>/Prompts
-AIChatApp.Core/Data/Assistants/<ProfileId>/Knowledge
-```
-
-Examples:
-
-```text
-AIChatApp.Core/Data/Assistants/Documentation/Prompts/SystemContext.json
-AIChatApp.Core/Data/Assistants/Documentation/Knowledge/QuickAnswers.json
-AIChatApp.Core/Data/Assistants/Documentation/Knowledge/Faq.json
-```
-
-Console-specific and shared content is also JSON-based:
-
-```text
-AIChatApp.Core/Data/Console/system_context.json
-AIChatApp.Core/Data/Console/product_knowledge.json
-AIChatApp.Core/Data/Console/disallowed_topics.json
-AIChatApp.Core/Data/Shared/system_api_context.json
-```
-
-At API startup, the JSON files under `AIChatApp.Core/Data` are imported into the `CoreDataFiles` SQL table after EF migrations run. The import is insert-only by `RelativePath`, so existing database rows are not overwritten by later startup runs. This keeps the JSON files useful as seed/source files while making the data visible in the database.
-
-Web navigation is hosted in `AIChatApp.Web` and uses these routes:
-
-- `/chat`: main documentation chat assistant
-- `/backoffice`: admin validation workspace for reports, knowledge, prompts, users, and reviewer workflow controls
-- Backoffice > Machine Learning: reviewer training data, jobs, and model registry using the same browser session as Chat and Backoffice
-- `/faqs`: readable FAQ page loaded from the assistant knowledge files
-
-The workspace sidebars use one theme color per app area instead of one color per link:
-
-- Chat: green/cyan
-- Backoffice: blue
-- FAQs: cyan
-
-Example local development setup:
+Use placeholders in committed config and set real values through user secrets or environment variables:
 
 ```powershell
 dotnet user-secrets init --project AIChatApp.API
-dotnet user-secrets set "JwtSettings:SecretKey" "replace-with-a-long-random-secret-key" --project AIChatApp.API
-dotnet user-secrets set "ApiKey.Settings:Keys:0" "replace-with-your-api-key" --project AIChatApp.API
-dotnet user-secrets set "EmailSettings:AppPassword" "replace-with-your-smtp-password" --project AIChatApp.API
-dotnet user-secrets set "Backoffice:DefaultAdminPassword" "replace-with-a-strong-admin-password" --project AIChatApp.API
+dotnet user-secrets set "JwtSettings:SecretKey" "<long-random-secret>" --project AIChatApp.API
+dotnet user-secrets set "ApiKey.Settings:Keys:0" "<gateway-api-key>" --project AIChatApp.API
+dotnet user-secrets set "Backoffice:DefaultAdminPassword" "<strong-local-password>" --project AIChatApp.API
 
 dotnet user-secrets init --project AIChatApp.Gateway
-dotnet user-secrets set "ApiKey.Settings:Keys:0" "replace-with-your-api-key" --project AIChatApp.Gateway
+dotnet user-secrets set "ApiKey.Settings:Keys:0" "<gateway-api-key>" --project AIChatApp.Gateway
 ```
 
-If you want to override the default local connection strings too, you can still set them through user secrets.
+Do not store personal usernames, real emails, real passwords, app passwords, or production keys in this README.
 
-Example Docker environment variables for sensitive values only:
+## Configuration
+
+Important settings:
+
+- `AssistantProfile:ProfileId`
+  - Selects the active assistant profile.
+- `AssistantProfile:AssistantName`
+  - Sets the assistant label.
+- `LocalModel:FileName`
+  - Selects the GGUF model file under `AIChatApp.Core/Models`.
+- `LocalModel:ContextSize`
+  - Sets the model context window.
+- `ResponseReviewer:Enabled`
+  - Enables or disables reviewer checks.
+- `ResponseReviewer:PublishedModelPath`
+  - Points to the published reviewer `.zip`.
+- `ResponseReviewer:CandidateModelFolder`
+  - Stores trained candidate reviewer models.
+- `Frontend:GatewayBaseUrl`
+  - Tells the Web app which Gateway URL to call.
+- `ApiKey.Settings`
+  - Controls gateway client name and API keys.
+- `JwtSettings`
+  - Controls JWT issuer, audience, and signing key.
+- `ConnectionStrings`
+  - Controls SQL Server connections.
+
+Sensitive values should be supplied through user secrets locally and environment variables outside local development.
+
+## Local Model Setup
+
+Download a compatible GGUF model, for example:
+
+- `qwen2.5-3b-instruct-q4_k_m.gguf`
+
+Place the model here:
 
 ```text
-ConnectionStrings__DefaultConnection=Server=host.docker.internal,1433;Database=AIChatAppDb;User Id=sa;Password=YourStrong@Passw0rd;TrustServerCertificate=True;
-ConnectionStrings__InventoryAppDb=Server=host.docker.internal,1433;Database=InventoryDb;User Id=sa;Password=YourStrong@Passw0rd;TrustServerCertificate=True;
-JwtSettings__SecretKey=replace-with-a-long-random-secret-key
-ApiKey.Settings__Keys__0=replace-with-your-api-key
-EmailSettings__AppPassword=replace-with-your-smtp-password
-Backoffice__DefaultAdminPassword=replace-with-a-strong-admin-password
+AIChatApp.Core/Models
 ```
 
-Quick Docker setup:
+Then point `LocalModel:FileName` to the file name.
 
-1. Build the API image:
+## Local Development
 
-```powershell
-docker build -t aichatapp-api -f AIChatApp.API/Dockerfile .
-```
-
-2. Build the Gateway image:
-
-```powershell
-docker build -t aichatapp-gateway -f AIChatApp.Gateway/Dockerfile .
-```
-
-3. Run the API container with the required environment variables.
-
-If SQL Server is running on your Windows host, use `host.docker.internal`:
-
-```powershell
-docker run -d --name aichatapp-api -p 7001:8080 `
-  -e JwtSettings__SecretKey="replace-with-a-long-random-secret-key" `
-  -e ApiKey.Settings__Keys__0="replace-with-your-api-key" `
-  -e ConnectionStrings__DefaultConnection="Server=host.docker.internal,1433;Database=AIChatAppDb;User Id=sa;Password=YourStrong@Passw0rd;TrustServerCertificate=True;" `
-  -e ConnectionStrings__InventoryAppDb="Server=host.docker.internal,1433;Database=InventoryDb;User Id=sa;Password=YourStrong@Passw0rd;TrustServerCertificate=True;" `
-  -e EmailSettings__From="your-email@example.com" `
-  -e EmailSettings__SmtpServer="smtp.gmail.com" `
-  -e EmailSettings__Username="your-email@example.com" `
-  -e EmailSettings__AppPassword="replace-with-your-smtp-password" `
-  aichatapp-api
-```
-
-If SQL Server is running in a Docker container instead, place both containers on the same network and use the SQL container name such as `mssqlserver`:
-
-```powershell
-docker network create inventory-network
-docker network connect inventory-network mssqlserver
-
-docker run -d --name aichatapp-api --network inventory-network -p 7001:8080 `
-  -e JwtSettings__SecretKey="replace-with-a-long-random-secret-key" `
-  -e ApiKey.Settings__Keys__0="replace-with-your-api-key" `
-  -e ConnectionStrings__DefaultConnection="Server=mssqlserver,1433;Database=AIChatAppDb;User Id=sa;Password=YourStrong@Passw0rd;TrustServerCertificate=True;" `
-  -e ConnectionStrings__InventoryAppDb="Server=mssqlserver,1433;Database=InventoryDb;User Id=sa;Password=YourStrong@Passw0rd;TrustServerCertificate=True;" `
-  -e EmailSettings__From="your-email@example.com" `
-  -e EmailSettings__SmtpServer="smtp.gmail.com" `
-  -e EmailSettings__Username="your-email@example.com" `
-  -e EmailSettings__AppPassword="replace-with-your-smtp-password" `
-  aichatapp-api
-```
-
-4. Run the Gateway container:
-
-```powershell
-docker run -d --name aichatapp-gateway -p 5001:8080 `
-  -e ApiKey.Settings__Keys__0="replace-with-your-api-key" `
-  aichatapp-gateway
-```
-
-If you are also using a shared Docker network for SQL Server, run the gateway on that same network:
-
-```powershell
-docker run -d --name aichatapp-gateway --network inventory-network -p 5001:8080 `
-  -e ApiKey.Settings__Keys__0="replace-with-your-api-key" `
-  aichatapp-gateway
-```
-
-5. Open the API at `http://localhost:7001`
-6. Open the Gateway at `http://localhost:5001`
-
-If you are running the projects locally with `dotnet run` instead of Docker, the default development ports are:
-
-- API: `https://localhost:7093` and `http://localhost:5157`
-- Gateway: `https://localhost:7067` and `http://localhost:5031`
-- Web: `https://localhost:7033` and `http://localhost:5143`
-- Web routes: `/chat`, `/backoffice`, and `/faqs`
-- ML Training is managed from Backoffice > Machine Learning.
-
-Important local auth note:
-
-- `AIChatApp.Web/appsettings.Development.json` should point `Frontend:GatewayBaseUrl` to `https://localhost:7067/`.
-- Avoid using `http://localhost:5031/` for authenticated Web chat calls because Gateway HTTPS redirection can drop the `Authorization: Bearer <token>` header during redirect.
-- If chat says the session expired immediately after login, restart API, Gateway, and Web, then sign in again.
-
-PowerShell note: the backtick must be the final character on the line. Do not attach it directly to `8080` or any other value.
-
-### 4. Apply the database
-
-The API currently auto-runs EF Core migrations at startup. You can also apply them manually from the repo root:
+Apply database migrations manually if needed:
 
 ```powershell
 dotnet ef database update --project AIChatApp.API --startup-project AIChatApp.API
 ```
-
-### 5. Run the applications
 
 Run the API:
 
@@ -425,21 +275,17 @@ Run the API:
 dotnet run --project AIChatApp.API
 ```
 
-Run the gateway:
+Run the Gateway:
 
 ```powershell
 dotnet run --project AIChatApp.Gateway
 ```
 
-Run the Blazor web app:
+Run the Web app:
 
 ```powershell
 dotnet run --project AIChatApp.Web
 ```
-
-Open Chat at `/chat`, then open ML Training from `/backoffice` > Machine Learning on the Web app host.
-
-The Web app also exposes `/backoffice` for admin validation and `/faqs` for end-user documentation answers.
 
 Run the console client:
 
@@ -447,135 +293,41 @@ Run the console client:
 dotnet run --project AIChatApp.Console
 ```
 
-## Auth And Security
+Common local routes:
 
-### Gateway headers
+- Web Chat: `/chat`
+- Web Backoffice: `/backoffice`
+- Web FAQs: `/faqs`
+- Backoffice Machine Learning: `/backoffice` > Machine Learning
 
-Requests passing through the gateway must include:
+Common development ports may vary by launch profile. Check each project's `launchSettings.json` or the terminal output after startup.
 
-- `X-Api-Client`
-- `X-Api-Key`
+## Gateway
 
-Example:
-
-```http
-X-Api-Client: GajiTechClient
-X-Api-Key: your-api-key
-```
-
-### JWT flow
-
-Authentication is handled by `POST /api/auth/login`.
-
-Login request body:
-
-```json
-{
-  "username": "demo-user",
-  "password": "your-password"
-}
-```
-
-Successful login response:
-
-```json
-{
-  "token": "your-jwt-token"
-}
-```
-
-Use the JWT in authenticated API calls:
+Requests through the Gateway require API key headers:
 
 ```http
-Authorization: Bearer your-jwt-token
+X-Api-Client: <client-name>
+X-Api-Key: <api-key>
 ```
 
-When calling through the gateway, authenticated chat endpoints usually require both:
+Authenticated requests also require:
 
-- `Authorization: Bearer <jwt>`
-- gateway headers: `X-Api-Client` and `X-Api-Key`
-
-For local Web development, call the HTTPS Gateway URL directly:
-
-```json
-{
-  "Frontend": {
-    "GatewayBaseUrl": "https://localhost:7067/"
-  }
-}
+```http
+Authorization: Bearer <jwt-token>
 ```
 
-Using the HTTP Gateway URL can cause authenticated chat requests to fail after login if the request is redirected and the bearer token is not forwarded.
+Gateway route overview:
 
-### Google Authenticator 2FA flow
+- `/auth/*` forwards to API auth endpoints.
+- `/chat/*` forwards to API chat endpoints.
+- `/chathistory/*` forwards to API chat history endpoints.
 
-The API supports TOTP-based 2FA using Google Authenticator or compatible apps.
-
-Initial setup flow:
-
-1. Log in with username and password to get a JWT.
-2. Call `POST /api/auth/2fa/setup` with `Authorization: Bearer <token>`.
-3. Read the returned `AuthenticatorUri` or `SharedKey`.
-4. Scan the `AuthenticatorUri` as a QR code, or enter the shared key manually, in Google Authenticator.
-5. Call `POST /api/auth/2fa/verify` with the current 6-digit code.
-6. Future login requests must include `OtpCode`.
-
-Setup response:
-
-```json
-{
-  "sharedKey": "BASE32SECRET",
-  "authenticatorUri": "otpauth://totp/AIChatApp:demo-user?secret=BASE32SECRET&issuer=AIChatApp&digits=6&period=30"
-}
-```
-
-Verify request:
-
-```json
-{
-  "code": "123456"
-}
-```
-
-Login request after 2FA is enabled:
-
-```json
-{
-  "username": "demo-user",
-  "password": "your-password",
-  "otpCode": "123456"
-}
-```
-
-### Change device flow
-
-If a user gets a new phone and needs a new QR code:
-
-1. Sign in from an existing trusted session.
-2. Call `POST /api/auth/2fa/setup` again.
-3. Render the returned `AuthenticatorUri` as a QR code.
-4. Scan it using the new device.
-5. Call `POST /api/auth/2fa/verify` using the new device's 6-digit code.
-
-### Disable 2FA
-
-Send the current authenticator code to:
-
-```text
-POST /api/auth/2fa/disable
-```
-
-Request body:
-
-```json
-{
-  "code": "123456"
-}
-```
+For local Web development, use the HTTPS Gateway URL when possible so authenticated requests do not lose the `Authorization` header during redirects.
 
 ## Main API Endpoints
 
-### Auth
+Auth:
 
 - `POST /api/auth/register`
 - `POST /api/auth/login`
@@ -583,189 +335,66 @@ Request body:
 - `POST /api/auth/2fa/verify`
 - `POST /api/auth/2fa/disable`
 - `POST /api/auth/reset-password`
-- `POST /api/auth/test-email-service`
 
-### Chat
+Chat:
 
 - `POST /api/chat/ask-stream`
 - `POST /api/chat/ask-ai`
 - `POST /api/chat/ask-continue`
 
-`ask-stream` request body:
-
-```json
-{
-  "chatId": "000001",
-  "user": "John Doe",
-  "prompt": "Hello AI",
-  "contextMode": "documentation"
-}
-```
-
-`ask-stream` requires:
-
-- `Authorization: Bearer <jwt>`
-- gateway headers if called through the gateway
-
-`ask-stream` returns Server-Sent Events with token chunks plus a final `complete` event.
-
-`ask-ai` returns a JSON payload:
-
-```json
-{
-  "prompt": "Hello AI",
-  "response": "Hello! How can I help?"
-}
-```
-
-`ask-continue` is used to finish a response that was cut off. Request body:
-
-```json
-{
-  "chatId": "000001",
-  "user": "John Doe",
-  "originalPrompt": "What is this project used for?",
-  "partialResponse": "AIChatApp is a local .NET chat application...",
-  "contextMode": "documentation"
-}
-```
-
-### Chat history
+Chat history:
 
 - `GET /api/chathistory/conversations/{chatId}`
 
-This endpoint requires:
+Backoffice:
 
-- `Authorization: Bearer <jwt>`
-- gateway headers if called through the gateway
+- workflow summary
+- reported responses
+- prompt templates
+- knowledge entries
+- user management
+- reviewer training data
+- reviewer training jobs
+- reviewer model registry
 
-## Example Requests
+## Example Chat Request
 
-### Register
-
-```http
-POST /api/auth/register
-Content-Type: application/json
-```
-
-```json
-{
-  "username": "demo-user",
-  "password": "StrongPassword123!",
-  "email": "demo@example.com"
-}
-```
-
-### Login
-
-```http
-POST /api/auth/login
-Content-Type: application/json
-```
+Streaming request:
 
 ```json
 {
-  "username": "demo-user",
-  "password": "StrongPassword123!"
-}
-```
-
-### Setup Google Authenticator
-
-```http
-POST /api/auth/2fa/setup
-Authorization: Bearer your-jwt-token
-```
-
-### Verify Google Authenticator
-
-```http
-POST /api/auth/2fa/verify
-Authorization: Bearer your-jwt-token
-Content-Type: application/json
-```
-
-```json
-{
-  "code": "123456"
-}
-```
-
-### Ask The Chat API Through The Gateway
-
-```http
-POST /chat/ask-stream
-X-Api-Client: GajiTechClient
-X-Api-Key: your-api-key
-Authorization: Bearer your-jwt-token
-Content-Type: application/json
-```
-
-```json
-{
-  "chatId": "000001",
-  "user": "John Doe",
-  "prompt": "Hello AI!",
+  "chatId": "demo-chat",
+  "user": "demo-user",
+  "prompt": "What ports does the Gateway use locally?",
   "contextMode": "documentation"
 }
 ```
 
-### Ask The JSON Chat Endpoint Through The Gateway
+`ask-stream` returns Server-Sent Events with streamed token chunks and a final completion event.
 
-```http
-POST /chat/ask-ai
-X-Api-Client: GajiTechClient
-X-Api-Key: your-api-key
-Authorization: Bearer your-jwt-token
-Content-Type: application/json
+## FAQ Behavior
+
+The FAQ experience reads quick-answer style documentation content. Published SQL knowledge can replace the bundled JSON seed data, so Backoffice updates can become visible without changing source files.
+
+## Testing
+
+Run tests:
+
+```powershell
+dotnet test AIChatApp.Tests/AIChatApp.UnitTesting.csproj
 ```
 
-```json
-{
-  "chatId": "000001",
-  "user": "John Doe",
-  "prompt": "What does AIChatApp.API do?",
-  "contextMode": "documentation"
-}
+Build the Web app without writing into locked `bin` folders:
+
+```powershell
+dotnet build AIChatApp.Web/AIChatApp.Web.csproj -p:UseAppHost=false -o artifacts/build/web
 ```
 
-### Continue A Cut Response Through The Gateway
+## Security Notes
 
-```http
-POST /chat/ask-continue
-X-Api-Client: GajiTechClient
-X-Api-Key: your-api-key
-Authorization: Bearer your-jwt-token
-Content-Type: application/json
-```
-
-```json
-{
-  "chatId": "000001",
-  "user": "John Doe",
-  "originalPrompt": "What is this project used for?",
-  "partialResponse": "AIChatApp is a local .NET chat application...",
-  "contextMode": "documentation"
-}
-```
-
-## Notes
-
-- `ask-stream` is an SSE endpoint, not a normal JSON endpoint.
-- `ask-ai` is the non-streaming JSON endpoint.
-- `ask-continue` is the dedicated continuation endpoint for finishing a cut-off answer.
-- Prompt and knowledge files are JSON-seeded under `AIChatApp.Core/Data/...` and mirrored into the `CoreDataFiles` table on API startup.
-- The documentation assistant uses profile-specific prompt templates, quick answers, topic summaries, and focused knowledge references.
-- The Web app is currently pinned to the documentation assistant experience.
-- The chat UI supports browser-persisted conversations, inline rename/delete, timestamps, copy, read-aloud, continue, report, completion notifications, and auto-follow scrolling.
-- Chat, Backoffice, and FAQs are available as Web-hosted workspaces with side navigation.
-- Backoffice includes Machine Learning modals for Training Data, Training Jobs, and Model Registry; Chat also has collapsible conversations, workspace, and account sections.
-- Workspace links use the current app theme color, not separate colors for every link.
-- The gateway maps `/chat/*`, `/auth/*`, and `/chathistory/*` to the API service.
-- In local development, the Web app should call the HTTPS Gateway URL directly to preserve `Authorization` headers on authenticated chat requests.
-- ML Training is hosted inside `AIChatApp.Web` under Backoffice > Machine Learning.
-- Google Authenticator support is based on TOTP with 6-digit codes and 30-second time windows.
-- The Blazor frontend uses the gateway as its API entry point in development.
-- `AIChatApp.Web.csproj` excludes generated `artifacts` folders so temporary build outputs are not copied recursively into `bin`.
-- Rotate any secrets that were previously committed to the repository before using this project in a shared environment.
-
+- Keep real credentials out of source control and documentation.
+- Use placeholders in committed settings.
+- Use user secrets for local sensitive values.
+- Use environment variables for Docker or deployed environments.
+- Rotate any secret that was ever committed accidentally.
+- Do not expose personal usernames, real emails, passwords, API keys, app passwords, or JWT secrets in README examples.

@@ -8518,60 +8518,101 @@ body:has(.backoffice-chat-theme) {
 
 .backoffice-loading-card {
     display: grid;
-    grid-template-columns: 3.2rem minmax(0, 1fr) 2.4rem;
-    align-items: center;
-    gap: 0.9rem;
-    width: min(520px, 100%);
-    padding: 1rem;
-    border: 1px solid rgba(120, 142, 177, 0.18);
-    border-radius: 14px;
+    place-items: center;
+    width: clamp(9rem, 18vw, 13rem);
+    aspect-ratio: 1;
+    padding: clamp(1.1rem, 2vw, 1.6rem);
+    border: 1px solid rgba(120, 142, 177, 0.16);
+    border-radius: 28px;
     background: #0d1725;
-    color: #ffffff;
     box-shadow: none;
 }
 
-.backoffice-loading-card .brand-symbol {
-    width: 3.2rem;
-    height: 3.2rem;
-    border-radius: 13px;
-    overflow: hidden;
+.backoffice-premium-loader {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 100%;
+    aspect-ratio: 1;
 }
 
-.backoffice-loading-card .brand-symbol img {
+.backoffice-premium-loader .loader-brand-symbol {
+    position: relative;
+    z-index: 2;
+    width: clamp(3.4rem, 7vw, 4.75rem);
+    min-width: 0;
+    height: clamp(3.4rem, 7vw, 4.75rem);
+    border-radius: 18px;
+    overflow: hidden;
+    box-shadow: 0 0 0 1px rgba(65, 105, 225, 0.18);
+}
+
+.backoffice-premium-loader .loader-brand-symbol img {
     display: block;
     width: 100%;
     height: 100%;
     object-fit: cover;
-    transform: scale(1.16);
+    transform: scale(1.14);
 }
 
-.backoffice-loading-card h1 {
-    margin: 0.12rem 0 0;
-    color: #ffffff;
-    font-size: clamp(1.05rem, 2vw, 1.35rem);
-    line-height: 1.15;
-}
-
-.backoffice-loading-card p {
-    margin: 0.45rem 0 0;
-    color: #aebbd0;
-    font-size: 0.9rem;
-    line-height: 1.45;
-}
-
-.backoffice-loading-spinner {
-    width: 2.15rem;
-    height: 2.15rem;
-    border: 3px solid rgba(120, 142, 177, 0.22);
-    border-top-color: #4169e1;
+.backoffice-premium-loader .loader-glow {
+    content: "";
+    position: absolute;
+    inset: 28%;
     border-radius: 999px;
-    animation: backoffice-spin 0.85s linear infinite;
+    background: rgba(65, 105, 225, 0.24);
+    filter: blur(14px);
+    animation: backoffice-loader-breathe 1.7s ease-in-out infinite;
 }
 
-@keyframes backoffice-spin {
-    to {
-        transform: rotate(360deg);
-    }
+.backoffice-premium-loader .loader-orbit {
+    position: absolute;
+    border-radius: 999px;
+    border: 1px solid rgba(120, 142, 177, 0.18);
+}
+
+.backoffice-premium-loader .loader-orbit::after {
+    content: "";
+    position: absolute;
+    width: 0.58rem;
+    height: 0.58rem;
+    border-radius: 999px;
+    background: #22d79a;
+    box-shadow: 0 0 0 0.28rem rgba(34, 215, 154, 0.13);
+}
+
+.backoffice-premium-loader .loader-orbit-large {
+    inset: 3%;
+    border-top-color: rgba(65, 105, 225, 0.95);
+    border-right-color: rgba(65, 105, 225, 0.5);
+    animation: backoffice-loader-spin 1.25s linear infinite;
+}
+
+.backoffice-premium-loader .loader-orbit-large::after {
+    top: 10%;
+    right: 13%;
+}
+
+.backoffice-premium-loader .loader-orbit-small {
+    inset: 17%;
+    border-bottom-color: rgba(65, 105, 225, 0.78);
+    border-left-color: rgba(65, 105, 225, 0.42);
+    animation: backoffice-loader-spin 1.8s linear infinite reverse;
+}
+
+.backoffice-premium-loader .loader-orbit-small::after {
+    bottom: 5%;
+    left: 18%;
+    width: 0.44rem;
+    height: 0.44rem;
+}
+
+@keyframes backoffice-loader-spin {
+    to { transform: rotate(360deg); }
+}
+
+@keyframes backoffice-loader-breathe {
+    50% { transform: scale(1.18); opacity: 0.72; }
 }
 
 @media (max-width: 1080px) {
@@ -8630,12 +8671,8 @@ body:has(.backoffice-chat-theme) {
     }
 
     .backoffice-loading-card {
-        grid-template-columns: 3rem minmax(0, 1fr);
-    }
-
-    .backoffice-loading-spinner {
-        grid-column: 1 / -1;
-        justify-self: start;
+        width: clamp(8.5rem, 42vw, 11rem);
+        border-radius: 24px;
     }
 }
 
@@ -10155,6 +10192,34 @@ body:has(.backoffice-chat-theme) {
     white-space: nowrap;
 }
 
+.backoffice-chat-theme .tracking-id {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    max-width: 100%;
+    color: #8fb2ff;
+    font-size: 0.76rem;
+    font-weight: 900;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.backoffice-chat-theme .compact-listing-card .tracking-id {
+    margin-bottom: 0.18rem;
+}
+
+.backoffice-chat-theme .compact-listing-card small:not(.tracking-id) {
+    display: block;
+    margin-top: 0.18rem;
+    color: #aebbd0;
+    font-size: 0.78rem;
+    font-weight: 700;
+    line-height: 1.25;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .backoffice-chat-theme .compact-listing-card strong::first-letter,
 .backoffice-chat-theme .user-management-card strong::first-letter {
     text-transform: uppercase;
@@ -10419,14 +10484,60 @@ body:has(.backoffice-chat-theme) {
     font-weight: 800;
 }
 
+.backoffice-chat-theme .knowledge-edit-grid .field-help,
+.backoffice-chat-theme .report-review-form-grid .field-help {
+    color: #aab8cf;
+    font-size: 0.78rem;
+    line-height: 1.4;
+}
+
 .backoffice-chat-theme .knowledge-edit-grid .backoffice-wide {
     grid-column: 1 / -1;
+}
+
+.backoffice-chat-theme .knowledge-edit-lock-note {
+    padding: 0.8rem 0.95rem;
+    border: 1px solid rgba(65, 105, 225, 0.28);
+    border-radius: 12px;
+    background: #101a2b;
+    color: #aab8cf;
+    font-size: 0.84rem;
+    line-height: 1.45;
 }
 
 .backoffice-chat-theme .knowledge-edit-modal .text-input,
 .backoffice-chat-theme .knowledge-edit-modal .backoffice-textarea {
     background: #101a2b !important;
     border-radius: 10px;
+}
+
+.backoffice-chat-theme .knowledge-edit-modal .text-input:disabled {
+    border-color: rgba(120, 142, 177, 0.12) !important;
+    background: #0d1725 !important;
+    color: #8fa2bd !important;
+    cursor: not-allowed;
+    opacity: 1;
+}
+
+.backoffice-chat-theme .knowledge-edit-modal .knowledge-tags-control {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.65rem;
+    align-items: center;
+}
+
+.backoffice-chat-theme .knowledge-edit-modal .generate-tags-button {
+    min-height: 3rem;
+    padding-inline: 1rem;
+    border-color: rgba(var(--backoffice-royal), 0.78) !important;
+    background: #4169e1 !important;
+    color: #ffffff !important;
+    white-space: nowrap;
+}
+
+.backoffice-chat-theme .knowledge-edit-modal .generate-tags-button .action-icon {
+    color: #ffffff !important;
+    stroke: currentColor !important;
 }
 
 .backoffice-chat-theme .knowledge-content-textarea {
@@ -10459,6 +10570,109 @@ body:has(.backoffice-chat-theme) {
     width: 1.1rem;
     height: 1.1rem;
     accent-color: #4169e1;
+}
+
+.backoffice-chat-theme .knowledge-matching-guide {
+    display: grid;
+    gap: 0.7rem;
+    padding: 0.35rem 0.1rem 0.85rem;
+    border-bottom: 1px solid rgba(120, 142, 177, 0.14);
+}
+
+.backoffice-chat-theme .knowledge-matching-guide h3 {
+    margin: 0.15rem 0 0;
+    color: #f8fbff;
+    font-size: clamp(0.98rem, 2vw, 1.08rem);
+}
+
+.backoffice-chat-theme .knowledge-matching-guide p {
+    margin: 0;
+    color: #aab8cf;
+    font-size: 0.86rem;
+    line-height: 1.45;
+}
+
+.backoffice-chat-theme .knowledge-matching-guide ol {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.backoffice-chat-theme .knowledge-matching-guide li {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    color: #d7e0f2;
+    font-size: 0.84rem;
+    font-weight: 800;
+    line-height: 1.25;
+}
+
+.backoffice-chat-theme .knowledge-matching-guide li:not(:last-child)::after {
+    content: ">";
+    color: #4169e1;
+    font-weight: 900;
+}
+
+.backoffice-chat-theme .knowledge-match-flow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    padding: 0.8rem;
+}
+
+.backoffice-chat-theme .knowledge-match-flow span,
+.backoffice-chat-theme .knowledge-match-flow strong {
+    min-height: 2.35rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.45rem 0.75rem;
+    border-radius: 999px;
+    font-size: 0.82rem;
+    line-height: 1.25;
+    text-align: center;
+}
+
+.backoffice-chat-theme .knowledge-match-flow strong {
+    border: 1px solid rgba(65, 105, 225, 0.36);
+    background: #152656;
+    color: #ffffff;
+}
+
+.backoffice-chat-theme .knowledge-match-flow span {
+    border: 1px solid rgba(120, 142, 177, 0.16);
+    background: #101a2b;
+    color: #c4d0e4;
+}
+
+@media (max-width: 640px) {
+    .backoffice-chat-theme .knowledge-matching-guide {
+        gap: 0.6rem;
+    }
+
+    .backoffice-chat-theme .knowledge-matching-guide ol {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 0.35rem;
+    }
+
+    .backoffice-chat-theme .knowledge-matching-guide li:not(:last-child)::after {
+        content: "";
+    }
+
+    .backoffice-chat-theme .knowledge-edit-modal .knowledge-tags-control {
+        grid-template-columns: 1fr;
+    }
+
+    .backoffice-chat-theme .knowledge-edit-modal .generate-tags-button {
+        width: 100%;
+        justify-content: center;
+    }
 }
 
 .backoffice-chat-theme .report-review-modal {
@@ -10570,6 +10784,50 @@ body:has(.backoffice-chat-theme) {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
 }
 
+.backoffice-chat-theme .report-review-modal .report-knowledge-action-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.85rem;
+    align-items: center;
+    padding: 0.85rem;
+    border: 1px solid rgba(65, 105, 225, 0.32);
+    border-radius: 12px;
+    background: #101a2b;
+}
+
+.backoffice-chat-theme .report-review-modal .report-knowledge-action-card strong {
+    display: block;
+    color: #ffffff;
+    font-size: 0.94rem;
+}
+
+.backoffice-chat-theme .report-review-modal .report-knowledge-action-card p {
+    margin: 0.2rem 0 0;
+    color: #aab8cf;
+    font-size: 0.82rem;
+    line-height: 1.4;
+}
+
+.backoffice-chat-theme .report-review-modal .report-knowledge-action-card small {
+    display: block;
+    margin-top: 0.35rem;
+    color: #8fa2bd;
+    font-size: 0.76rem;
+    line-height: 1.35;
+}
+
+.backoffice-chat-theme .report-review-modal .report-knowledge-action-card .primary-action {
+    border-color: rgba(var(--backoffice-royal), 0.78) !important;
+    background: #4169e1 !important;
+    color: #ffffff !important;
+    white-space: nowrap;
+}
+
+.backoffice-chat-theme .report-review-modal .report-knowledge-action-card .action-icon {
+    color: #ffffff !important;
+    stroke: currentColor !important;
+}
+
 .backoffice-chat-theme .report-review-modal .backoffice-inline-options {
     display: grid !important;
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
@@ -10600,6 +10858,15 @@ body:has(.backoffice-chat-theme) {
 
     .backoffice-chat-theme .report-review-modal .compact-textarea {
         min-height: 7.25rem !important;
+    }
+
+    .backoffice-chat-theme .report-review-modal .report-knowledge-action-card {
+        grid-template-columns: 1fr;
+    }
+
+    .backoffice-chat-theme .report-review-modal .report-knowledge-action-card .primary-action {
+        width: 100%;
+        justify-content: center;
     }
 }
 
@@ -13871,17 +14138,31 @@ body:has(.backoffice-chat-theme) {
 .backoffice-chat-theme .ml-training-upload-card,
 .backoffice-chat-theme .ml-training-form-card,
 .backoffice-chat-theme .ml-training-job-controls,
-.backoffice-chat-theme .ml-training-list-card {
+.backoffice-chat-theme .ml-training-list-card,
+.backoffice-chat-theme .ml-training-purpose-note {
     display: grid;
     gap: 0.9rem;
     padding: 1rem;
     background: #0e1826 !important;
 }
 
+.backoffice-chat-theme .ml-training-purpose-note {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+    border-color: rgba(65, 105, 225, 0.42);
+    background: rgba(65, 105, 225, 0.08) !important;
+}
+
+.backoffice-chat-theme .ml-training-purpose-note .note-icon {
+    width: 2.4rem;
+    height: 2.4rem;
+}
+
 .backoffice-chat-theme .ml-training-upload-card h3,
 .backoffice-chat-theme .ml-training-form-card h3,
 .backoffice-chat-theme .ml-training-job-controls h3,
-.backoffice-chat-theme .ml-training-list-card h3 {
+.backoffice-chat-theme .ml-training-list-card h3,
+.backoffice-chat-theme .ml-training-purpose-note h3 {
     margin: 0;
     color: #ffffff;
     font-size: 1rem;
@@ -13891,7 +14172,8 @@ body:has(.backoffice-chat-theme) {
 .backoffice-chat-theme .ml-training-upload-card p,
 .backoffice-chat-theme .ml-training-form-card p,
 .backoffice-chat-theme .ml-training-job-controls p,
-.backoffice-chat-theme .ml-training-list-card p {
+.backoffice-chat-theme .ml-training-list-card p,
+.backoffice-chat-theme .ml-training-purpose-note p {
     margin: 0.25rem 0 0;
     color: #aebbd0;
     line-height: 1.45;
@@ -14020,6 +14302,37 @@ body:has(.backoffice-chat-theme) {
     gap: 0.7rem;
 }
 
+.backoffice-chat-theme .training-candidates-header small {
+    display: block;
+    margin-top: 0.3rem;
+    color: #8fa2bd;
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+
+.backoffice-chat-theme .ml-training-candidates-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.backoffice-chat-theme .ml-training-candidates-header > div {
+    min-width: 0;
+}
+
+.backoffice-chat-theme .ml-training-candidates-header .ml-training-theme-button {
+    flex: 0 0 auto;
+    margin-left: auto;
+    white-space: nowrap;
+}
+
+.backoffice-chat-theme .ml-training-pagination {
+    margin-top: 0.15rem;
+    padding-top: 0.85rem;
+    border-top: 1px solid rgba(120, 142, 177, 0.12);
+}
+
 .backoffice-chat-theme .ml-training-row,
 .backoffice-chat-theme .ml-training-job-row {
     display: grid !important;
@@ -14109,6 +14422,17 @@ body:has(.backoffice-chat-theme) {
         width: 2.5rem;
         height: 2.5rem;
     }
+
+    .backoffice-chat-theme .ml-training-candidates-header {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .backoffice-chat-theme .ml-training-candidates-header .ml-training-theme-button {
+        width: 100%;
+        justify-content: center;
+        margin-left: 0;
+    }
 }
 
 /* Let Backoffice modals hug short content while still scrolling when content is long. */
@@ -14166,4 +14490,54 @@ body:has(.backoffice-chat-theme) {
     .backoffice-chat-theme .ml-training-management-modal .ml-training-modal-body {
         max-height: calc(100dvh - 9.5rem) !important;
     }
+}
+
+/* Keep Backoffice flush with the viewport instead of inset inside a shell. */
+.backoffice-page.backoffice-chat-theme {
+    padding: 0 !important;
+}
+
+.backoffice-chat-theme .backoffice-layout,
+.backoffice-chat-theme.sidebar-nav-hidden .backoffice-layout {
+    height: 100dvh !important;
+    border-radius: 0 !important;
+}
+
+.backoffice-chat-theme .backoffice-sidebar {
+    height: 100dvh !important;
+}
+
+@media (min-width: 761px) {
+    .backoffice-chat-theme .backoffice-layout,
+    .backoffice-chat-theme.sidebar-nav-hidden .backoffice-layout {
+        height: 100dvh !important;
+    }
+
+    .backoffice-chat-theme .backoffice-sidebar {
+        height: 100dvh !important;
+    }
+}
+
+/* Hide modal scrollbar rails while keeping modal content scrollable. */
+.chat-app .modal-backdrop,
+.chat-app .confirm-dialog,
+.chat-app .app-modal,
+.chat-app .app-modal *,
+.backoffice-chat-theme .backoffice-modal-backdrop,
+.backoffice-chat-theme .backoffice-modal,
+.backoffice-chat-theme .backoffice-modal * {
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+}
+
+.chat-app .modal-backdrop::-webkit-scrollbar,
+.chat-app .confirm-dialog::-webkit-scrollbar,
+.chat-app .app-modal::-webkit-scrollbar,
+.chat-app .app-modal *::-webkit-scrollbar,
+.backoffice-chat-theme .backoffice-modal-backdrop::-webkit-scrollbar,
+.backoffice-chat-theme .backoffice-modal::-webkit-scrollbar,
+.backoffice-chat-theme .backoffice-modal *::-webkit-scrollbar {
+    width: 0 !important;
+    height: 0 !important;
+    display: none !important;
 }

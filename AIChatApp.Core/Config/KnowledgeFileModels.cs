@@ -17,7 +17,11 @@ public sealed class JsonQuickAnswersFile
 
 public sealed class JsonQuickAnswerEntry
 {
+    public string Title { get; set; } = string.Empty;
     public List<string> Aliases { get; set; } = [];
+    public List<string> Keywords { get; set; } = [];
+    public string SourceName { get; set; } = string.Empty;
+    public string Summary { get; set; } = string.Empty;
     public string Answer { get; set; } = string.Empty;
 }
 
