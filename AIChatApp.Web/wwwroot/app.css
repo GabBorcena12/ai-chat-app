@@ -14120,6 +14120,29 @@ body:has(.backoffice-chat-theme) {
     grid-template-rows: auto minmax(0, 1fr) !important;
 }
 
+/* Keep Backoffice header titles anchored left when the side navigation is open. */
+@media (min-width: 721px) {
+    .backoffice-chat-theme:not(.sidebar-nav-hidden) .backoffice-header,
+    .backoffice-chat-theme.sidebar-open:not(.sidebar-nav-hidden) .backoffice-header {
+        grid-template-columns: minmax(0, 1fr) !important;
+        justify-items: start !important;
+        text-align: left !important;
+    }
+
+    .backoffice-chat-theme:not(.sidebar-nav-hidden) .backoffice-sidebar-toggle,
+    .backoffice-chat-theme.sidebar-open:not(.sidebar-nav-hidden) .backoffice-sidebar-toggle {
+        display: none !important;
+    }
+
+    .backoffice-chat-theme:not(.sidebar-nav-hidden) .backoffice-title-block,
+    .backoffice-chat-theme.sidebar-open:not(.sidebar-nav-hidden) .backoffice-title-block {
+        grid-column: 1 !important;
+        justify-self: start !important;
+        text-align: left !important;
+        padding-left: 0 !important;
+    }
+}
+
 .backoffice-chat-theme .ml-training-modal-body {
     display: grid;
     gap: 1rem;
