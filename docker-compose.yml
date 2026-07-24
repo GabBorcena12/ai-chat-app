@@ -1,0 +1,89 @@
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: aichatapp-sqlserver
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Developer
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:-Local_Docker_Pass123!}
+    ports:
+      - "14333:1433"
+    volumes:
+      - aichatapp-sql-data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$${MSSQL_SA_PASSWORD}\" -C -Q \"SELECT 1\" || /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P \"$${MSSQL_SA_PASSWORD}\" -Q \"SELECT 1\""]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  api:
+    build:
+      context: .
+      dockerfile: AIChatApp.API/Dockerfile
+    container_name: aichatapp-api
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Docker
+      ASPNETCORE_URLS: http://+:8080
+      AppSettings__BaseUrl: http://aichatapp-api:8080
+      ConnectionStrings__DefaultConnection: Server=sqlserver,1433;Database=AIChatAppDb;User Id=sa;Password=${MSSQL_SA_PASSWORD:-Local_Docker_Pass123!};TrustServerCertificate=True;
+      ConnectionStrings__InventoryAppDb: Server=sqlserver,1433;Database=AIChatAppDb;User Id=sa;Password=${MSSQL_SA_PASSWORD:-Local_Docker_Pass123!};TrustServerCertificate=True;
+      JwtSettings__SecretKey: ${JWT_SECRET_KEY:-local-docker-jwt-secret-key-change-before-production-12345}
+      ApiKey.Settings__ClientName: ${API_CLIENT_NAME:-GajiTechClient}
+      ApiKey.Settings__Keys__0: ${API_KEY:-dummy-api-key}
+      Backoffice__DefaultAdminUsername: ${BACKOFFICE_ADMIN_USERNAME:-admin}
+      Backoffice__DefaultAdminEmail: ${BACKOFFICE_ADMIN_EMAIL:-admin@localhost}
+      Backoffice__DefaultAdminPassword: ${BACKOFFICE_ADMIN_PASSWORD:-Admin123!}
+      ResponseReviewer__PublishedModelPath: AIChatApp.MLTraining/ReviewerModels/published-response-reviewer.zip
+      ResponseReviewer__CandidateModelFolder: AIChatApp.MLTraining/ReviewerModels/Candidates
+      LocalModel__FileName: ${LOCAL_MODEL_FILE:-qwen2.5-3b-instruct-q4_k_m.gguf}
+    ports:
+      - "5157:8080"
+    volumes:
+      - ./AIChatApp.Core/Models:/app/AIChatApp.Core/Models:ro
+      - ./AIChatApp.MLTraining/ReviewerModels:/app/AIChatApp.MLTraining/ReviewerModels
+
+  gateway:
+    build:
+      context: .
+      dockerfile: AIChatApp.Gateway/Dockerfile
+    container_name: aichatapp-gateway
+    depends_on:
+      - api
+    environment:
+      ASPNETCORE_ENVIRONMENT: Docker
+      ASPNETCORE_URLS: http://+:8080
+      ApiKey.Settings__ClientName: ${API_CLIENT_NAME:-GajiTechClient}
+      ApiKey.Settings__Keys__0: ${API_KEY:-dummy-api-key}
+      ReverseProxy__Clusters__ChatCluster__Destinations__chatApi__Address: http://aichatapp-api:8080/
+      ReverseProxy__Clusters__AuthCluster__Destinations__authApi__Address: http://aichatapp-api:8080/
+      ReverseProxy__Clusters__ChatHistoryCluster__Destinations__chatHistoryApi__Address: http://aichatapp-api:8080/
+      ReverseProxy__Clusters__BackofficeCluster__Destinations__backofficeApi__Address: http://aichatapp-api:8080/
+    ports:
+      - "5001:8080"
+
+  web:
+    build:
+      context: .
+      dockerfile: AIChatApp.Web/Dockerfile
+    container_name: aichatapp-web
+    depends_on:
+      - gateway
+    environment:
+      ASPNETCORE_ENVIRONMENT: Docker
+      ASPNETCORE_URLS: http://+:8080
+      Frontend__GatewayBaseUrl: http://aichatapp-gateway:8080/
+      Frontend__ApiClientName: ${API_CLIENT_NAME:-GajiTechClient}
+      Frontend__ApiKey: ${API_KEY:-dummy-api-key}
+      ResponseReviewer__PublishedModelPath: AIChatApp.MLTraining/ReviewerModels/published-response-reviewer.zip
+      ResponseReviewer__CandidateModelFolder: AIChatApp.MLTraining/ReviewerModels/Candidates
+    ports:
+      - "44318:8080"
+    volumes:
+      - ./AIChatApp.MLTraining/ReviewerModels:/app/AIChatApp.MLTraining/ReviewerModels
+
+volumes:
+  aichatapp-sql-data:

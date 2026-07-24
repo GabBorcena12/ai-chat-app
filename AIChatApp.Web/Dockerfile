@@ -1,9 +1,11 @@
 # --- Build stage ---
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
-# Copy Web project file
+# Copy project files
 COPY ["AIChatApp.Web/AIChatApp.Web.csproj", "AIChatApp.Web/"]
+COPY ["AIChatApp.Core/AIChatApp.Core.csproj", "AIChatApp.Core/"]
+COPY ["AIChatApp.MLTraining/AIChatApp.MLTraining.csproj", "AIChatApp.MLTraining/"]
 
 # Restore dependencies
 RUN dotnet restore "AIChatApp.Web/AIChatApp.Web.csproj"
@@ -16,15 +18,16 @@ WORKDIR "/src/AIChatApp.Web"
 RUN dotnet publish -c Release -o /app/publish
 
 # --- Runtime stage ---
-FROM mcr.microsoft.com/dotnet/aspnet:9.0
+FROM mcr.microsoft.com/dotnet/aspnet:10.0
 WORKDIR /app
 
 # Copy published output
 COPY --from=build /app/publish .
+COPY AIChatApp.Core/Data /app/AIChatApp.Core/Data
+COPY AIChatApp.MLTraining/ReviewerModels /app/AIChatApp.MLTraining/ReviewerModels
 
 # Expose container ports
 EXPOSE 8080
-EXPOSE 8081
 
 # Run Web app
 ENTRYPOINT ["dotnet", "AIChatApp.Web.dll"]

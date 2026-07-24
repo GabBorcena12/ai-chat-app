@@ -1,9 +1,10 @@
 # --- Build stage ---
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
-# Copy Gateway project file
+# Copy project files
 COPY ["AIChatApp.Gateway/AIChatApp.Gateway.csproj", "AIChatApp.Gateway/"]
+COPY ["AIChatApp.Core/AIChatApp.Core.csproj", "AIChatApp.Core/"]
 
 # Restore dependencies
 RUN dotnet restore "AIChatApp.Gateway/AIChatApp.Gateway.csproj"
@@ -16,7 +17,7 @@ WORKDIR "/src/AIChatApp.Gateway"
 RUN dotnet publish -c Release -o /app/publish
 
 # --- Runtime stage ---
-FROM mcr.microsoft.com/dotnet/aspnet:9.0
+FROM mcr.microsoft.com/dotnet/aspnet:10.0
 WORKDIR /app
 
 # Copy published output
@@ -24,7 +25,6 @@ COPY --from=build /app/publish .
 
 # Expose ports (YARP / Gateway)
 EXPOSE 8080
-EXPOSE 8081
 
 # Run Gateway
 ENTRYPOINT ["dotnet", "AIChatApp.Gateway.dll"]

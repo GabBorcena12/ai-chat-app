@@ -1,10 +1,11 @@
 # --- Build stage ---
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 # Copy csproj files
 COPY ["AIChatApp.API/AIChatApp.API.csproj", "AIChatApp.API/"]
 COPY ["AIChatApp.Core/AIChatApp.Core.csproj", "AIChatApp.Core/"]
+COPY ["AIChatApp.MLTraining/AIChatApp.MLTraining.csproj", "AIChatApp.MLTraining/"]
 
 # Restore dependencies
 RUN dotnet restore "AIChatApp.API/AIChatApp.API.csproj"
@@ -17,7 +18,7 @@ WORKDIR "/src/AIChatApp.API"
 RUN dotnet publish -c Release -o /app/publish
 
 # --- Runtime stage ---
-FROM mcr.microsoft.com/dotnet/aspnet:9.0
+FROM mcr.microsoft.com/dotnet/aspnet:10.0
 WORKDIR /app
 
 # Install native dependencies for LLamaSharp CPU backend
@@ -28,13 +29,18 @@ RUN apt-get update && \
 # Copy published app from build stage
 COPY --from=build /app/publish .
 
-# Copy Core files (Models and Data) into container
-COPY AIChatApp.Core/Models /app/AIChatApp.Core/Models
+# Copy Core data and reviewer files into container.
+# GGUF model files are mounted by docker-compose to keep the image small.
 COPY AIChatApp.Core/Data /app/AIChatApp.Core/Data
+COPY AIChatApp.MLTraining/ReviewerModels /app/AIChatApp.MLTraining/ReviewerModels
+COPY README.md /app/README.md
 
 # Ensure folders exist (optional, safe)
 RUN mkdir -p /app/AIChatApp.Core/Models
 RUN mkdir -p /app/AIChatApp.Core/Data
+RUN mkdir -p /app/AIChatApp.MLTraining/ReviewerModels/Candidates
+
+EXPOSE 8080
 
 # Set entrypoint
 ENTRYPOINT ["dotnet", "AIChatApp.API.dll"]
