@@ -29,7 +29,7 @@ This solution contains six main projects:
 - JSON-based prompt templates, quick answers, topic knowledge, and console/shared context files imported into SQL for centralized tracking
 - Retrieval-style documentation context selection from focused knowledge sources
 - Browser-persisted conversation workspace with rename, delete, timestamps, copy, read-aloud, continue, and report actions
-- Unified Web workspace routes for Chat, Backoffice, FAQs, and ML Training
+- Unified Web workspace routes for Chat, Backoffice, and FAQs, with ML Training inside Backoffice > Machine Learning
 - Responsive workspace sidebars with collapsible groups and app-themed navigation colors
 - Response reporting pipeline for saving bad or suspicious AI answers for later investigation
 - Admin backoffice for reviewing reported answers, validating fixes, managing prompt templates, and maintaining assistant knowledge in SQL
@@ -64,11 +64,10 @@ The backoffice is the admin workflow for improving assistant quality without edi
 5. If the fix should improve future answers, the admin checks `Promote to knowledge`.
 6. If the new knowledge should become live right away, the admin also checks `Publish immediately`.
 7. Approved reports with a category become training candidates.
-8. In `Workflow`, the admin clicks `Build Dataset`.
-9. The admin clicks `Train Model` to train the ML.NET reviewer classifier.
-10. The admin reviews the accuracy/F1 result.
-11. The admin clicks `Publish Reviewer`.
-12. The API loads the published reviewer and classifies generated answers before they are returned.
+8. In `Machine Learning`, the admin opens `Training Data` to review or approve training examples.
+9. In `Training Jobs`, the admin builds a dataset and trains the ML.NET reviewer classifier.
+10. In `Model Registry`, the admin publishes the reviewer model that should become active.
+11. The API loads the published reviewer and classifies generated answers before they are returned.
 
 ### ML.NET Reviewer Workflow
 
@@ -85,6 +84,21 @@ High-level flow:
 7. Admin publishes the reviewer model.
 8. API uses the published reviewer before returning future LLM answers.
 
+What gets generated:
+
+- training jobs create candidate ML.NET model files under `AIChatApp.MLTraining/ReviewerModels/Candidates`
+- candidate files are named like `DocumentationQualityReviewer-v1-job1.zip`
+- publishing copies the selected candidate to `AIChatApp.MLTraining/ReviewerModels/published-response-reviewer.zip`
+- the published `.zip` is the model package loaded by the API through `ml.Model.Load(path, out _)`
+
+How the API uses it:
+
+- `ResponseReviewer:PublishedModelPath` points to the published reviewer zip
+- `ResponseReviewerService` loads that zip when the file exists
+- generated chat answers are converted into text features with the question, answer, and context mode
+- the model predicts a quality label such as `Good`, `Incomplete`, `PromptLeak`, `Repetitive`, or `TooLong`
+- deterministic rule checks still run, so obvious risky answers are caught even without a published model
+
 Reviewer behavior:
 
 - if a published ML.NET model exists, the API uses it for response-quality classification
@@ -95,14 +109,14 @@ Reviewer behavior:
 ### Backoffice Sections
 
 - Sidebar groups
-  - `Workspaces`: links to Chat, Backoffice, ML Training, and FAQs
-  - `Validation`: workflow, reports, prompt templates, and knowledge entries
+  - `Workspaces`: links to Chat, Backoffice, and FAQs
+  - `Validation`: workflow, reported responses, prompt templates, and knowledge entries
+  - `Machine Learning`: training data, training jobs, and model registry modals
   - `Administration`: profile and user management
   - groups are collapsible so the page stays easier to scan
 - `Workflow`
   - shows the full improvement loop from reported answer to published reviewer
   - displays counts for pending reports, approved fixes, training candidates, and live knowledge
-  - provides `Build Dataset`, `Train Model`, and `Publish Reviewer` controls
   - lists training candidates created from approved reviewed reports
 - `Reported Responses`
   - list view of reported answers
@@ -112,6 +126,10 @@ Reviewer behavior:
   - database-backed assistant behavior rules such as system context, answer style, retry template, and continuation template
 - `Knowledge Entries`
   - database-backed quick answers, topics, and reference content used by the assistant
+- `Machine Learning`
+  - `Training Data`: import text notes, add reviewed examples, and approve examples for training
+  - `Training Jobs`: build datasets from approved examples and train reviewer models
+  - `Model Registry`: see candidate reviewer models and publish the one the API should use
 - `Profile Management`
   - update the chat display name and avatar label
 - `User Management`
@@ -419,7 +437,7 @@ Run the Blazor web app:
 dotnet run --project AIChatApp.Web
 ```
 
-Open Chat at `/chat` and ML Training from `/backoffice` > Machine Learning on the Web app host.
+Open Chat at `/chat`, then open ML Training from `/backoffice` > Machine Learning on the Web app host.
 
 The Web app also exposes `/backoffice` for admin validation and `/faqs` for end-user documentation answers.
 
