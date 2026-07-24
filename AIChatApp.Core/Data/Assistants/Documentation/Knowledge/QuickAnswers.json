@@ -1,4 +1,4 @@
-﻿{
+{
     "entries":  [
                     {
                         "aliases":  [
@@ -320,7 +320,7 @@
                                         "what pages are available in the web app",
                                         "what workspaces are available"
                                     ],
-                        "answer":  "AIChatApp.Web has /chat, /backoffice, /ml-training, and /faqs."
+                        "answer":  "AIChatApp.Web has /chat, /backoffice, and /faqs. ML Training now lives inside Backoffice > Machine Learning."
                     },
                     {
                         "aliases":  [
@@ -328,7 +328,7 @@
                                         "where is ml training now",
                                         "how do i go to ml training"
                                     ],
-                        "answer":  "Open ML Training at /ml-training in AIChatApp.Web so it uses the same browser session as Chat and Backoffice."
+                        "answer":  "Open Backoffice > Machine Learning in AIChatApp.Web so it uses the same browser session as Chat and Backoffice."
                     },
                     {
                         "aliases":  [
@@ -343,7 +343,7 @@
                                         "How is Backoffice navigation organized?",
                                         "what are the backoffice sidebar groups"
                                     ],
-                        "answer":  "Backoffice groups navigation into Workspaces, Validation, and Administration."
+                        "answer":  "Backoffice groups navigation into Workspaces, Validation, Machine Learning, and Administration."
                     },
                     {
                         "aliases":  [
@@ -354,3 +354,4 @@
                     }
                 ]
 }
+

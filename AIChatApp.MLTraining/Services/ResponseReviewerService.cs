@@ -29,6 +29,8 @@ public sealed class ResponseReviewerService : IResponseReviewer
             return new ResponseReviewResult { IssueType = "Good", Confidence = 1, Source = "Disabled" };
         }
 
+        // Always run deterministic rules first so obvious bad answers are caught even
+        // before a trained ML.NET model has been published.
         var heuristic = ReviewWithRules(question, answer, contextMode);
         var engine = _engine.Value;
         if (engine is null)
@@ -113,6 +115,8 @@ public sealed class ResponseReviewerService : IResponseReviewer
             return null;
         }
 
+        // The prediction engine is lazy-loaded once because ML.NET model loading is
+        // relatively expensive compared with a single chat response review.
         var ml = new MLContext(seed: 7);
         var model = ml.Model.Load(path, out _);
         return ml.Model.CreatePredictionEngine<ResponseReviewerInput, ResponseReviewerPrediction>(model);

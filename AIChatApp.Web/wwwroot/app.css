@@ -13801,3 +13801,369 @@ body:has(.backoffice-chat-theme) {
         grid-column: 2 !important;
     }
 }
+
+/* Backoffice ML Training section polish. */
+.backoffice-chat-theme .ml-training-backoffice-section {
+    gap: 1rem !important;
+}
+
+.backoffice-chat-theme .ml-training-backoffice-section .training-candidates-panel,
+.backoffice-chat-theme .ml-training-backoffice-section .workflow-important-note,
+.backoffice-chat-theme .ml-training-backoffice-section .workflow-controls-panel {
+    width: 100%;
+}
+
+.backoffice-chat-theme .ml-training-metrics {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+}
+
+.backoffice-chat-theme .ml-training-panel .workflow-control-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+}
+
+.backoffice-chat-theme .ml-training-backoffice-section .candidate-checklist article p {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+@media (max-width: 1180px) {
+    .backoffice-chat-theme .ml-training-metrics,
+    .backoffice-chat-theme .ml-training-panel .workflow-control-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+}
+
+@media (max-width: 640px) {
+    .backoffice-chat-theme .ml-training-metrics,
+    .backoffice-chat-theme .ml-training-panel .workflow-control-grid {
+        grid-template-columns: 1fr !important;
+    }
+
+    .backoffice-chat-theme .ml-training-backoffice-section .workflow-dashboard-actions,
+    .backoffice-chat-theme .ml-training-backoffice-section .workflow-important-note > .ghost-button {
+        width: 100%;
+    }
+}
+
+/* Machine Learning management modals inside Backoffice. */
+.backoffice-chat-theme .ml-training-management-modal {
+    width: min(1120px, 100%) !important;
+    grid-template-rows: auto minmax(0, 1fr) !important;
+}
+
+.backoffice-chat-theme .ml-training-modal-body {
+    display: grid;
+    gap: 1rem;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding: 1rem 1.1rem;
+}
+
+.backoffice-chat-theme .ml-training-form-grid {
+    display: grid;
+    grid-template-columns: minmax(260px, 0.75fr) minmax(0, 1.25fr);
+    gap: 1rem;
+}
+
+.backoffice-chat-theme .ml-training-upload-card,
+.backoffice-chat-theme .ml-training-form-card,
+.backoffice-chat-theme .ml-training-job-controls,
+.backoffice-chat-theme .ml-training-list-card {
+    display: grid;
+    gap: 0.9rem;
+    padding: 1rem;
+    background: #0e1826 !important;
+}
+
+.backoffice-chat-theme .ml-training-upload-card h3,
+.backoffice-chat-theme .ml-training-form-card h3,
+.backoffice-chat-theme .ml-training-job-controls h3,
+.backoffice-chat-theme .ml-training-list-card h3 {
+    margin: 0;
+    color: #ffffff;
+    font-size: 1rem;
+    line-height: 1.2;
+}
+
+.backoffice-chat-theme .ml-training-upload-card p,
+.backoffice-chat-theme .ml-training-form-card p,
+.backoffice-chat-theme .ml-training-job-controls p,
+.backoffice-chat-theme .ml-training-list-card p {
+    margin: 0.25rem 0 0;
+    color: #aebbd0;
+    line-height: 1.45;
+}
+
+.backoffice-chat-theme .ml-training-upload-zone {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.85rem;
+    align-items: center;
+    padding: 1rem;
+    border: 1px solid rgba(65, 105, 225, 0.34);
+    border-radius: 12px;
+    background: rgba(65, 105, 225, 0.08);
+}
+
+.backoffice-chat-theme .ml-training-upload-icon {
+    display: grid;
+    place-items: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    border: 1px solid rgba(65, 105, 225, 0.48);
+    border-radius: 12px;
+    background: rgba(65, 105, 225, 0.18);
+    color: #8fb0ff;
+}
+
+.backoffice-chat-theme .ml-training-upload-zone strong,
+.backoffice-chat-theme .ml-training-upload-zone span {
+    display: block;
+}
+
+.backoffice-chat-theme .ml-training-upload-zone strong {
+    color: #ffffff;
+    font-size: 0.94rem;
+    line-height: 1.25;
+}
+
+.backoffice-chat-theme .ml-training-upload-zone span {
+    margin-top: 0.2rem;
+    color: #aebbd0;
+    font-size: 0.84rem;
+    line-height: 1.35;
+}
+
+.backoffice-chat-theme .ml-training-file-input {
+    grid-column: 1 / -1;
+    width: 100%;
+    min-height: 2.75rem;
+    padding: 0.42rem;
+    border: 1px solid rgba(120, 142, 177, 0.18);
+    border-radius: 10px;
+    background: #101a2b;
+    color: #c7d2e7;
+    font: inherit;
+    font-size: 0.86rem;
+}
+
+.backoffice-chat-theme .ml-training-file-input::file-selector-button {
+    min-height: 2rem;
+    margin-right: 0.75rem;
+    padding: 0 0.85rem;
+    border: 1px solid rgba(65, 105, 225, 0.76);
+    border-radius: 8px;
+    background: #4169e1;
+    color: #ffffff;
+    font: inherit;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.backoffice-chat-theme .ml-training-file-input:hover::file-selector-button {
+    border-color: rgba(93, 130, 255, 0.95);
+    background: #3158d4;
+}
+
+.backoffice-chat-theme .ml-training-form-card textarea.text-input {
+    min-height: 7rem;
+    resize: vertical;
+}
+
+.backoffice-chat-theme .ml-training-form-card .span-full {
+    grid-column: 1 / -1;
+}
+
+.backoffice-chat-theme .compact-actions {
+    padding: 0 !important;
+    border-top: 0 !important;
+    justify-content: flex-end !important;
+}
+
+.backoffice-chat-theme .ml-training-theme-button,
+.backoffice-chat-theme .ml-training-management-modal .compact-actions .primary-action {
+    min-height: 2.75rem;
+    border: 1px solid rgba(65, 105, 225, 0.76) !important;
+    background: #4169e1 !important;
+    color: #ffffff !important;
+    box-shadow: none !important;
+}
+
+.backoffice-chat-theme .ml-training-theme-button .action-icon,
+.backoffice-chat-theme .ml-training-management-modal .compact-actions .primary-action .action-icon {
+    color: #ffffff !important;
+    stroke: currentColor !important;
+}
+
+.backoffice-chat-theme .ml-training-theme-button:hover:not(:disabled),
+.backoffice-chat-theme .ml-training-theme-button:focus-visible,
+.backoffice-chat-theme .ml-training-management-modal .compact-actions .primary-action:hover:not(:disabled),
+.backoffice-chat-theme .ml-training-management-modal .compact-actions .primary-action:focus-visible {
+    border-color: rgba(93, 130, 255, 0.95) !important;
+    background: #3158d4 !important;
+    color: #ffffff !important;
+}
+
+.backoffice-chat-theme .ml-training-theme-button:disabled,
+.backoffice-chat-theme .ml-training-management-modal .compact-actions .primary-action:disabled {
+    border-color: rgba(65, 105, 225, 0.28) !important;
+    background: rgba(65, 105, 225, 0.48) !important;
+    color: rgba(255, 255, 255, 0.72) !important;
+    cursor: not-allowed;
+}
+
+.backoffice-chat-theme .ml-training-list {
+    display: grid;
+    gap: 0.7rem;
+}
+
+.backoffice-chat-theme .ml-training-row,
+.backoffice-chat-theme .ml-training-job-row {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto !important;
+    align-items: center !important;
+    gap: 0.75rem !important;
+    width: 100%;
+    min-height: 4rem;
+    padding: 0.85rem 1rem !important;
+    border: 1px solid rgba(120, 142, 177, 0.16) !important;
+    border-radius: 12px !important;
+    background: #101a2b !important;
+}
+
+.backoffice-chat-theme .ml-training-row::after {
+    display: none !important;
+}
+
+.backoffice-chat-theme .ml-training-row strong,
+.backoffice-chat-theme .ml-training-job-row strong {
+    display: block;
+    overflow: hidden;
+    color: #ffffff;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.backoffice-chat-theme .ml-training-row small,
+.backoffice-chat-theme .ml-training-job-row small,
+.backoffice-chat-theme .ml-training-job-row span {
+    color: #aebbd0;
+}
+
+.backoffice-chat-theme .ml-training-job-actions {
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) auto auto;
+    gap: 0.75rem;
+    align-items: center;
+}
+
+.backoffice-chat-theme .ml-training-model-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 0.85rem;
+}
+
+@media (max-width: 900px) {
+    .backoffice-chat-theme .ml-training-form-grid,
+    .backoffice-chat-theme .ml-training-job-actions {
+        grid-template-columns: 1fr;
+    }
+
+    .backoffice-chat-theme .ml-training-job-actions .ghost-button,
+    .backoffice-chat-theme .ml-training-job-actions .primary-action {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+@media (max-width: 640px) {
+    .backoffice-chat-theme .ml-training-management-modal {
+        width: 100% !important;
+        max-height: calc(100dvh - 1rem) !important;
+    }
+
+    .backoffice-chat-theme .ml-training-modal-body {
+        padding: 0.85rem;
+    }
+
+    .backoffice-chat-theme .ml-training-row,
+    .backoffice-chat-theme .ml-training-job-row {
+        grid-template-columns: 1fr !important;
+        align-items: start !important;
+    }
+
+    .backoffice-chat-theme .ml-training-row strong,
+    .backoffice-chat-theme .ml-training-job-row strong {
+        white-space: normal;
+    }
+
+    .backoffice-chat-theme .ml-training-upload-zone {
+        grid-template-columns: 1fr;
+        text-align: left;
+    }
+
+    .backoffice-chat-theme .ml-training-upload-icon {
+        width: 2.5rem;
+        height: 2.5rem;
+    }
+}
+
+/* Let Backoffice modals hug short content while still scrolling when content is long. */
+.backoffice-chat-theme .admin-management-modal,
+.backoffice-chat-theme .listing-management-modal,
+.backoffice-chat-theme .user-management-modal,
+.backoffice-chat-theme .profile-management-modal,
+.backoffice-chat-theme .ml-training-management-modal {
+    height: auto !important;
+    min-height: 0 !important;
+    align-self: center !important;
+}
+
+.backoffice-chat-theme .listing-management-modal,
+.backoffice-chat-theme .user-management-modal,
+.backoffice-chat-theme .profile-management-modal {
+    max-height: min(86dvh, 760px) !important;
+}
+
+.backoffice-chat-theme .ml-training-management-modal {
+    max-height: min(88dvh, 780px) !important;
+}
+
+.backoffice-chat-theme .listing-management-modal .listing-modal-body,
+.backoffice-chat-theme .user-management-modal .user-management-results,
+.backoffice-chat-theme .profile-management-modal .profile-management-grid,
+.backoffice-chat-theme .ml-training-management-modal .ml-training-modal-body {
+    flex: 0 1 auto !important;
+    height: auto !important;
+    min-height: 0 !important;
+}
+
+.backoffice-chat-theme .listing-management-modal .listing-modal-body,
+.backoffice-chat-theme .ml-training-management-modal .ml-training-modal-body {
+    max-height: calc(100dvh - 11rem) !important;
+    overflow-y: auto !important;
+}
+
+.backoffice-chat-theme .listing-management-modal .compact-listing-list,
+.backoffice-chat-theme .user-management-modal .user-management-results,
+.backoffice-chat-theme .ml-training-management-modal .ml-training-list,
+.backoffice-chat-theme .ml-training-management-modal .ml-training-model-grid {
+    min-height: 0 !important;
+}
+
+@media (max-width: 760px) {
+    .backoffice-chat-theme .listing-management-modal,
+    .backoffice-chat-theme .user-management-modal,
+    .backoffice-chat-theme .profile-management-modal,
+    .backoffice-chat-theme .ml-training-management-modal {
+        max-height: calc(100dvh - 1rem) !important;
+    }
+
+    .backoffice-chat-theme .listing-management-modal .listing-modal-body,
+    .backoffice-chat-theme .ml-training-management-modal .ml-training-modal-body {
+        max-height: calc(100dvh - 9.5rem) !important;
+    }
+}

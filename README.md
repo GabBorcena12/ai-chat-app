@@ -8,15 +8,14 @@ AIChatApp is a full-stack AI chat platform built with Blazor, ASP.NET Core, YARP
 
 ## Overview
 
-This solution contains seven main projects:
+This solution contains six main projects:
 
 - `AIChatApp.API`: backend for authentication, chat orchestration, chat history, and LLM access
 - `AIChatApp.Gateway`: reverse proxy entry point with API key validation and rate limiting
 - `AIChatApp.Core`: shared config, middleware, data access, and model path helpers
 - `AIChatApp.Console`: local console chat client for direct model testing
-- `AIChatApp.Web`: Blazor frontend for login, 2FA management, chat UI, FAQ page, backoffice navigation, Web-hosted ML training, and streaming chat
-- `AIChatApp.MLTraining`: optional standalone Blazor UI for reviewer training experiments
-- `AIChatApp.MLTraining.Core`: shared ML.NET reviewer models, trainer, runtime reviewer service, and training workflow services
+- `AIChatApp.Web`: Blazor frontend for login, 2FA management, chat UI, FAQ page, backoffice navigation, Backoffice Machine Learning modals, and streaming chat
+- `AIChatApp.MLTraining`: ML.NET reviewer models, trainer, runtime reviewer service, and Backoffice training workflow services
 
 ## Key Features
 
@@ -273,14 +272,13 @@ Web navigation is hosted in `AIChatApp.Web` and uses these routes:
 
 - `/chat`: main documentation chat assistant
 - `/backoffice`: admin validation workspace for reports, knowledge, prompts, users, and reviewer workflow controls
-- `/ml-training`: Web-hosted ML.NET reviewer training workspace using the same browser session as Chat and Backoffice
+- Backoffice > Machine Learning: reviewer training data, jobs, and model registry using the same browser session as Chat and Backoffice
 - `/faqs`: readable FAQ page loaded from the assistant knowledge files
 
 The workspace sidebars use one theme color per app area instead of one color per link:
 
 - Chat: green/cyan
 - Backoffice: blue
-- ML Training: gold
 - FAQs: cyan
 
 Example local development setup:
@@ -382,13 +380,12 @@ If you are running the projects locally with `dotnet run` instead of Docker, the
 - API: `https://localhost:7093` and `http://localhost:5157`
 - Gateway: `https://localhost:7067` and `http://localhost:5031`
 - Web: `https://localhost:7033` and `http://localhost:5143`
-- Web routes: `/chat`, `/backoffice`, `/faqs`, and `/ml-training`
-- Optional standalone ML Training UI: `http://localhost:55192` in local development. HTTPS `https://localhost:55191` also exists if the dev certificate is trusted.
+- Web routes: `/chat`, `/backoffice`, and `/faqs`
+- ML Training is managed from Backoffice > Machine Learning.
 
 Important local auth note:
 
 - `AIChatApp.Web/appsettings.Development.json` should point `Frontend:GatewayBaseUrl` to `https://localhost:7067/`.
-- `AIChatApp.MLTraining/appsettings.Development.json` should point `TrainingFrontend:GatewayBaseUrl` to `https://localhost:7067/`.
 - Avoid using `http://localhost:5031/` for authenticated Web chat calls because Gateway HTTPS redirection can drop the `Authorization: Bearer <token>` header during redirect.
 - If chat says the session expired immediately after login, restart API, Gateway, and Web, then sign in again.
 
@@ -422,19 +419,9 @@ Run the Blazor web app:
 dotnet run --project AIChatApp.Web
 ```
 
-Open Chat at `/chat` and ML Training at `/ml-training` on the Web app host.
+Open Chat at `/chat` and ML Training from `/backoffice` > Machine Learning on the Web app host.
 
 The Web app also exposes `/backoffice` for admin validation and `/faqs` for end-user documentation answers.
-
-Optional standalone ML training UI:
-
-```powershell
-dotnet run --project AIChatApp.MLTraining
-```
-
-Open it locally at `http://localhost:55192`. Use `https://localhost:55191` only after trusting the ASP.NET Core development certificate.
-
-The preferred ML Training UI is now `/ml-training` inside `AIChatApp.Web`, so it uses the same browser session as Chat and Backoffice. The standalone ML Training project remains useful for isolated experiments.
 
 Run the console client:
 
@@ -753,14 +740,14 @@ Content-Type: application/json
 - The documentation assistant uses profile-specific prompt templates, quick answers, topic summaries, and focused knowledge references.
 - The Web app is currently pinned to the documentation assistant experience.
 - The chat UI supports browser-persisted conversations, inline rename/delete, timestamps, copy, read-aloud, continue, report, completion notifications, and auto-follow scrolling.
-- Chat, Backoffice, ML Training, and FAQs are available as Web-hosted workspaces with side navigation.
-- Backoffice, ML Training, and FAQs each have workspace navigation; Chat also has collapsible conversations, workspace, and account sections.
+- Chat, Backoffice, and FAQs are available as Web-hosted workspaces with side navigation.
+- Backoffice includes Machine Learning modals for Training Data, Training Jobs, and Model Registry; Chat also has collapsible conversations, workspace, and account sections.
 - Workspace links use the current app theme color, not separate colors for every link.
 - The gateway maps `/chat/*`, `/auth/*`, and `/chathistory/*` to the API service.
 - In local development, the Web app should call the HTTPS Gateway URL directly to preserve `Authorization` headers on authenticated chat requests.
-- The preferred ML Training UI is hosted by `AIChatApp.Web` at `/ml-training`.
-- `AIChatApp.MLTraining` can still run as a standalone experiment UI, but normal navigation should use the Web-hosted `/ml-training` route.
+- ML Training is hosted inside `AIChatApp.Web` under Backoffice > Machine Learning.
 - Google Authenticator support is based on TOTP with 6-digit codes and 30-second time windows.
 - The Blazor frontend uses the gateway as its API entry point in development.
 - `AIChatApp.Web.csproj` excludes generated `artifacts` folders so temporary build outputs are not copied recursively into `bin`.
 - Rotate any secrets that were previously committed to the repository before using this project in a shared environment.
+

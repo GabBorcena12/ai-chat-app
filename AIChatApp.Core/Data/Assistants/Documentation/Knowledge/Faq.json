@@ -1,4 +1,4 @@
-﻿{
+{
     "topics":  [
                    {
                        "topic":  "purpose",
@@ -36,8 +36,8 @@
                                        "- AIChatApp.Gateway is the reverse proxy entry point for auth, chat, and chat history routes.",
                                        "- AIChatApp.API handles authentication, chat orchestration, prompt building, local model execution, response reporting, backoffice APIs, ML.NET reviewer workflow endpoints, and chat history persistence.",
                                        "- AIChatApp.Core contains shared entities, DbContexts, middleware, assistant profile settings, JSON prompt and knowledge files, config helpers, and path helpers.",
-                                       "- AIChatApp.MLTraining.Core contains ML.NET reviewer training and runtime reviewer services.",
-                                       "- AIChatApp.MLTraining is an optional standalone UI for isolated reviewer-training experiments.",
+                                       "- AIChatApp.MLTraining contains ML.NET reviewer training and runtime reviewer services.",
+                                       "- Reviewer training data, jobs, and model registry views are managed from Backoffice > Machine Learning.",
                                        "- AIChatApp.Console is the local console client for direct testing."
                                    ]
                    },
@@ -171,13 +171,16 @@
                        "context":  [
                                        "- /chat is the main documentation chat assistant.",
                                        "- /backoffice is the admin validation workspace for reports, prompts, knowledge, users, and reviewer workflow controls.",
-                                       "- /ml-training is the preferred ML.NET reviewer training workspace because it shares the Web app browser session.",
+                                       "- Backoffice > Machine Learning is the preferred ML.NET reviewer training workspace because it shares the Web app browser session.",
                                        "- /faqs is a readable FAQ page loaded from assistant knowledge files.",
                                        "- Chat has collapsible conversation, workspace, and account sections.",
-                                       "- Backoffice groups navigation into Workspaces, Validation, and Administration.",
+                                       "- Backoffice groups navigation into Workspaces, Validation, Machine Learning, and Administration.",
                                        "- FAQs has a workspace sidebar and a scrollable FAQ content area.",
                                        "- Workspace links use the current app theme color instead of different colors per link."
                                    ]
                    }
                ]
 }
+
+
+

@@ -3,8 +3,8 @@ using Microsoft.Extensions.Options;
 
 namespace AIChatApp.MLTraining.Services;
 
-// Owns the ML training workflow state for the Blazor training workspace.
-// Triggered by AIChatApp.MLTraining UI actions such as importing text,
+// Owns the ML training workflow state for the Backoffice Machine Learning workspace.
+// Triggered by Backoffice UI actions such as importing text,
 // approving reviewed examples, building datasets, running training, and publishing models.
 // This is currently an in-memory workflow simulation; replace the storage/training runner
 // with database + ML.NET services when the training pipeline becomes production-ready.

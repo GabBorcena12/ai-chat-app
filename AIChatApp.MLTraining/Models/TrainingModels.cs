@@ -3,6 +3,7 @@ namespace AIChatApp.MLTraining.Models;
 public sealed class TrainingExample
 {
     public int Id { get; set; }
+    // SourceReference prevents duplicate imports from the same reviewed report/export.
     public string SourceType { get; set; } = "Manual";
     public string SourceReference { get; set; } = string.Empty;
     public string Question { get; set; } = string.Empty;
@@ -66,8 +67,9 @@ public sealed class ResponseReviewerOptions
 {
     public const string SectionName = "ResponseReviewer";
     public bool Enabled { get; set; } = true;
-    public string PublishedModelPath { get; set; } = "AIChatApp.MLTraining.Core/ReviewerModels/published-response-reviewer.zip";
-    public string CandidateModelFolder { get; set; } = "AIChatApp.MLTraining.Core/ReviewerModels/Candidates";
+    // Paths are repo-relative by default so API and Web can share the same model files.
+    public string PublishedModelPath { get; set; } = "AIChatApp.MLTraining/ReviewerModels/published-response-reviewer.zip";
+    public string CandidateModelFolder { get; set; } = "AIChatApp.MLTraining/ReviewerModels/Candidates";
 }
 
 public sealed class ReviewerWorkflowState
@@ -79,3 +81,4 @@ public sealed class ReviewerWorkflowState
     public string PublishedModelVersion { get; set; } = string.Empty;
     public string PublishedModelPath { get; set; } = string.Empty;
 }
+

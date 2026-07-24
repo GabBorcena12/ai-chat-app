@@ -17,7 +17,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AIChatApp.Core\AIChatApp.Core.csproj" />
-    <ProjectReference Include="..\AIChatApp.MLTraining.Core\AIChatApp.MLTraining.Core.csproj" />
+    <ProjectReference Include="..\AIChatApp.MLTraining\AIChatApp.MLTraining.csproj" />
   </ItemGroup>
 
 </Project>

@@ -8,6 +8,8 @@ public sealed class ResponseReviewerTrainer
 {
     private readonly MLContext _ml = new(seed: 7);
 
+    // Trains a small text classifier that predicts answer quality labels such as Good,
+    // Incomplete, TooLong, or PromptLeak from reviewed Backoffice examples.
     public ReviewerTrainingResult TrainAndSave(
         IReadOnlyList<TrainingExample> examples,
         string modelPath)
@@ -21,6 +23,8 @@ public sealed class ResponseReviewerTrainer
         var data = _ml.Data.LoadFromEnumerable(trainingRows);
         var split = _ml.Data.TrainTestSplit(data, testFraction: trainingRows.Count >= 6 ? 0.25 : 0.01, seed: 7);
 
+        // Pipeline shape:
+        // text -> numeric features -> multiclass classifier -> readable label.
         var pipeline = _ml.Transforms.Conversion.MapValueToKey("Label")
             .Append(_ml.Transforms.Text.FeaturizeText("Features", nameof(ResponseReviewerInput.Text)))
             .Append(_ml.MulticlassClassification.Trainers.SdcaMaximumEntropy("Label", "Features"))
@@ -45,6 +49,7 @@ public sealed class ResponseReviewerTrainer
 
     private static List<ResponseReviewerInput> BuildTrainingRows(IReadOnlyList<TrainingExample> examples)
     {
+        // BadResponse rows teach the reviewer what problem category to detect.
         var rows = examples.Select(example => new ResponseReviewerInput
         {
             Text = ResponseReviewerService.BuildFeatureText(example.Question, example.BadResponse, example.Intent),

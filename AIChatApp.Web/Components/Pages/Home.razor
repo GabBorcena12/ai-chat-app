@@ -2,7 +2,6 @@
 @page "/chat"
 @rendermode InteractiveServer
 @using AIChatApp.Core.Config
-@using AIChatApp.Web.Config
 @using System.Net
 @using System.Text
 @inject AIChatApp.Web.Services.AIChatGatewayClient GatewayClient
@@ -12,7 +11,6 @@
 @inject ILogger<Home> Logger
 @inject NavigationManager Navigation
 @inject Microsoft.Extensions.Options.IOptions<AssistantProfileOptions> AssistantProfileOptionsAccessor
-@inject Microsoft.Extensions.Options.IOptions<FrontendOptions> FrontendOptionsAccessor
 
 <PageTitle>@AssistantProfile.PageTitle</PageTitle>
 
@@ -171,22 +169,6 @@
                             <small>Validate answers</small>
                         </span>
                     </button>
-                    <a class="workspace-nav-link app-ml"
-                       href="@FrontendOptions.MlTrainingUrl">
-                        <span class="workspace-icon" aria-hidden="true">
-                            <svg class="action-icon" viewBox="0 0 24 24">
-                                <path d="M4 19V5" />
-                                <path d="M8 19v-7" />
-                                <path d="M12 19V8" />
-                                <path d="M16 19v-4" />
-                                <path d="M20 19V9" />
-                            </svg>
-                        </span>
-                        <span class="workspace-copy">
-                            <span>ML Training</span>
-                            <small>Train reviewer</small>
-                        </span>
-                    </a>
                     <button type="button" class="workspace-nav-link app-faq compact" @onclick="OpenFaqModalAsync">
                         <span class="workspace-icon" aria-hidden="true">
                             <svg class="action-icon" viewBox="0 0 24 24">
@@ -865,7 +847,6 @@
     private string FaqSearchTerm = string.Empty;
     private bool isFaqFilterOpen;
     private AssistantProfileOptions AssistantProfile => AssistantProfileOptionsAccessor.Value;
-    private FrontendOptions FrontendOptions => FrontendOptionsAccessor.Value;
 
     private bool IsAuthenticated => !string.IsNullOrWhiteSpace(token);
     private string CurrentUsernameOrFallback => string.IsNullOrWhiteSpace(CurrentUsername) ? "You" : CurrentUsername;
