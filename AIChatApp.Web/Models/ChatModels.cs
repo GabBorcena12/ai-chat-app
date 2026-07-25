@@ -5,6 +5,9 @@ namespace AIChatApp.Web.Models;
 public class ChatRequestPayload
 {
     public string ChatId { get; set; } = string.Empty;
+    public string UserMessageId { get; set; } = string.Empty;
+    public string AssistantMessageId { get; set; } = string.Empty;
+    public string ConversationTitle { get; set; } = string.Empty;
     public string User { get; set; } = string.Empty;
     public string Prompt { get; set; } = string.Empty;
     public string ContextMode { get; set; } = "documentation";
@@ -64,6 +67,23 @@ public class ChatResponsePayload
 {
     public string Prompt { get; set; } = string.Empty;
     public string Response { get; set; } = string.Empty;
+}
+
+public class ChatConversationHistoryViewModel
+{
+    public string ChatId { get; set; } = string.Empty;
+    public string Title { get; set; } = "New conversation";
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+    public List<ChatHistoryMessageViewModel> Messages { get; set; } = [];
+}
+
+public class ChatHistoryMessageViewModel
+{
+    public string MessageId { get; set; } = string.Empty;
+    public string User { get; set; } = string.Empty;
+    public string Content { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; }
 }
 
 public class BackofficeReportViewModel

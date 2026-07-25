@@ -1,0 +1,3 @@
+{
+  "content": "Configuration context:\n- Configuration lives across appsettings.json, launchSettings.json, AssistantProfileOptions, BackofficeOptions, JWT/auth settings, API settings, model paths, gateway URLs, and reviewer model paths.\n- AIChatApp.API/Program.cs wires dependency injection, auth, memory cache, response reviewer, migrations, seeding, and startup behavior.\n- Assistant prompt templates and knowledge can come from database rows with bundled JSON fallback.\n- Configuration answers should name the specific file/function when known and mention runtime differences between Docker and direct local development."
+}

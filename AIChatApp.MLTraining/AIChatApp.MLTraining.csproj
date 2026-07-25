@@ -11,4 +11,8 @@
     <PackageReference Include="Microsoft.ML" Version="5.0.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="Data\ReviewerTrainingExamples.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

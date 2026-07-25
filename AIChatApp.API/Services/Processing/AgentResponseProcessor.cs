@@ -63,6 +63,7 @@ namespace AIChatApp.Core.Agents
             response = CollapseRepeatedParagraphs(response);
             response = CollapseRepeatedLines(response);
             response = CollapseNearDuplicateClauses(response);
+            response = RemoveGenericClosingPhrases(response);
             response = TrimDanglingFragments(response);
 
             return Process(user, response.Trim());
@@ -150,7 +151,14 @@ namespace AIChatApp.Core.Agents
                 "Missing continuation only:",
                 "Missing final part only:",
                 "Incomplete answer to fix:",
-                "Final answer:"
+                "Final answer:",
+                "For other issues, explain",
+                "For other topics, explain",
+                "Do not include examples",
+                "Use bullet points if needed",
+                "Do not explain the topic",
+                "response generator has been updated",
+                "trains a response generator"
             };
 
             foreach (var marker in markers)
@@ -200,9 +208,35 @@ namespace AIChatApp.Core.Agents
             }
 
             var trimmed = response.Trim();
+            trimmed = Regex.Replace(trimmed, @"\s+\b(additionally|also|however|therefore|for example|in addition)\s*$", "", RegexOptions.IgnoreCase);
             trimmed = Regex.Replace(trimmed, @"\s+\b(and|or|with|for|to|of|in)\s*$", "", RegexOptions.IgnoreCase);
             trimmed = Regex.Replace(trimmed, @"[:;,.\-]+\s*$", match => match.Value.Contains('.') ? "." : "");
             return trimmed.Trim();
+        }
+
+        private static string RemoveGenericClosingPhrases(string response)
+        {
+            if (string.IsNullOrWhiteSpace(response))
+            {
+                return string.Empty;
+            }
+
+            var cleaned = response;
+            var patterns = new[]
+            {
+                @"\s+If you have specific questions or need further details,?\s*feel free to ask\.?\s*$",
+                @"\s+If you have specific questions about .+?,?\s*feel free to ask\.?\s*$",
+                @"\s+If you need more details,?\s*feel free to ask\.?\s*$",
+                @"\s+For more detailed information,?\s+you can inspect .+?\.\s*$",
+                @"\s+To summarize,?\s*.*$"
+            };
+
+            foreach (var pattern in patterns)
+            {
+                cleaned = Regex.Replace(cleaned, pattern, "", RegexOptions.IgnoreCase);
+            }
+
+            return cleaned.Trim();
         }
 
         private static string CollapseNearDuplicateClauses(string response)

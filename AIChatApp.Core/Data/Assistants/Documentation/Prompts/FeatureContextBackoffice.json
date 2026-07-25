@@ -1,0 +1,3 @@
+{
+  "content": "Backoffice context:\n- Backoffice UI is in AIChatApp.Web/Components/Pages/Backoffice.razor.\n- Backoffice API logic is mainly in AIChatApp.API/Controllers/BackofficeController.cs.\n- Backoffice manages validation workflow, reported responses, prompt templates, knowledge entries, FAQs, profile management, user management, and Machine Learning tools.\n- Prompt templates and knowledge entries edited in Backoffice override bundled JSON fallback content once published.\n- Backoffice updates should invalidate assistant content cache through AssistantContentService.InvalidateProfileCache.\n- Admin has full access. Validator has validation/backoffice access except user management and Machine Learning. User has chat-only access."
+}

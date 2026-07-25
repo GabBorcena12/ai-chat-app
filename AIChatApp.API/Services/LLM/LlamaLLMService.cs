@@ -10,6 +10,9 @@ namespace AIChatApp.API.Services.LLM
 {
     public class LlamaLLMService : ILLMService
     {
+        private const string AnsiGreen = "\x1b[32m";
+        private const string AnsiYellow = "\x1b[33m";
+        private const string AnsiReset = "\x1b[0m";
         private readonly InteractiveExecutor _executor;
         private readonly IConfiguration _configuration;
         private readonly ILogger<LlamaLLMService> _logger;
@@ -57,12 +60,22 @@ namespace AIChatApp.API.Services.LLM
             sw.Stop();
             if (sw.ElapsedMilliseconds > 30000)
             {
-                _logger.LogWarning("Model is slow (GenerateAsync): {ElapsedMs} ms", sw.ElapsedMilliseconds);
+                _logger.LogWarning("{LogLabel} Model is slow: {ElapsedMs} ms.", LogLabel("[LLM:SLOW]", AnsiYellow), sw.ElapsedMilliseconds);
             }
             else
             {
-                _logger.LogInformation("LLM Success | Latency (GenerateAsync): {ElapsedMs} ms", sw.ElapsedMilliseconds);
+                _logger.LogInformation("{LogLabel} Model call finished in {ElapsedMs} ms.", LogLabel("[LLM:DONE]", AnsiGreen), sw.ElapsedMilliseconds);
             }
+        }
+
+        private static string LogLabel(string label, string color)
+        {
+            if (Console.IsOutputRedirected || !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("NO_COLOR")))
+            {
+                return label;
+            }
+
+            return $"{color}{label}{AnsiReset}";
         }
     }
 }

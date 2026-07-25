@@ -1,0 +1,3 @@
+{
+  "content": "Caching context:\n- Server-side memory cache is registered in AIChatApp.API/Program.cs.\n- AssistantContentService caches prompt templates, quick answers, topic entries, and reference knowledge for read-heavy chat usage.\n- Important methods: LoadPromptAsync, LoadQuickAnswersAsync, LoadKnowledgeTextAsync, LoadTopicsAsync, InvalidateProfileCache.\n- Backoffice updates should invalidate profile cache so saved prompt/knowledge changes are visible to chat.\n- Chat history is not cached.\n- Browser-side FAQ cache was removed to avoid stale user/profile behavior. If stale answers appear, check cache invalidation logs and whether the API was restarted after code/template changes."
+}

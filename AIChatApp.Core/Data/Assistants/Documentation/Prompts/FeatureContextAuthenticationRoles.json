@@ -1,0 +1,3 @@
+{
+  "content": "Authentication and Roles context:\n- Authentication endpoints are in AIChatApp.API/Controllers/AuthController.cs.\n- Shared role names are in AIChatApp.Core/Config/AppRoleNames.cs.\n- Role/config seed behavior is connected to BackofficeOptions in AIChatApp.Core/Config/BackofficeOptions.cs and API startup configuration.\n- Intended roles: Admin has all access, User has chat app access only, Validator has Backoffice validation access except user management and Machine Learning.\n- 2FA/Google Authenticator status and setup are exposed through auth endpoints and shown in Web modals.\n- Do not expose real credentials in answers. Refer users to configured seeded development accounts only when safe and requested."
+}

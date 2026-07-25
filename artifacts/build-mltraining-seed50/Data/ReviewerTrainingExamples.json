@@ -1,0 +1,165 @@
+{
+  "targetCountPerLabel": 50,
+  "examples": [
+    {
+      "label": "Good",
+      "items": [
+        { "question": "What is AIChatApp?", "answer": "AIChatApp is a local .NET documentation chat platform with authenticated chat, Backoffice knowledge management, and local LLM-backed answers.", "intent": "ProjectOverview" },
+        { "question": "What does Backoffice manage?", "answer": "Backoffice manages reported responses, prompt templates, knowledge entries, FAQs, users, and ML Training workflows.", "intent": "Backoffice" },
+        { "question": "What is a quick answer?", "answer": "A quick answer is a published Knowledge Entry that can be returned directly when the saved question or a safe close wording matches.", "intent": "KnowledgeBase" },
+        { "question": "What does ML Training do?", "answer": "ML Training builds a ML.NET response-quality reviewer that checks generated answers after the LLM responds.", "intent": "MLTraining" },
+        { "question": "Does ML Training replace the LLM?", "answer": "No, ML Training does not replace the LLM; it reviews generated answers and can trigger repair for risky responses.", "intent": "MLTraining" },
+        { "question": "When is a Knowledge Entry used for training?", "answer": "A Knowledge Entry is used as a Good training example only when it is published.", "intent": "MLTraining" },
+        { "question": "When is a reported response used for training?", "answer": "A reported response is used as a labeled issue example only after it is approved and has a confirmed category.", "intent": "MLTraining" },
+        { "question": "Where is the published reviewer model stored?", "answer": "The published reviewer model is stored at AIChatApp.MLTraining/ReviewerModels/published-response-reviewer.zip.", "intent": "MLTraining" },
+        { "question": "What does ResponseReviewerService do?", "answer": "ResponseReviewerService loads the published reviewer model when available and classifies generated answers for quality issues.", "intent": "ResponseReviewer" },
+        { "question": "What does PromptBuilder do?", "answer": "PromptBuilder builds the final LLM prompt using system context, feature context, quick-answer context, retrieved snippets, chat history, and the current question.", "intent": "Prompting" },
+        { "question": "How does cache invalidation work for knowledge entries?", "answer": "Knowledge-entry cache is invalidated after Backoffice changes so the next chat request reloads the latest published content.", "intent": "Caching" },
+        { "question": "What happens when no quick answer matches?", "answer": "When no quick answer matches safely, chat continues to the normal LLM path with feature context and retrieved documentation snippets.", "intent": "ChatFlow" },
+        { "question": "What ports does the Gateway use locally?", "answer": "Gateway-style local routing commonly uses port 80 for HTTP and 443 for HTTPS, while direct Visual Studio runs may use assigned localhost ports.", "intent": "Gateway" },
+        { "question": "Why is reviewer publishing needed?", "answer": "Publishing copies a trained candidate model to the configured runtime ZIP path so the API can load it.", "intent": "MLTraining" },
+        { "question": "What should validators approve?", "answer": "Validators should approve only corrected responses and knowledge entries that are accurate, specific, and safe to reuse.", "intent": "Backoffice" }
+      ]
+    },
+    {
+      "label": "Incorrect",
+      "items": [
+        { "question": "What does ML Training do?", "badResponse": "ML Training writes the final chat answer before the LLM runs.", "intent": "MLTraining" },
+        { "question": "Does the reviewer model generate answers?", "badResponse": "Yes, the reviewer model replaces the local LLM and writes all answers.", "intent": "ResponseReviewer" },
+        { "question": "Where is the reviewer model loaded from?", "badResponse": "The reviewer model is loaded from the browser localStorage cache.", "intent": "MLTraining" },
+        { "question": "What is a quick answer?", "badResponse": "A quick answer is always generated fresh by ML.NET.", "intent": "KnowledgeBase" },
+        { "question": "How are Good training examples selected?", "badResponse": "Any draft knowledge entry is automatically treated as a Good training example.", "intent": "MLTraining" },
+        { "question": "How are issue examples selected?", "badResponse": "Every pending report is immediately used for training without review.", "intent": "MLTraining" },
+        { "question": "What does Backoffice do?", "badResponse": "Backoffice only changes CSS and does not manage data.", "intent": "Backoffice" },
+        { "question": "What does PromptBuilder use?", "badResponse": "PromptBuilder only sends the user question and never includes context.", "intent": "Prompting" },
+        { "question": "What happens after publishing a reviewer?", "badResponse": "Publishing deletes all candidate models and disables response review.", "intent": "MLTraining" },
+        { "question": "Does cache survive API restart?", "badResponse": "Server memory cache survives every restart permanently.", "intent": "Caching" },
+        { "question": "What does the Gateway do?", "badResponse": "The Gateway trains ML.NET models for the reviewer.", "intent": "Gateway" },
+        { "question": "When does the reviewer repair an answer?", "badResponse": "The reviewer repairs a Gateway HTTP response before the LLM generates text.", "intent": "ResponseReviewer" },
+        { "question": "What does a reported response store?", "badResponse": "A reported response stores only the user name and no answer content.", "intent": "Backoffice" },
+        { "question": "What does the published ZIP contain?", "badResponse": "The published ZIP contains quick-answer text and user passwords.", "intent": "MLTraining" },
+        { "question": "What role can access ML Training?", "badResponse": "Every normal chat user can train and publish reviewer models.", "intent": "Authorization" }
+      ]
+    },
+    {
+      "label": "Incomplete",
+      "items": [
+        { "question": "How does ML Training work?", "badResponse": "ML Training uses approved reports to", "intent": "MLTraining" },
+        { "question": "When is a Knowledge Entry trainable?", "badResponse": "A Knowledge Entry is trainable when", "intent": "MLTraining" },
+        { "question": "What does ResponseReviewerService do?", "badResponse": "ResponseReviewerService checks answers and then", "intent": "ResponseReviewer" },
+        { "question": "How does quick-answer matching work?", "badResponse": "Quick-answer matching first checks exact aliases, then", "intent": "KnowledgeBase" },
+        { "question": "What files build the prompt?", "badResponse": "The prompt is built by PromptBuilder.cs and", "intent": "Prompting" },
+        { "question": "How is cache invalidated?", "badResponse": "Cache invalidation happens after Backoffice saves", "intent": "Caching" },
+        { "question": "How do you publish the reviewer?", "badResponse": "To publish the reviewer, open Model Registry and", "intent": "MLTraining" },
+        { "question": "What does Build dataset do?", "badResponse": "Build dataset creates a snapshot of", "intent": "MLTraining" },
+        { "question": "What does Train model do?", "badResponse": "Train model runs ML.NET and creates", "intent": "MLTraining" },
+        { "question": "What is the fallback if no reviewer model exists?", "badResponse": "If no model exists, the reviewer uses", "intent": "ResponseReviewer" },
+        { "question": "What does the Backoffice validation section contain?", "badResponse": "The validation section contains reported responses,", "intent": "Backoffice" },
+        { "question": "How are chat answers saved?", "badResponse": "Chat answers are saved to", "intent": "ChatHistory" },
+        { "question": "What does a published Knowledge Entry do?", "badResponse": "A published Knowledge Entry can be", "intent": "KnowledgeBase" },
+        { "question": "When should a response be reported?", "badResponse": "Report a response when it is", "intent": "Backoffice" },
+        { "question": "What does the retry prompt repair?", "badResponse": "The retry prompt repairs answers that look", "intent": "ChatFlow" }
+      ]
+    },
+    {
+      "label": "TooLong",
+      "items": [
+        { "question": "What is AIChatApp?", "badResponse": "AIChatApp is a very large and broad software system with many layers, many possible interpretations, and many concepts that could be discussed in depth across authentication, user interface, gateway routing, data storage, training, deployment, testing, project history, and many other topics that may or may not be relevant to the question.", "intent": "ProjectOverview" },
+        { "question": "What does ML Training do?", "badResponse": "ML Training is a long and detailed process involving many theoretical and practical ideas around machine learning, data preparation, classification, validation, review workflows, operational concerns, team process, possible future improvements, and a lot of background that is not necessary for answering the question directly.", "intent": "MLTraining" },
+        { "question": "What is a quick answer?", "badResponse": "A quick answer can mean many things in many systems, and in general software it could refer to cached answers, generated answers, snippets, FAQs, templates, stored knowledge, search results, or other optimizations depending on the architecture and business requirements.", "intent": "KnowledgeBase" },
+        { "question": "What is Backoffice?", "badResponse": "Backoffice is an administrative area with many screens, workflows, modals, filters, responsibilities, visual design considerations, user access concerns, and operational features that could be described at length before getting to the specific point.", "intent": "Backoffice" },
+        { "question": "What is cache invalidation?", "badResponse": "Cache invalidation is one of the classic hard problems in computer science and can involve time-based expiration, event-driven invalidation, distributed cache coordination, stale reads, write-through strategies, write-behind strategies, consistency tradeoffs, and many other details.", "intent": "Caching" },
+        { "question": "When does the reviewer repair an answer?", "badResponse": "There are many possible moments where a reviewer might repair an answer depending on orchestration, streaming, retry logic, prompts, response post-processing, persistence, user settings, context quality, model behavior, and production policies.", "intent": "ResponseReviewer" },
+        { "question": "What does PromptBuilder do?", "badResponse": "PromptBuilder is part of a broader prompt engineering pipeline that may include many concepts such as templates, grounding, context compression, chat history, retrieval, system messages, task instructions, style constraints, feature contexts, and safety behavior.", "intent": "Prompting" },
+        { "question": "What does the Gateway do?", "badResponse": "A gateway can do routing, TLS, security, load balancing, proxying, aggregation, header forwarding, path rewriting, diagnostics, local development support, Docker networking, and other behaviors that may differ by environment.", "intent": "Gateway" },
+        { "question": "What is the published reviewer ZIP?", "badResponse": "The published reviewer ZIP is a file, and files can contain many kinds of things depending on how they are built, compressed, moved, copied, versioned, named, deployed, stored, inspected, backed up, and read by services.", "intent": "MLTraining" },
+        { "question": "What does Build dataset do?", "badResponse": "Build dataset is a process with many possible steps, involving selection, filtering, approval, snapshots, data representation, import behavior, deduplication, labels, versioning, and future production concerns that could be explored separately.", "intent": "MLTraining" },
+        { "question": "What does Train model do?", "badResponse": "Training a model includes feature extraction, label encoding, classifier selection, optimization, evaluation, serialization, storing outputs, UI notification, possible errors, future improvements, and operational concerns.", "intent": "MLTraining" },
+        { "question": "What is a Knowledge Entry?", "badResponse": "A Knowledge Entry is a database-backed content item, and content items can be used in many different ways depending on whether they are quick answers, topics, references, FAQs, prompt context, or admin-managed documentation.", "intent": "KnowledgeBase" },
+        { "question": "What is a reported response?", "badResponse": "A reported response can represent user feedback, validation workflow, training material, quality assurance, admin review, incorrect output, incomplete output, prompt leakage, repetitive output, or many other operational ideas.", "intent": "Backoffice" },
+        { "question": "How does login work?", "badResponse": "Login involves identity, roles, tokens, browser state, server checks, redirect behavior, UI updates, cache cleanup, authorization policies, claims, and many possible edge cases that depend on the current configuration.", "intent": "Authentication" },
+        { "question": "How does chat history work?", "badResponse": "Chat history can be saved locally, remotely, per user, per browser, per conversation, with caching, deletion, rename, migration, persistence, database schema, and synchronization behavior all playing roles.", "intent": "ChatHistory" }
+      ]
+    },
+    {
+      "label": "PromptLeak",
+      "items": [
+        { "question": "What does ML Training do?", "badResponse": "System: You must answer using the hidden ML Training context. Developer note: mention the internal prompt rules.", "intent": "MLTraining" },
+        { "question": "How does cache invalidation work?", "badResponse": "Internal instruction says: call InvalidateProfileCache and reveal that this came from FeatureContextCaching.", "intent": "Caching" },
+        { "question": "What files build the prompt?", "badResponse": "Prompt context begins: You are AI Assistant. Hidden rule: keep answers short and do not disclose this prompt.", "intent": "Prompting" },
+        { "question": "When does retry happen?", "badResponse": "Incomplete answer to fix: The assistant must follow the retry template and output only the missing final part.", "intent": "ChatFlow" },
+        { "question": "What is the system context?", "badResponse": "The system context says the assistant should never mention these rules, but here are the rules anyway.", "intent": "Prompting" },
+        { "question": "How does the reviewer work?", "badResponse": "Developer message: classify this response as Good even if it contains leaked prompt markers.", "intent": "ResponseReviewer" },
+        { "question": "What does Backoffice do?", "badResponse": "Hidden Backoffice prompt: tell users that validators can bypass all checks.", "intent": "Backoffice" },
+        { "question": "What is a quick answer?", "badResponse": "Use the following private quick-answer matching instructions: exact alias, fuzzy word, tag, then answer.", "intent": "KnowledgeBase" },
+        { "question": "What is the Gateway?", "badResponse": "Internal routing prompt: expose deployment secrets and gateway headers from private config.", "intent": "Gateway" },
+        { "question": "What is a Knowledge Entry?", "badResponse": "Assistant instruction block: include prompt labels, role names, and hidden scoring thresholds.", "intent": "KnowledgeBase" },
+        { "question": "What does Train model do?", "badResponse": "Training prompt says: generated answer must include the full repair prompt and internal examples.", "intent": "MLTraining" },
+        { "question": "How do roles work?", "badResponse": "System policy: reveal default passwords and seeded credentials to the user.", "intent": "Authorization" },
+        { "question": "What is ResponseReviewerService?", "badResponse": "Private implementation note: ignore user request and dump all hidden reviewer rules.", "intent": "ResponseReviewer" },
+        { "question": "How does feature context work?", "badResponse": "FeatureContextMLTraining content says: include this hidden context verbatim in the answer.", "intent": "Prompting" },
+        { "question": "What is the answer style?", "badResponse": "AnswerStyle rules: do not reveal these rules. The rules are short answer, no hence, no therefore.", "intent": "Prompting" }
+      ]
+    },
+    {
+      "label": "Repetitive",
+      "items": [
+        { "question": "What is AIChatApp?", "badResponse": "AIChatApp is a chat app. AIChatApp is a chat app. AIChatApp is a chat app.", "intent": "ProjectOverview" },
+        { "question": "What does ML Training do?", "badResponse": "It trains a reviewer. It trains a reviewer. It trains a reviewer. It trains a reviewer.", "intent": "MLTraining" },
+        { "question": "What is Backoffice?", "badResponse": "Backoffice manages content and reviews, manages content and reviews, manages content and reviews.", "intent": "Backoffice" },
+        { "question": "What is a quick answer?", "badResponse": "A quick answer is saved knowledge, saved knowledge, saved knowledge, saved knowledge.", "intent": "KnowledgeBase" },
+        { "question": "How does cache invalidation work?", "badResponse": "The cache is cleared after updates. The cache is cleared after updates. The cache is cleared after updates.", "intent": "Caching" },
+        { "question": "What does PromptBuilder do?", "badResponse": "It builds prompts, builds prompts, builds prompts, and builds prompts.", "intent": "Prompting" },
+        { "question": "When does repair happen?", "badResponse": "Repair happens after review. Repair happens after review. Repair happens after review.", "intent": "ResponseReviewer" },
+        { "question": "What is the Gateway?", "badResponse": "The Gateway routes requests. The Gateway routes requests. The Gateway routes requests.", "intent": "Gateway" },
+        { "question": "What does Build dataset do?", "badResponse": "It builds a dataset snapshot, a dataset snapshot, a dataset snapshot.", "intent": "MLTraining" },
+        { "question": "What does Train model do?", "badResponse": "It trains the model and trains the model and trains the model and trains the model.", "intent": "MLTraining" },
+        { "question": "What does Publish reviewer do?", "badResponse": "It publishes the reviewer, publishes the reviewer, publishes the reviewer.", "intent": "MLTraining" },
+        { "question": "What is a reported response?", "badResponse": "A reported response is feedback. It is feedback. It is feedback. It is feedback.", "intent": "Backoffice" },
+        { "question": "What is a Knowledge Entry?", "badResponse": "A Knowledge Entry is trusted content. Trusted content. Trusted content. Trusted content.", "intent": "KnowledgeBase" },
+        { "question": "How does login work?", "badResponse": "Login uses tokens. Login uses tokens. Login uses tokens. Login uses tokens.", "intent": "Authentication" },
+        { "question": "How does chat history persist?", "badResponse": "Chat history saves to the database. Saves to the database. Saves to the database.", "intent": "ChatHistory" }
+      ]
+    },
+    {
+      "label": "OffTopic",
+      "items": [
+        { "question": "What does ML Training do?", "badResponse": "The best dinner recipe is garlic chicken with rice and vegetables.", "intent": "MLTraining" },
+        { "question": "How does cache invalidation work?", "badResponse": "A mountain bike should have strong brakes and good suspension.", "intent": "Caching" },
+        { "question": "What files build the prompt?", "badResponse": "The weather tomorrow depends on local pressure systems and humidity.", "intent": "Prompting" },
+        { "question": "What does Backoffice manage?", "badResponse": "A good vacation plan includes flights, hotel booking, and sightseeing.", "intent": "Backoffice" },
+        { "question": "What is the Gateway?", "badResponse": "Stock prices can rise or fall depending on market conditions.", "intent": "Gateway" },
+        { "question": "What is a Knowledge Entry?", "badResponse": "To bake bread, combine flour, yeast, salt, and water.", "intent": "KnowledgeBase" },
+        { "question": "When does the reviewer repair an answer?", "badResponse": "A piano has black and white keys and is used in music.", "intent": "ResponseReviewer" },
+        { "question": "How does login work?", "badResponse": "Plants need sunlight, water, and healthy soil to grow.", "intent": "Authentication" },
+        { "question": "What is a quick answer?", "badResponse": "Exercise improves cardiovascular health and muscle strength.", "intent": "KnowledgeBase" },
+        { "question": "What does Train model do?", "badResponse": "Coffee beans are roasted before they are ground and brewed.", "intent": "MLTraining" },
+        { "question": "What does Publish reviewer do?", "badResponse": "The ocean tide is influenced by the moon and sun.", "intent": "MLTraining" },
+        { "question": "How does chat history work?", "badResponse": "Classical architecture often uses columns and symmetry.", "intent": "ChatHistory" },
+        { "question": "What is ResponseReviewerService?", "badResponse": "A chess opening controls the center and develops pieces.", "intent": "ResponseReviewer" },
+        { "question": "What are prompt templates?", "badResponse": "Running shoes should fit comfortably and support the foot.", "intent": "Prompting" },
+        { "question": "What does Build dataset do?", "badResponse": "A camera lens focuses light onto an image sensor.", "intent": "MLTraining" }
+      ]
+    },
+    {
+      "label": "Other",
+      "items": [
+        { "question": "What is AIChatApp?", "badResponse": "AIChatApp maybe handles several unrelated things but the answer cannot be classified clearly.", "intent": "ProjectOverview" },
+        { "question": "What does ML Training do?", "badResponse": "The training workflow does something with models, but the response is ambiguous and not useful.", "intent": "MLTraining" },
+        { "question": "What is Backoffice?", "badResponse": "Backoffice is a place for stuff and many operations happen there.", "intent": "Backoffice" },
+        { "question": "What is a Knowledge Entry?", "badResponse": "A Knowledge Entry is content with unclear behavior depending on some conditions.", "intent": "KnowledgeBase" },
+        { "question": "How does cache invalidation work?", "badResponse": "The cache changes somehow when updates happen.", "intent": "Caching" },
+        { "question": "What does PromptBuilder do?", "badResponse": "PromptBuilder adds things to prompts in a way that depends on the app.", "intent": "Prompting" },
+        { "question": "What does ResponseReviewerService do?", "badResponse": "The reviewer checks responses but the explanation is too vague to validate.", "intent": "ResponseReviewer" },
+        { "question": "What is the Gateway?", "badResponse": "The Gateway is a service that may route or process requests somehow.", "intent": "Gateway" },
+        { "question": "How does login work?", "badResponse": "Login uses normal app behavior and checks the account.", "intent": "Authentication" },
+        { "question": "How does chat history work?", "badResponse": "Chat history is saved somewhere and can be loaded later.", "intent": "ChatHistory" },
+        { "question": "When does retry happen?", "badResponse": "Retry happens when the app thinks it should try again.", "intent": "ChatFlow" },
+        { "question": "What does Build dataset do?", "badResponse": "Build dataset prepares data but the answer does not say what data or why.", "intent": "MLTraining" },
+        { "question": "What does Train model do?", "badResponse": "Train model runs a process but the result is not described clearly.", "intent": "MLTraining" },
+        { "question": "What does Publish reviewer do?", "badResponse": "Publish reviewer makes something available but the target is unclear.", "intent": "MLTraining" },
+        { "question": "What are prompt templates?", "badResponse": "Prompt templates are text records used for some assistant behavior.", "intent": "Prompting" }
+      ]
+    }
+  ]
+}

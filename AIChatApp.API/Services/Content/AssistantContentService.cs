@@ -1,7 +1,9 @@
 using AIChatApp.Core.Config;
 using AIChatApp.Core.Data_Context;
 using AIChatApp.Core.Data_Context.Entity;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.EntityFrameworkCore;
+using System.Collections.Concurrent;
 using System.Text.Json;
 
 namespace AIChatApp.API.Services.Content
@@ -13,132 +15,172 @@ namespace AIChatApp.API.Services.Content
     public class AssistantContentService : IAssistantContentService
     {
         private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+        private static readonly TimeSpan ContentCacheDuration = TimeSpan.FromMinutes(10);
+        private static readonly ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> ProfileCacheKeys = new(StringComparer.OrdinalIgnoreCase);
         private readonly AppDbContext _dbContext;
         private readonly ChatPaths _paths;
+        private readonly IMemoryCache _cache;
 
-        public AssistantContentService(AppDbContext dbContext, ChatPaths paths)
+        public AssistantContentService(AppDbContext dbContext, ChatPaths paths, IMemoryCache cache)
         {
             _dbContext = dbContext;
             _paths = paths;
+            _cache = cache;
         }
 
         public async Task<string> LoadPromptAsync(string profileId, string templateName, CancellationToken cancellationToken = default)
         {
             var normalizedTemplate = Path.GetFileNameWithoutExtension(templateName);
+            var cacheKey = TrackCacheKey(profileId, BuildCacheKey(profileId, "prompt", normalizedTemplate));
 
-            // Published prompt templates are treated as the live source of truth after Backoffice edits.
-            var published = await _dbContext.AssistantPromptTemplates
-                .AsNoTracking()
-                .Where(x => x.ProfileId == profileId && x.TemplateName == normalizedTemplate && x.IsPublished)
-                .OrderByDescending(x => x.UpdatedAt)
-                .FirstOrDefaultAsync(cancellationToken);
+            return await _cache.GetOrCreateAsync(cacheKey, async entry =>
+            {
+                entry.AbsoluteExpirationRelativeToNow = ContentCacheDuration;
 
-            return published?.Content ?? _paths.LoadAssistantPrompt(profileId, templateName);
+                // Published prompt templates are treated as the live source of truth after Backoffice edits.
+                var published = await _dbContext.AssistantPromptTemplates
+                    .AsNoTracking()
+                    .Where(x => x.ProfileId == profileId && x.TemplateName == normalizedTemplate && x.IsPublished)
+                    .OrderByDescending(x => x.UpdatedAt)
+                    .FirstOrDefaultAsync(cancellationToken);
+
+                return published?.Content ?? _paths.LoadAssistantPrompt(profileId, templateName);
+            }) ?? string.Empty;
         }
 
         public async Task<string> LoadKnowledgeTextAsync(string profileId, string sourceName, CancellationToken cancellationToken = default)
         {
             var normalizedSource = Path.GetFileNameWithoutExtension(sourceName);
+            var cacheKey = TrackCacheKey(profileId, BuildCacheKey(profileId, "knowledge-text", normalizedSource));
 
-            // Quick answers and FAQ topics are structured DB entries, so convert them into prompt-friendly text.
-            if (string.Equals(normalizedSource, "QuickAnswers", StringComparison.OrdinalIgnoreCase))
+            return await _cache.GetOrCreateAsync(cacheKey, async entry =>
             {
-                var quickAnswers = await LoadQuickAnswersAsync(profileId, cancellationToken);
-                if (quickAnswers.Count > 0)
+                entry.AbsoluteExpirationRelativeToNow = ContentCacheDuration;
+
+                // Quick answers and FAQ topics are structured DB entries, so convert them into prompt-friendly text.
+                if (string.Equals(normalizedSource, "QuickAnswers", StringComparison.OrdinalIgnoreCase))
                 {
-                    return string.Join(Environment.NewLine + Environment.NewLine, quickAnswers.Select(entry =>
-                        $"Q: {string.Join(" | ", entry.Aliases)}{Environment.NewLine}A: {entry.Answer}"));
+                    var quickAnswers = await LoadQuickAnswersAsync(profileId, cancellationToken);
+                    if (quickAnswers.Count > 0)
+                    {
+                        return string.Join(Environment.NewLine + Environment.NewLine, quickAnswers.Select(entry =>
+                            $"Q: {string.Join(" | ", entry.Aliases)}{Environment.NewLine}A: {entry.Answer}"));
+                    }
                 }
-            }
 
-            if (string.Equals(normalizedSource, "Faq", StringComparison.OrdinalIgnoreCase))
-            {
-                var topics = await LoadTopicsAsync(profileId, cancellationToken);
-                if (topics.Count > 0)
+                if (string.Equals(normalizedSource, "Faq", StringComparison.OrdinalIgnoreCase))
                 {
-                    return string.Join(Environment.NewLine + Environment.NewLine, topics.Select(entry =>
-                        $"topic: {entry.Topic}{Environment.NewLine}keywords: {string.Join(", ", entry.Keywords)}{Environment.NewLine}summary: {entry.Summary}{Environment.NewLine}context:{Environment.NewLine}{string.Join(Environment.NewLine, entry.Context)}"));
+                    var topics = await LoadTopicsAsync(profileId, cancellationToken);
+                    if (topics.Count > 0)
+                    {
+                        return string.Join(Environment.NewLine + Environment.NewLine, topics.Select(entry =>
+                            $"topic: {entry.Topic}{Environment.NewLine}keywords: {string.Join(", ", entry.Keywords)}{Environment.NewLine}summary: {entry.Summary}{Environment.NewLine}context:{Environment.NewLine}{string.Join(Environment.NewLine, entry.Context)}"));
+                    }
                 }
-            }
 
-            // Reference knowledge is stored as editable published rows. If none exist yet, use the bundled JSON file.
-            var published = await _dbContext.AssistantKnowledgeEntries
-                .AsNoTracking()
-                .Where(x => x.ProfileId == profileId
-                    && x.SourceName == normalizedSource
-                    && x.IsPublished
-                    && x.EntryType == "Reference")
-                .OrderBy(x => x.SortOrder)
-                .ThenBy(x => x.Id)
-                .ToListAsync(cancellationToken);
+                // Reference knowledge is stored as editable published rows. If none exist yet, use the bundled JSON file.
+                var published = await _dbContext.AssistantKnowledgeEntries
+                    .AsNoTracking()
+                    .Where(x => x.ProfileId == profileId
+                        && x.SourceName == normalizedSource
+                        && x.IsPublished
+                        && x.EntryType == "Reference")
+                    .OrderBy(x => x.SortOrder)
+                    .ThenBy(x => x.Id)
+                    .ToListAsync(cancellationToken);
 
-            if (published.Count == 0)
-            {
-                return _paths.LoadAssistantKnowledge(profileId, sourceName);
-            }
+                if (published.Count == 0)
+                {
+                    return _paths.LoadAssistantKnowledge(profileId, sourceName);
+                }
 
-            return string.Join(Environment.NewLine + Environment.NewLine, published.Select(x => x.Content).Where(x => !string.IsNullOrWhiteSpace(x)));
+                return string.Join(Environment.NewLine + Environment.NewLine, published.Select(x => x.Content).Where(x => !string.IsNullOrWhiteSpace(x)));
+            }) ?? string.Empty;
         }
 
         public async Task<IReadOnlyList<JsonQuickAnswerEntry>> LoadQuickAnswersAsync(string profileId, CancellationToken cancellationToken = default)
         {
-            var published = await _dbContext.AssistantKnowledgeEntries
-                .AsNoTracking()
-                .Where(x => x.ProfileId == profileId
-                    && x.EntryType == "QuickAnswer"
-                    && x.IsPublished)
-                .OrderBy(x => x.SortOrder)
-                .ThenBy(x => x.Id)
-                .ToListAsync(cancellationToken);
-
-            if (published.Count == 0)
+            return await _cache.GetOrCreateAsync(TrackCacheKey(profileId, BuildCacheKey(profileId, "quick-answers")), async entry =>
             {
-                return _paths.LoadAssistantQuickAnswers(profileId);
-            }
+                entry.AbsoluteExpirationRelativeToNow = ContentCacheDuration;
 
-            return published.Select(x =>
-            {
-                var aliases = DeserializeList(x.AliasesJson);
-                if (!string.IsNullOrWhiteSpace(x.Title))
+                var published = await _dbContext.AssistantKnowledgeEntries
+                    .AsNoTracking()
+                    .Where(x => x.ProfileId == profileId
+                        && x.EntryType == "QuickAnswer"
+                        && x.IsPublished)
+                    .OrderBy(x => x.SortOrder)
+                    .ThenBy(x => x.Id)
+                    .ToListAsync(cancellationToken);
+
+                if (published.Count == 0)
                 {
-                    aliases.Add(x.Title.Trim());
+                    return _paths.LoadAssistantQuickAnswers(profileId);
                 }
 
-                return new JsonQuickAnswerEntry
+                return published.Select(x =>
                 {
-                    Title = x.Title,
-                    Aliases = aliases.Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
-                    Keywords = DeserializeList(x.KeywordsJson),
-                    SourceName = x.SourceName,
-                    Summary = x.Summary ?? string.Empty,
-                    Answer = x.Content ?? string.Empty
-                };
-            }).ToList();
+                    var aliases = DeserializeList(x.AliasesJson);
+                    if (!string.IsNullOrWhiteSpace(x.Title))
+                    {
+                        aliases.Add(x.Title.Trim());
+                    }
+
+                    return new JsonQuickAnswerEntry
+                    {
+                        Title = x.Title,
+                        Aliases = aliases.Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
+                        Keywords = DeserializeList(x.KeywordsJson),
+                        SourceName = x.SourceName,
+                        Summary = x.Summary ?? string.Empty,
+                        Answer = x.Content ?? string.Empty
+                    };
+                }).ToList();
+            }) ?? [];
         }
 
         public async Task<IReadOnlyList<JsonTopicEntry>> LoadTopicsAsync(string profileId, CancellationToken cancellationToken = default)
         {
-            var published = await _dbContext.AssistantKnowledgeEntries
-                .AsNoTracking()
-                .Where(x => x.ProfileId == profileId
-                    && x.EntryType == "Topic"
-                    && x.IsPublished)
-                .OrderBy(x => x.SortOrder)
-                .ThenBy(x => x.Id)
-                .ToListAsync(cancellationToken);
-
-            if (published.Count == 0)
+            return await _cache.GetOrCreateAsync(TrackCacheKey(profileId, BuildCacheKey(profileId, "topics")), async entry =>
             {
-                return _paths.LoadAssistantTopics(profileId);
+                entry.AbsoluteExpirationRelativeToNow = ContentCacheDuration;
+
+                var published = await _dbContext.AssistantKnowledgeEntries
+                    .AsNoTracking()
+                    .Where(x => x.ProfileId == profileId
+                        && x.EntryType == "Topic"
+                        && x.IsPublished)
+                    .OrderBy(x => x.SortOrder)
+                    .ThenBy(x => x.Id)
+                    .ToListAsync(cancellationToken);
+
+                if (published.Count == 0)
+                {
+                    return _paths.LoadAssistantTopics(profileId);
+                }
+
+                return published.Select(x => new JsonTopicEntry
+                {
+                    Topic = x.Title,
+                    Summary = x.Summary ?? string.Empty,
+                    Keywords = DeserializeList(x.KeywordsJson),
+                    Context = DeserializeList(x.Content)
+                }).ToList();
+            }) ?? [];
+        }
+
+        public void InvalidateProfileCache(string profileId)
+        {
+            var normalizedProfile = NormalizeProfileId(profileId);
+            if (!ProfileCacheKeys.TryRemove(normalizedProfile, out var keys))
+            {
+                return;
             }
 
-            return published.Select(x => new JsonTopicEntry
+            foreach (var key in keys.Keys)
             {
-                Topic = x.Title,
-                Summary = x.Summary ?? string.Empty,
-                Keywords = DeserializeList(x.KeywordsJson),
-                Context = DeserializeList(x.Content)
-            }).ToList();
+                _cache.Remove(key);
+            }
         }
 
         public async Task SeedProfileContentAsync(string profileId, CancellationToken cancellationToken = default)
@@ -151,7 +193,32 @@ namespace AIChatApp.API.Services.Content
 
         private async Task SeedPromptTemplatesAsync(string profileId, CancellationToken cancellationToken)
         {
-            var templateNames = new[] { "SystemContext", "AnswerStyle", "RetryTemplate", "ContinuationTemplate" };
+            var templateNames = new[]
+            {
+                "SystemContext",
+                "AnswerStyle",
+                "RetryTemplate",
+                "ContinuationTemplate",
+                "FeatureContextProjectOverview",
+                "FeatureContextChatApp",
+                "FeatureContextChatOrchestration",
+                "FeatureContextPromptBuilding",
+                "FeatureContextKnowledgeBase",
+                "FeatureContextQuickAnswers",
+                "FeatureContextAnswerMatching",
+                "FeatureContextBackoffice",
+                "FeatureContextReportedResponses",
+                "FeatureContextMLTraining",
+                "FeatureContextResponseReviewer",
+                "FeatureContextCaching",
+                "FeatureContextAuthenticationRoles",
+                "FeatureContextGatewayRouting",
+                "FeatureContextDockerDeployment",
+                "FeatureContextConfiguration",
+                "FeatureContextLLMModel",
+                "FeatureContextFAQContent",
+                "FeatureContextTroubleshooting"
+            };
             foreach (var templateName in templateNames)
             {
                 var exists = await _dbContext.AssistantPromptTemplates
@@ -297,5 +364,18 @@ namespace AIChatApp.API.Services.Content
                 return json.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
             }
         }
+
+        private static string BuildCacheKey(string profileId, string kind, string? name = null)
+            => $"assistant-content:{NormalizeProfileId(profileId)}:{kind}:{name?.Trim().ToLowerInvariant()}";
+
+        private static string TrackCacheKey(string profileId, string cacheKey)
+        {
+            var keys = ProfileCacheKeys.GetOrAdd(NormalizeProfileId(profileId), _ => new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase));
+            keys.TryAdd(cacheKey, 0);
+            return cacheKey;
+        }
+
+        private static string NormalizeProfileId(string profileId)
+            => profileId.Trim().ToLowerInvariant();
     }
 }

@@ -1,5 +1,6 @@
 ﻿using AIChatApp.API.Model;
 using AIChatApp.API.Services.Generic;
+using AIChatApp.Core.Config;
 using AIChatApp.Core.Data_Context.Entity;
 using Inventory.API.Models;
 using Microsoft.AspNetCore.Authorization;
@@ -116,7 +117,7 @@ namespace AichatApp.API.Controllers
                 Email = model.Email
             };
 
-            var roleName = "AppUser";
+            var roleName = AppRoleNames.User;
             if (!await _roleManager.RoleExistsAsync(roleName))
             {
                 await _roleManager.CreateAsync(new IdentityRole(roleName));

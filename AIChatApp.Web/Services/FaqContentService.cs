@@ -1,15 +1,26 @@
 using AIChatApp.Core.Config;
 using AIChatApp.Web.Models;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace AIChatApp.Web.Services;
 
 public sealed class FaqContentService
 {
     private const string ProfileId = "Documentation";
+    private static readonly TimeSpan FaqCacheDuration = TimeSpan.FromMinutes(15);
     private readonly ChatPaths _paths = new();
+    private readonly IMemoryCache _cache;
+
+    public FaqContentService(IMemoryCache cache)
+    {
+        _cache = cache;
+    }
 
     public IReadOnlyList<FaqItemViewModel> LoadQuickAnswers()
-        => _paths.LoadAssistantQuickAnswers(ProfileId)
+        => _cache.GetOrCreate("faq-content:quick-answers", cacheEntry =>
+        {
+            cacheEntry.AbsoluteExpirationRelativeToNow = FaqCacheDuration;
+            return _paths.LoadAssistantQuickAnswers(ProfileId)
             .Where(entry => !string.IsNullOrWhiteSpace(entry.Answer) && entry.Aliases.Count > 0)
             .Select(entry => new FaqItemViewModel
             {
@@ -20,9 +31,13 @@ public sealed class FaqContentService
             .OrderBy(item => item.Category)
             .ThenBy(item => item.Question)
             .ToList();
+        }) ?? [];
 
     public IReadOnlyList<FaqTopicViewModel> LoadTopics()
-        => _paths.LoadAssistantTopics(ProfileId)
+        => _cache.GetOrCreate("faq-content:topics", cacheEntry =>
+        {
+            cacheEntry.AbsoluteExpirationRelativeToNow = FaqCacheDuration;
+            return _paths.LoadAssistantTopics(ProfileId)
             .Where(topic => !string.IsNullOrWhiteSpace(topic.Topic) && !string.IsNullOrWhiteSpace(topic.Summary))
             .Select(topic => new FaqTopicViewModel
             {
@@ -32,6 +47,7 @@ public sealed class FaqContentService
             })
             .OrderBy(topic => topic.Topic)
             .ToList();
+        }) ?? [];
 
     private static string NormalizeQuestion(string value)
     {

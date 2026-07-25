@@ -26,6 +26,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Register ChatService
 builder.Services.AddControllers();
+builder.Services.AddMemoryCache();
 builder.Services.Configure<AssistantProfileOptions>(builder.Configuration.GetSection(AssistantProfileOptions.SectionName));
 builder.Services.Configure<LocalModelOptions>(builder.Configuration.GetSection(LocalModelOptions.SectionName));
 builder.Services.Configure<BackofficeOptions>(builder.Configuration.GetSection(BackofficeOptions.SectionName));
@@ -175,7 +176,8 @@ builder.Services.AddScoped<CoreDataImportService>();
 
 // Response processor (includes Agent / keyword logic)
 builder.Services.AddScoped<IResponseProcessor, AgentResponseProcessor>();
-builder.Services.AddSingleton<IResponseReviewer, ResponseReviewerService>();
+builder.Services.AddSingleton<ResponseReviewerService>();
+builder.Services.AddSingleton<IResponseReviewer>(sp => sp.GetRequiredService<ResponseReviewerService>());
 builder.Services.AddSingleton<TrainingWorkspaceService>();
 
 // Agent tools for product suggestions
@@ -281,7 +283,14 @@ static async Task EnsureRolesAndBackofficeSeedAsync(IServiceProvider services)
     var backofficeOptions = services.GetRequiredService<Microsoft.Extensions.Options.IOptions<BackofficeOptions>>().Value;
     var logger = services.GetRequiredService<ILoggerFactory>().CreateLogger("StartupSeed");
 
-    foreach (var roleName in new[] { "User", "AppUser", "DataValidator", "Admin" })
+    foreach (var roleName in new[]
+    {
+        AppRoleNames.User,
+        AppRoleNames.Validator,
+        AppRoleNames.Admin,
+        AppRoleNames.LegacyAppUser,
+        AppRoleNames.LegacyDataValidator
+    })
     {
         if (!await roleManager.RoleExistsAsync(roleName))
         {
@@ -289,46 +298,31 @@ static async Task EnsureRolesAndBackofficeSeedAsync(IServiceProvider services)
         }
     }
 
-    if (backofficeOptions.SeedDefaultAdmin
-        && !string.IsNullOrWhiteSpace(backofficeOptions.DefaultAdminUsername)
-        && !string.IsNullOrWhiteSpace(backofficeOptions.DefaultAdminEmail)
-        && !string.IsNullOrWhiteSpace(backofficeOptions.DefaultAdminPassword))
+    if (backofficeOptions.SeedDefaultRoleAccounts || backofficeOptions.SeedDefaultAdmin)
     {
-        var defaultAdmin = await userManager.FindByNameAsync(backofficeOptions.DefaultAdminUsername);
-        if (defaultAdmin is null)
-        {
-            defaultAdmin = new ApplicationUser
-            {
-                UserName = backofficeOptions.DefaultAdminUsername.Trim(),
-                Email = backofficeOptions.DefaultAdminEmail.Trim(),
-                EmailConfirmed = true,
-                IsConfirmed = true
-            };
+        await EnsureDefaultRoleAccountAsync(
+            userManager,
+            logger,
+            backofficeOptions.DefaultAdminUsername,
+            backofficeOptions.DefaultAdminEmail,
+            backofficeOptions.DefaultAdminPassword,
+            AppRoleNames.Admin);
 
-            var createAdminResult = await userManager.CreateAsync(defaultAdmin, backofficeOptions.DefaultAdminPassword);
-            if (!createAdminResult.Succeeded)
-            {
-                logger.LogWarning("Default admin account could not be created: {Errors}", string.Join("; ", createAdminResult.Errors.Select(error => error.Description)));
-            }
-            else
-            {
-                logger.LogInformation("Seeded default admin account {Username}.", defaultAdmin.UserName);
-            }
-        }
+        await EnsureDefaultRoleAccountAsync(
+            userManager,
+            logger,
+            backofficeOptions.DefaultUserUsername,
+            backofficeOptions.DefaultUserEmail,
+            backofficeOptions.DefaultUserPassword,
+            AppRoleNames.User);
 
-        if (defaultAdmin is not null)
-        {
-            defaultAdmin.Email ??= backofficeOptions.DefaultAdminEmail.Trim();
-            defaultAdmin.EmailConfirmed = true;
-            defaultAdmin.IsConfirmed = true;
-            defaultAdmin.IsDisabled = false;
-            await userManager.UpdateAsync(defaultAdmin);
-
-            if (!await userManager.IsInRoleAsync(defaultAdmin, "Admin"))
-            {
-                await userManager.AddToRoleAsync(defaultAdmin, "Admin");
-            }
-        }
+        await EnsureDefaultRoleAccountAsync(
+            userManager,
+            logger,
+            backofficeOptions.DefaultValidatorUsername,
+            backofficeOptions.DefaultValidatorEmail,
+            backofficeOptions.DefaultValidatorPassword,
+            AppRoleNames.Validator);
     }
 
     foreach (var username in backofficeOptions.AdminUsernames.Distinct(StringComparer.OrdinalIgnoreCase))
@@ -340,14 +334,69 @@ static async Task EnsureRolesAndBackofficeSeedAsync(IServiceProvider services)
             continue;
         }
 
-        if (!await userManager.IsInRoleAsync(user, "Admin"))
+        if (!await userManager.IsInRoleAsync(user, AppRoleNames.Admin))
         {
-            await userManager.AddToRoleAsync(user, "Admin");
+            await userManager.AddToRoleAsync(user, AppRoleNames.Admin);
         }
     }
 
     await coreDataImportService.ImportCoreDataJsonAsync();
     await assistantContentService.SeedProfileContentAsync("Documentation");
+}
+
+static async Task EnsureDefaultRoleAccountAsync(
+    UserManager<ApplicationUser> userManager,
+    ILogger logger,
+    string username,
+    string email,
+    string password,
+    string roleName)
+{
+    if (string.IsNullOrWhiteSpace(username)
+        || string.IsNullOrWhiteSpace(email)
+        || string.IsNullOrWhiteSpace(password))
+    {
+        return;
+    }
+
+    var normalizedUsername = username.Trim();
+    var normalizedEmail = email.Trim();
+    var user = await userManager.FindByNameAsync(normalizedUsername)
+        ?? await userManager.FindByEmailAsync(normalizedEmail);
+
+    if (user is null)
+    {
+        user = new ApplicationUser
+        {
+            UserName = normalizedUsername,
+            Email = normalizedEmail,
+            EmailConfirmed = true,
+            IsConfirmed = true
+        };
+
+        var createResult = await userManager.CreateAsync(user, password);
+        if (!createResult.Succeeded)
+        {
+            logger.LogWarning(
+                "Default {RoleName} account could not be created: {Errors}",
+                roleName,
+                string.Join("; ", createResult.Errors.Select(error => error.Description)));
+            return;
+        }
+
+        logger.LogInformation("Seeded default {RoleName} account {Username}.", roleName, user.UserName);
+    }
+
+    user.Email ??= normalizedEmail;
+    user.EmailConfirmed = true;
+    user.IsConfirmed = true;
+    user.IsDisabled = false;
+    await userManager.UpdateAsync(user);
+
+    if (!await userManager.IsInRoleAsync(user, roleName))
+    {
+        await userManager.AddToRoleAsync(user, roleName);
+    }
 }
 
 static async Task EnsureCoreDataFilesTableAsync(AppDbContext db)

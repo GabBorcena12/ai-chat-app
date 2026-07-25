@@ -1,6 +1,7 @@
 @page "/backoffice"
 @rendermode InteractiveServer
 @using AIChatApp.Web.Config
+@using AIChatApp.Core.Config
 @using System.Globalization
 @using System.Text
 @using System.Text.Json
@@ -36,6 +37,10 @@
     else if (!IsAuthenticated)
     {
         <p class="status-note">Sign in first to open the backoffice.</p>
+    }
+    else if (!CanAccessBackoffice)
+    {
+        <p class="status-note">Your account can use the chat workspace, but it does not have backoffice access.</p>
     }
     else
     {
@@ -130,47 +135,50 @@
                     }
                 </section>
 
-                <section class="backoffice-nav-group collapsible-sidebar-section @(machineLearningNavOpen ? null : "collapsed")">
-                    <button type="button"
-                            class="backoffice-nav-heading"
-                            aria-expanded="@machineLearningNavOpen"
-                            @onclick="() => ToggleBackofficeNavGroup(BackofficeNavGroup.MachineLearning)">
-                        <span>Machine Learning</span>
-                        <small>Reviewer training and publishing</small>
-                        <strong class="section-toggle-icon" aria-hidden="true">
-                            <svg class="action-icon" viewBox="0 0 24 24">
-                                <path d="m6 9 6 6 6-6" />
-                            </svg>
-                        </strong>
-                    </button>
-                    @if (machineLearningNavOpen)
-                    {
+                @if (CanManageMachineLearning)
+                {
+                    <section class="backoffice-nav-group collapsible-sidebar-section @(machineLearningNavOpen ? null : "collapsed")">
                         <button type="button"
-                                class="backoffice-nav-button app-ml @(ActiveSection == BackofficeSection.MlTraining ? "active" : null)"
-                                @onclick="() => SetSection(BackofficeSection.MlTraining)">
-                            <span>ML Training</span>
-                            <small>Build, train, and publish reviewer</small>
+                                class="backoffice-nav-heading"
+                                aria-expanded="@machineLearningNavOpen"
+                                @onclick="() => ToggleBackofficeNavGroup(BackofficeNavGroup.MachineLearning)">
+                            <span>Machine Learning</span>
+                            <small>Reviewer training and publishing</small>
+                            <strong class="section-toggle-icon" aria-hidden="true">
+                                <svg class="action-icon" viewBox="0 0 24 24">
+                                    <path d="m6 9 6 6 6-6" />
+                                </svg>
+                            </strong>
                         </button>
-                        <button type="button"
-                                class="backoffice-nav-button @(ShowTrainingDataModal ? "active" : null)"
-                                @onclick="OpenTrainingDataModal">
-                            <span>Training Data</span>
-                            <small>Approved report candidates</small>
-                        </button>
-                        <button type="button"
-                                class="backoffice-nav-button @(ShowTrainingJobsModal ? "active" : null)"
-                                @onclick="OpenTrainingJobsModal">
-                            <span>Training Jobs</span>
-                            <small>Build and train reviewer</small>
-                        </button>
-                        <button type="button"
-                                class="backoffice-nav-button @(ShowModelRegistryModal ? "active" : null)"
-                                @onclick="OpenModelRegistryModal">
-                            <span>Model Registry</span>
-                            <small>Published reviewer status</small>
-                        </button>
-                    }
-                </section>
+                        @if (machineLearningNavOpen)
+                        {
+                            <button type="button"
+                                    class="backoffice-nav-button app-ml @(ActiveSection == BackofficeSection.MlTraining ? "active" : null)"
+                                    @onclick="() => SetSection(BackofficeSection.MlTraining)">
+                                <span>ML Training</span>
+                                <small>Build, train, and publish reviewer</small>
+                            </button>
+                            <button type="button"
+                                    class="backoffice-nav-button @(ShowTrainingDataModal ? "active" : null)"
+                                    @onclick="OpenTrainingDataModal">
+                                <span>Training Data</span>
+                                <small>Approved report candidates</small>
+                            </button>
+                            <button type="button"
+                                    class="backoffice-nav-button @(ShowTrainingJobsModal ? "active" : null)"
+                                    @onclick="OpenTrainingJobsModal">
+                                <span>Training Jobs</span>
+                                <small>Build and train reviewer</small>
+                            </button>
+                            <button type="button"
+                                    class="backoffice-nav-button @(ShowModelRegistryModal ? "active" : null)"
+                                    @onclick="OpenModelRegistryModal">
+                                <span>Model Registry</span>
+                                <small>Published reviewer status</small>
+                            </button>
+                        }
+                    </section>
+                }
 
                 <section class="backoffice-nav-group collapsible-sidebar-section @(administrationNavOpen ? null : "collapsed")">
                     <button type="button"
@@ -193,12 +201,15 @@
                             <span>Profile Management</span>
                             <small>Change chat display name and avatar</small>
                         </button>
-                        <button type="button"
-                                class="backoffice-nav-button @(ShowUserManagementModal ? "active" : null)"
-                                @onclick="OpenUserManagementModal">
-                            <span>User Management</span>
-                            <small>Create users and manage backoffice roles</small>
-                        </button>
+                        @if (CanManageUsers)
+                        {
+                            <button type="button"
+                                    class="backoffice-nav-button @(ShowUserManagementModal ? "active" : null)"
+                                    @onclick="OpenUserManagementModal">
+                                <span>User Management</span>
+                                <small>Create users and manage backoffice roles</small>
+                            </button>
+                        }
                     }
                 </section>
 
@@ -1358,13 +1369,14 @@
                                 <h3>Quick answer matching order</h3>
                             </div>
                             <ol>
-                                <li>Exact question</li>
-                                <li>Close wording</li>
-                                <li>Tags or source</li>
-                                <li>Similar meaning</li>
+                                <li>Exact question or alias</li>
+                                <li>Safe close wording</li>
+                                <li>Close wording with tags/source</li>
+                                <li>Feature context templates</li>
+                                <li>Related docs as AI context</li>
                                 <li>Normal chat</li>
                             </ol>
-                            <p>The assistant checks safer matches first. If no match is confident, it lets the normal chat model answer.</p>
+                            <p>Saved answers are returned only for safe matches. Broader feature context helps the AI answer topic questions without guessing.</p>
                         </section>
 
                         @if (FilteredKnowledgeEntries.Count == 0)
@@ -1894,7 +1906,7 @@
                                         Generate tags
                                     </button>
                                 </div>
-                                <small class="field-help">Tags help match same-thought questions when wording changes.</small>
+                                <small class="field-help">Tags help confirm close wording matches. Related entries can help the AI, but weak matches do not auto-return saved answers.</small>
                             </label>
                             <label class="backoffice-wide">
                                 <span title="The main reusable content the assistant can read from this entry.">Content</span>
@@ -1905,10 +1917,11 @@
                         <div class="knowledge-match-flow" aria-label="Quick answer matching order">
                             <span>User question</span>
                             <strong>Exact alias</strong>
-                            <strong>Close wording</strong>
-                            <strong>Tags/source</strong>
-                            <strong>Similar meaning</strong>
-                            <span>Normal chat if no confident match</span>
+                            <strong>Safe close wording</strong>
+                            <strong>Close wording + tags/source</strong>
+                            <strong>Feature context</strong>
+                            <strong>Related docs</strong>
+                            <span>Normal chat if no safe match</span>
                         </div>
 
                         <div class="backoffice-inline-options knowledge-edit-options">
@@ -2327,6 +2340,7 @@
     private string? currentUsername;
     private string? currentDisplayName;
     private string? currentAvatar;
+    private HashSet<string> currentRoles = new(StringComparer.OrdinalIgnoreCase);
     private string displayNameDraft = string.Empty;
     private string avatarLabelDraft = string.Empty;
     private string? StatusMessage;
@@ -2379,7 +2393,7 @@
     private Dictionary<int, BackofficeReviewPayload> ReviewDrafts { get; } = [];
     private Dictionary<int, SavePromptTemplatePayload> PromptDrafts { get; } = [];
     private Dictionary<int, SaveKnowledgeEntryPayload> KnowledgeDrafts { get; } = [];
-    private static readonly string[] BackofficeRoleOptions = ["Admin", "DataValidator", "AppUser"];
+    private static readonly string[] BackofficeRoleOptions = [AppRoleNames.Admin, AppRoleNames.Validator, AppRoleNames.User];
     private static readonly string[] ReviewStatusOptions = ["Pending", "Reviewed", "Approved", "Rejected"];
     private static readonly HashSet<string> TagStopWords = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -2435,8 +2449,8 @@
         ("chat answer", "chat answers"),
         ("chat response", "chat responses"),
         ("prompt template", "prompt template"),
-        ("semantic", "semantic match"),
-        ("embedding", "semantic match"),
+        ("semantic", "related context"),
+        ("embedding", "related context"),
         ("gateway", "gateway"),
         ("authentication", "authentication"),
         ("google authenticator", "2FA"),
@@ -2494,6 +2508,10 @@
     private bool IsEditingKnowledgeEntry => EditingKnowledgeId.HasValue;
 
     private bool IsAuthenticated => !string.IsNullOrWhiteSpace(token);
+    private bool IsAdmin => currentRoles.Contains(AppRoleNames.Admin);
+    private bool CanAccessBackoffice => IsAdmin || currentRoles.Contains(AppRoleNames.Validator);
+    private bool CanManageMachineLearning => IsAdmin;
+    private bool CanManageUsers => IsAdmin;
     private bool StatusIsError { get; set; }
     private string CurrentUsernameOrFallback => string.IsNullOrWhiteSpace(currentUsername) ? "Unknown user" : currentUsername;
     private string CurrentDisplayNameOrFallback => string.IsNullOrWhiteSpace(currentDisplayName) ? CurrentUsernameOrFallback : currentDisplayName;
@@ -2611,13 +2629,13 @@
         }
 
         token = await BrowserStorage.GetAsync(TokenStorageKey);
+        currentRoles = ReadRolesFromJwt(token);
         currentUsername = await BrowserStorage.GetAsync(UserStorageKey);
-        currentDisplayName = await BrowserStorage.GetAsync(DisplayNameStorageKey);
-        currentAvatar = await BrowserStorage.GetAsync(AvatarLabelStorageKey);
+        await LoadCurrentProfileAsync();
         SyncProfileDrafts();
         initialized = true;
 
-        if (IsAuthenticated)
+        if (IsAuthenticated && CanAccessBackoffice)
         {
             await LoadAllAsync();
         }
@@ -2633,7 +2651,11 @@
             await RefreshWorkflowCoreAsync(cancellationToken);
             await RefreshPromptTemplatesCoreAsync(cancellationToken);
             await RefreshKnowledgeEntriesCoreAsync(cancellationToken);
-            await RefreshUsersCoreAsync(cancellationToken);
+            if (CanManageUsers)
+            {
+                await RefreshUsersCoreAsync(cancellationToken);
+            }
+
             ReviewDrafts.Clear();
             PromptDrafts.Clear();
             KnowledgeDrafts.Clear();
@@ -2643,6 +2665,14 @@
 
     private void SetSection(BackofficeSection section)
     {
+        if ((section == BackofficeSection.MlTraining && !CanManageMachineLearning)
+            || (section == BackofficeSection.Users && !CanManageUsers))
+        {
+            SetStatus("Your role does not have access to that section.", true);
+            ActiveSection = BackofficeSection.Workflow;
+            return;
+        }
+
         ActiveSection = section;
         if (section == BackofficeSection.Knowledge)
         {
@@ -2656,7 +2686,7 @@
         {
             BackofficeNavGroup.Workspaces => !workspacesNavOpen,
             BackofficeNavGroup.Validation => !validationNavOpen,
-            BackofficeNavGroup.MachineLearning => !machineLearningNavOpen,
+            BackofficeNavGroup.MachineLearning => CanManageMachineLearning && !machineLearningNavOpen,
             BackofficeNavGroup.Administration => !administrationNavOpen,
             _ => false
         };
@@ -2859,6 +2889,12 @@
 
     private void OpenUserManagementModal()
     {
+        if (!CanManageUsers)
+        {
+            SetStatus("Only admins can manage users.", true);
+            return;
+        }
+
         UsersFiltersOpen = false;
         UserPage = 1;
         ShowUserManagementModal = true;
@@ -2872,6 +2908,12 @@
 
     private async Task OpenTrainingDataModal()
     {
+        if (!CanManageMachineLearning)
+        {
+            SetStatus("Only admins can manage machine learning.", true);
+            return;
+        }
+
         TrainingCandidatePage = 1;
         ShowTrainingDataModal = true;
         await LoadReviewerWorkflowAsync();
@@ -2882,6 +2924,12 @@
 
     private async Task OpenTrainingJobsModal()
     {
+        if (!CanManageMachineLearning)
+        {
+            SetStatus("Only admins can manage machine learning.", true);
+            return;
+        }
+
         ShowTrainingJobsModal = true;
         await LoadReviewerWorkflowAsync();
     }
@@ -2891,6 +2939,12 @@
 
     private async Task OpenModelRegistryModal()
     {
+        if (!CanManageMachineLearning)
+        {
+            SetStatus("Only admins can manage machine learning.", true);
+            return;
+        }
+
         ShowModelRegistryModal = true;
         await LoadReviewerWorkflowAsync();
     }
@@ -2947,11 +3001,11 @@
         currentUsername = null;
         currentDisplayName = null;
         currentAvatar = null;
+        currentRoles.Clear();
 
         await BrowserStorage.RemoveAsync(TokenStorageKey);
         await BrowserStorage.RemoveAsync(UserStorageKey);
-        await BrowserStorage.RemoveAsync(DisplayNameStorageKey);
-        await BrowserStorage.RemoveAsync(AvatarLabelStorageKey);
+        await RemoveLegacyProfileStorageAsync();
 
         Navigation.NavigateTo("/chat");
     }
@@ -2968,21 +3022,23 @@
 
         if (string.IsNullOrWhiteSpace(displayName))
         {
-            await BrowserStorage.RemoveAsync(DisplayNameStorageKey);
+            await RemoveUserProfileValueAsync(GetDisplayNameStorageKey);
         }
         else
         {
-            await BrowserStorage.SetAsync(DisplayNameStorageKey, displayName);
+            await SetUserProfileValueAsync(GetDisplayNameStorageKey, displayName);
         }
 
         if (string.IsNullOrWhiteSpace(avatarLabel))
         {
-            await BrowserStorage.RemoveAsync(AvatarLabelStorageKey);
+            await RemoveUserProfileValueAsync(GetAvatarLabelStorageKey);
         }
         else
         {
-            await BrowserStorage.SetAsync(AvatarLabelStorageKey, avatarLabel);
+            await SetUserProfileValueAsync(GetAvatarLabelStorageKey, avatarLabel);
         }
+
+        await RemoveLegacyProfileStorageAsync();
 
         SetStatus("Chat profile updated.");
         await ShowCompletionNotificationAsync("Chat profile updated.");
@@ -2993,10 +3049,47 @@
         currentDisplayName = null;
         currentAvatar = null;
         SyncProfileDrafts();
-        await BrowserStorage.RemoveAsync(DisplayNameStorageKey);
-        await BrowserStorage.RemoveAsync(AvatarLabelStorageKey);
+        await RemoveUserProfileValueAsync(GetDisplayNameStorageKey);
+        await RemoveUserProfileValueAsync(GetAvatarLabelStorageKey);
+        await RemoveLegacyProfileStorageAsync();
         SetStatus("Chat profile reset.");
         await ShowCompletionNotificationAsync("Chat profile reset.");
+    }
+
+    private async Task LoadCurrentProfileAsync()
+    {
+        currentDisplayName = null;
+        currentAvatar = null;
+
+        if (!string.IsNullOrWhiteSpace(currentUsername))
+        {
+            currentDisplayName = await BrowserStorage.GetAsync(GetDisplayNameStorageKey(currentUsername));
+            currentAvatar = await BrowserStorage.GetAsync(GetAvatarLabelStorageKey(currentUsername));
+        }
+
+        await RemoveLegacyProfileStorageAsync();
+    }
+
+    private async Task SetUserProfileValueAsync(Func<string, string> keyFactory, string value)
+    {
+        if (!string.IsNullOrWhiteSpace(currentUsername))
+        {
+            await BrowserStorage.SetAsync(keyFactory(currentUsername), value);
+        }
+    }
+
+    private async Task RemoveUserProfileValueAsync(Func<string, string> keyFactory)
+    {
+        if (!string.IsNullOrWhiteSpace(currentUsername))
+        {
+            await BrowserStorage.RemoveAsync(keyFactory(currentUsername));
+        }
+    }
+
+    private async Task RemoveLegacyProfileStorageAsync()
+    {
+        await BrowserStorage.RemoveAsync(DisplayNameStorageKey);
+        await BrowserStorage.RemoveAsync(AvatarLabelStorageKey);
     }
 
     private void SyncProfileDrafts()
@@ -3126,6 +3219,12 @@
 
     private Task LoadUsersAsync() => RunBusyAsync(async cancellationToken =>
     {
+        if (!CanManageUsers)
+        {
+            SetStatus("Only admins can manage users.", true);
+            return;
+        }
+
         await RefreshUsersCoreAsync(cancellationToken);
         SetStatus("Users refreshed.");
     });
@@ -3319,6 +3418,12 @@
 
     private void OpenCreateUserModal()
     {
+        if (!CanManageUsers)
+        {
+            SetStatus("Only admins can create users.", true);
+            return;
+        }
+
         EditingUserId = null;
         UserModalDraft = CreateDefaultUserDraft();
         ShowUserModal = true;
@@ -3326,6 +3431,12 @@
 
     private void OpenEditUserModal(BackofficeUserViewModel user)
     {
+        if (!CanManageUsers)
+        {
+            SetStatus("Only admins can edit users.", true);
+            return;
+        }
+
         EditingUserId = user.Id;
         UserModalDraft = new SaveBackofficeUserPayload
         {
@@ -3396,6 +3507,7 @@
         }
 
         CloseKnowledgeModal();
+        FaqItems = FaqContent.LoadQuickAnswers();
         await RefreshReportsCoreAsync(cancellationToken);
         await RefreshKnowledgeEntriesCoreAsync(cancellationToken);
         await RefreshWorkflowCoreAsync(cancellationToken);
@@ -3530,13 +3642,28 @@
     private async Task RefreshWorkflowCoreAsync(CancellationToken cancellationToken)
     {
         WorkflowSummary = await GatewayClient.GetBackofficeWorkflowSummaryAsync(token!, cancellationToken);
-        TrainingCandidates = await GatewayClient.GetTrainingCandidatesAsync(token!, cancellationToken);
-        ReviewerState = await GatewayClient.GetReviewerWorkflowStateAsync(token!, cancellationToken);
+        if (CanManageMachineLearning)
+        {
+            TrainingCandidates = await GatewayClient.GetTrainingCandidatesAsync(token!, cancellationToken);
+            ReviewerState = await GatewayClient.GetReviewerWorkflowStateAsync(token!, cancellationToken);
+        }
+        else
+        {
+            TrainingCandidates = [];
+            ReviewerState = new ReviewerWorkflowStateViewModel();
+        }
+
         ClampTrainingCandidatePage();
     }
 
     private Task BuildReviewerDatasetAsync() => RunBusyAsync(async cancellationToken =>
     {
+        if (!CanManageMachineLearning)
+        {
+            SetStatus("Only admins can manage machine learning.", true);
+            return;
+        }
+
         await ShowCompletionNotificationAsync("Building reviewer dataset...");
         var message = await GatewayClient.BuildReviewerDatasetAsync(token!, cancellationToken);
         await RefreshWorkflowCoreAsync(cancellationToken);
@@ -3546,6 +3673,12 @@
 
     private Task TrainReviewerAsync() => RunBusyAsync(async cancellationToken =>
     {
+        if (!CanManageMachineLearning)
+        {
+            SetStatus("Only admins can manage machine learning.", true);
+            return;
+        }
+
         await ShowCompletionNotificationAsync("Training reviewer model...");
         var message = await GatewayClient.TrainReviewerAsync(token!, cancellationToken);
         await RefreshWorkflowCoreAsync(cancellationToken);
@@ -3555,6 +3688,12 @@
 
     private Task PublishLatestReviewerAsync() => RunBusyAsync(async cancellationToken =>
     {
+        if (!CanManageMachineLearning)
+        {
+            SetStatus("Only admins can manage machine learning.", true);
+            return;
+        }
+
         await ShowCompletionNotificationAsync("Publishing latest reviewer model...");
         var message = await GatewayClient.PublishLatestReviewerAsync(token!, cancellationToken);
         await RefreshWorkflowCoreAsync(cancellationToken);
@@ -3630,6 +3769,84 @@
     {
         StatusMessage = message;
         StatusIsError = isError;
+    }
+
+    private static HashSet<string> ReadRolesFromJwt(string? jwt)
+    {
+        var roles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(jwt))
+        {
+            return roles;
+        }
+
+        var parts = jwt.Split('.');
+        if (parts.Length < 2)
+        {
+            return roles;
+        }
+
+        try
+        {
+            var payloadJson = Encoding.UTF8.GetString(Base64UrlDecode(parts[1]));
+            using var payload = JsonDocument.Parse(payloadJson);
+            AddRolesFromClaim(payload.RootElement, "role", roles);
+            AddRolesFromClaim(payload.RootElement, "roles", roles);
+            AddRolesFromClaim(payload.RootElement, "http://schemas.microsoft.com/ws/2008/06/identity/claims/role", roles);
+        }
+        catch (JsonException)
+        {
+        }
+        catch (FormatException)
+        {
+        }
+
+        if (roles.Remove(AppRoleNames.LegacyAppUser))
+        {
+            roles.Add(AppRoleNames.User);
+        }
+
+        if (roles.Remove(AppRoleNames.LegacyDataValidator))
+        {
+            roles.Add(AppRoleNames.Validator);
+        }
+
+        return roles;
+    }
+
+    private static void AddRolesFromClaim(JsonElement payload, string claimName, ISet<string> roles)
+    {
+        if (!payload.TryGetProperty(claimName, out var claim))
+        {
+            return;
+        }
+
+        if (claim.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var value in claim.EnumerateArray())
+            {
+                AddRoleValue(value, roles);
+            }
+
+            return;
+        }
+
+        AddRoleValue(claim, roles);
+    }
+
+    private static void AddRoleValue(JsonElement value, ISet<string> roles)
+    {
+        var role = value.GetString();
+        if (!string.IsNullOrWhiteSpace(role))
+        {
+            roles.Add(role.Trim());
+        }
+    }
+
+    private static byte[] Base64UrlDecode(string value)
+    {
+        var padded = value.Replace('-', '+').Replace('_', '/');
+        padded = padded.PadRight(padded.Length + ((4 - padded.Length % 4) % 4), '=');
+        return Convert.FromBase64String(padded);
     }
 
     private void OnKnowledgeSourceChanged(ChangeEventArgs args)
@@ -4209,7 +4426,7 @@
     private static SaveBackofficeUserPayload CreateDefaultUserDraft()
         => new()
         {
-            Roles = ["AppUser"],
+            Roles = [AppRoleNames.User],
             IsConfirmed = true
         };
 
@@ -4261,6 +4478,15 @@
         return letters.Length == 0 ? fallback : new string(letters);
     }
 
+    private static string GetDisplayNameStorageKey(string username)
+        => $"aichatapp.web.profile.{NormalizeStorageUser(username)}.displayName";
+
+    private static string GetAvatarLabelStorageKey(string username)
+        => $"aichatapp.web.profile.{NormalizeStorageUser(username)}.avatarLabel";
+
+    private static string NormalizeStorageUser(string username)
+        => Uri.EscapeDataString(username.Trim().ToLowerInvariant());
+
     private static SaveBackofficeUserPayload NormalizeUserDraft(SaveBackofficeUserPayload draft)
         => new()
         {
@@ -4293,7 +4519,7 @@
 
         if (UserModalDraft.Roles.Count == 0)
         {
-            UserModalDraft.Roles.Add("AppUser");
+            UserModalDraft.Roles.Add(AppRoleNames.User);
         }
     }
 }

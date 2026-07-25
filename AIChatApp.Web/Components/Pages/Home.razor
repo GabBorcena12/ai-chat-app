@@ -898,10 +898,8 @@
             initialized = true;
             token = await BrowserStorage.GetAsync(TokenStorageKey);
             CurrentUsername = await BrowserStorage.GetAsync(UserStorageKey);
-            CurrentDisplayName = await BrowserStorage.GetAsync(DisplayNameStorageKey);
-            CurrentAvatar = await BrowserStorage.GetAsync(AvatarLabelStorageKey);
-            var storedTheme = await BrowserStorage.GetAsync(ThemeStorageKey);
-            isLightTheme = string.Equals(storedTheme, "light", StringComparison.OrdinalIgnoreCase);
+            await LoadCurrentProfileAsync();
+            await ClearUnsafeGlobalConversationCacheAsync();
             await ApplyThemeAsync();
 
             if (IsAuthenticated)
@@ -1072,7 +1070,6 @@
     private async Task ToggleThemeAsync()
     {
         isLightTheme = !isLightTheme;
-        await BrowserStorage.SetAsync(ThemeStorageKey, isLightTheme ? "light" : "dark");
         await ApplyThemeAsync();
     }
 
@@ -1170,21 +1167,34 @@
         conversation.DraftTitle = conversation.Title;
     }
 
-    private void SaveConversationTitle(ConversationViewModel conversation)
+    private async Task SaveConversationTitle(ConversationViewModel conversation)
     {
         conversation.Title = string.IsNullOrWhiteSpace(conversation.DraftTitle)
             ? "New conversation"
             : conversation.DraftTitle.Trim();
         conversation.HasCustomTitle = true;
         conversation.IsRenaming = false;
-        PersistConversations();
+        await PersistConversationsAsync();
+
+        if (IsAuthenticated && !string.IsNullOrWhiteSpace(token))
+        {
+            try
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+                await GatewayClient.UpdateChatConversationTitleAsync(token, conversation.Id, conversation.Title, cts.Token);
+            }
+            catch (Exception ex)
+            {
+                ChatStatus = ex.Message;
+            }
+        }
     }
 
     private Task HandleRenameKeyDown(KeyboardEventArgs args, ConversationViewModel conversation)
     {
         if (args.Key == "Enter")
         {
-            SaveConversationTitle(conversation);
+            return SaveConversationTitle(conversation);
         }
         else if (args.Key == "Escape")
         {
@@ -1194,7 +1204,7 @@
         return Task.CompletedTask;
     }
 
-    private void DeleteConversation(ConversationViewModel conversation)
+    private async Task DeleteConversation(ConversationViewModel conversation)
     {
         var wasActive = ActiveConversation.Id == conversation.Id;
         Conversations.Remove(conversation);
@@ -1211,7 +1221,20 @@
         }
 
         ChatStatus = null;
-        PersistConversations();
+        await PersistConversationsAsync();
+
+        if (IsAuthenticated && !string.IsNullOrWhiteSpace(token))
+        {
+            try
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+                await GatewayClient.DeleteChatConversationAsync(token, conversation.Id, cts.Token);
+            }
+            catch (Exception ex)
+            {
+                ChatStatus = ex.Message;
+            }
+        }
     }
 
     private async Task RegisterAsync()
@@ -1244,10 +1267,9 @@
 
             token = issuedToken;
             CurrentUsername = loginModel.Username.Trim();
-            CurrentDisplayName = await BrowserStorage.GetAsync(DisplayNameStorageKey);
-            CurrentAvatar = await BrowserStorage.GetAsync(AvatarLabelStorageKey);
             await BrowserStorage.SetAsync(TokenStorageKey, token);
             await BrowserStorage.SetAsync(UserStorageKey, CurrentUsername);
+            await LoadCurrentProfileAsync();
             await RestoreConversationsAsync();
 
             loginModel.Password = string.Empty;
@@ -1263,6 +1285,7 @@
 
     private async Task LogoutAsync()
     {
+        var signedOutUsername = CurrentUsername;
         token = null;
         CurrentUsername = null;
         CurrentDisplayName = null;
@@ -1271,6 +1294,7 @@
         twoFactorCode = string.Empty;
         await BrowserStorage.RemoveAsync(TokenStorageKey);
         await BrowserStorage.RemoveAsync(UserStorageKey);
+        await ClearScopedConversationCacheAsync(signedOutUsername);
         ResetConversationWorkspace();
         AuthMessage = "Signed out.";
         ChatStatus = "Sign back in to stream through the authenticated flow.";
@@ -1399,6 +1423,9 @@
                 new ChatRequestPayload
                 {
                     ChatId = ActiveConversation.Id,
+                    UserMessageId = userMessage.Id,
+                    AssistantMessageId = assistantMessage.Id,
+                    ConversationTitle = ActiveConversation.Title,
                     User = CurrentUsernameOrFallback,
                     Prompt = trimmedPrompt,
                     ContextMode = "documentation"
@@ -1835,6 +1862,7 @@
 
     private async Task EndInvalidSessionAsync(string message)
     {
+        var expiredUsername = CurrentUsername;
         token = null;
         CurrentUsername = null;
         CurrentDisplayName = null;
@@ -1848,8 +1876,28 @@
 
         await BrowserStorage.RemoveAsync(TokenStorageKey);
         await BrowserStorage.RemoveAsync(UserStorageKey);
+        await ClearScopedConversationCacheAsync(expiredUsername);
         ResetConversationWorkspace();
         await InvokeAsync(StateHasChanged);
+    }
+
+    private Task LoadCurrentProfileAsync()
+    {
+        CurrentDisplayName = null;
+        CurrentAvatar = null;
+        return Task.CompletedTask;
+    }
+
+    private ValueTask ClearUnsafeGlobalConversationCacheAsync()
+        => BrowserStorage.RemoveAsync(ConversationStorageKey);
+
+    private async Task ClearScopedConversationCacheAsync(string? username)
+    {
+        await ClearUnsafeGlobalConversationCacheAsync();
+        if (!string.IsNullOrWhiteSpace(username))
+        {
+            await BrowserStorage.RemoveAsync(GetConversationStorageKey(username));
+        }
     }
 
     private static bool IsInvalidSessionError(Exception ex)
@@ -2113,6 +2161,18 @@
         return letters.Length == 0 ? fallback : new string(letters);
     }
 
+    private static string GetDisplayNameStorageKey(string username)
+        => $"aichatapp.web.profile.{NormalizeStorageUser(username)}.displayName";
+
+    private static string GetAvatarLabelStorageKey(string username)
+        => $"aichatapp.web.profile.{NormalizeStorageUser(username)}.avatarLabel";
+
+    private static string GetConversationStorageKey(string username)
+        => $"aichatapp.web.conversations.{NormalizeStorageUser(username)}";
+
+    private static string NormalizeStorageUser(string username)
+        => Uri.EscapeDataString(username.Trim().ToLowerInvariant());
+
     private void HandleBrandTitleClick(MouseEventArgs args)
     {
         if (args.ShiftKey)
@@ -2121,20 +2181,53 @@
         }
     }
 
+    private void ResetConversationWorkspace()
+    {
+        Conversations.Clear();
+        ActiveConversation = new ConversationViewModel();
+        Conversations.Add(ActiveConversation);
+        ChatStatus = null;
+        promptText = string.Empty;
+    }
+
     private async Task RestoreConversationsAsync()
     {
-        var state = await BrowserStorage.GetJsonAsync<ConversationWorkspaceState>(ConversationStorageKey);
-        if (state?.Conversations is null || state.Conversations.Count == 0)
+        if (!IsAuthenticated || string.IsNullOrWhiteSpace(token) || string.IsNullOrWhiteSpace(CurrentUsername))
         {
-            if (Conversations.Count == 0)
-            {
-                ResetConversationWorkspace();
-            }
+            ResetConversationWorkspace();
             return;
         }
 
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            var serverConversations = await GatewayClient.GetChatConversationsAsync(token, cts.Token);
+            if (serverConversations.Count > 0)
+            {
+                LoadConversations(serverConversations.Select(ToConversationViewModel).ToList());
+                await PersistConversationsAsync();
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            ChatStatus = ex.Message;
+        }
+
+        var state = await BrowserStorage.GetJsonAsync<ConversationWorkspaceState>(GetConversationStorageKey(CurrentUsername));
+        if (state?.Conversations is null || state.Conversations.Count == 0)
+        {
+            ResetConversationWorkspace();
+            return;
+        }
+
+        LoadConversations(state.Conversations);
+    }
+
+    private void LoadConversations(List<ConversationViewModel> conversations)
+    {
         Conversations.Clear();
-        foreach (var conversation in state.Conversations)
+        foreach (var conversation in conversations)
         {
             conversation.IsRenaming = false;
             conversation.DraftTitle = conversation.Title;
@@ -2156,32 +2249,54 @@
             Conversations.Add(conversation);
         }
 
-        ActiveConversation = Conversations.FirstOrDefault(x => x.Id == state.ActiveConversationId) ?? Conversations[0];
+        if (Conversations.Count == 0)
+        {
+            ResetConversationWorkspace();
+            return;
+        }
+
+        ActiveConversation = Conversations[0];
         QueueScrollToLatest(force: true);
     }
 
-    private void ResetConversationWorkspace()
+    private ConversationViewModel ToConversationViewModel(ChatConversationHistoryViewModel conversation)
     {
-        Conversations.Clear();
-        ActiveConversation = new ConversationViewModel();
-        Conversations.Add(ActiveConversation);
-        ChatStatus = null;
-        promptText = string.Empty;
+        return new ConversationViewModel
+        {
+            Id = conversation.ChatId,
+            Title = string.IsNullOrWhiteSpace(conversation.Title) ? "New conversation" : conversation.Title,
+            HasCustomTitle = !string.IsNullOrWhiteSpace(conversation.Title) && !IsDefaultConversationTitle(conversation.Title),
+            Messages = conversation.Messages
+                .Select(message => new MessageViewModel
+                {
+                    Id = string.IsNullOrWhiteSpace(message.MessageId) ? Guid.NewGuid().ToString("N") : message.MessageId,
+                    Role = string.Equals(message.User, AssistantProfile.AssistantName, StringComparison.OrdinalIgnoreCase)
+                        ? "assistant"
+                        : "user",
+                    Content = message.Content,
+                    CreatedAt = ToLocalOffset(message.CreatedAt),
+                    LastUpdatedAt = ToLocalOffset(message.CreatedAt)
+                })
+                .ToList()
+        };
+    }
+
+    private static DateTimeOffset ToLocalOffset(DateTime value)
+    {
+        var utc = value.Kind == DateTimeKind.Utc
+            ? value
+            : DateTime.SpecifyKind(value, DateTimeKind.Utc);
+        return new DateTimeOffset(utc).ToLocalTime();
     }
 
     private void PersistConversations()
     {
-        if (!initialized)
-        {
-            return;
-        }
-
         _ = PersistConversationsAsync();
     }
 
     private ValueTask PersistConversationsAsync()
     {
-        if (!initialized)
+        if (!initialized || string.IsNullOrWhiteSpace(CurrentUsername))
         {
             return ValueTask.CompletedTask;
         }
@@ -2192,7 +2307,7 @@
             Conversations = Conversations
         };
 
-        return BrowserStorage.SetJsonAsync(ConversationStorageKey, state);
+        return BrowserStorage.SetJsonAsync(GetConversationStorageKey(CurrentUsername), state);
     }
 
     private static string GetQrCodeUrl(string authenticatorUri)

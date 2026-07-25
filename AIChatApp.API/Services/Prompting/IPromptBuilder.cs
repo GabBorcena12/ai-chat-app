@@ -14,6 +14,7 @@
             string user,
             string message,
             string incompleteResponse,
-            string? contextMode = null);
+            string? contextMode = null,
+            bool completionOnly = false);
     }
 }

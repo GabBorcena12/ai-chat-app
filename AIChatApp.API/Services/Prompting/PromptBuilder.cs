@@ -16,10 +16,39 @@ namespace AIChatApp.API.Services.Prompting
         private const int DocumentationSectionCharLimit = 1200;
         private const int DocumentationSnippetCharLimit = 320;
         private const int DocumentationMaxSnippets = 3;
+        private const int QuickAnswerPromptContextThreshold = 70;
+        private const int FeatureContextMatchThreshold = 5;
+        private const string AnsiCyan = "\x1b[36m";
+        private const string AnsiYellow = "\x1b[33m";
+        private const string AnsiMagenta = "\x1b[35m";
+        private const string AnsiReset = "\x1b[0m";
+        private static readonly IReadOnlyList<FeatureContextProfile> FeatureContextProfiles =
+        [
+            new("Project Overview", "FeatureContextProjectOverview", ["aichatapp", "project overview", "solution", "projects", "modules", "web api core", "what is aichatapp"]),
+            new("Chat App", "FeatureContextChatApp", ["chat app", "chat ui", "conversation", "composer", "side nav", "home razor", "chat screen"]),
+            new("Chat Orchestration", "FeatureContextChatOrchestration", ["chat orchestrator", "orchestration", "streamasync", "askasync", "finalize response", "retry and repair", "chat pipeline"]),
+            new("Prompt Building", "FeatureContextPromptBuilding", ["prompt", "build prompt", "builds the prompt", "prompt sent", "sent to the llm", "llm prompt", "prompt builder", "prompt building", "prompt template", "answerstyle", "retrytemplate", "continuationtemplate", "system context"]),
+            new("Knowledge Base", "FeatureContextKnowledgeBase", ["knowledge base", "knowledge entry", "knowledge entries", "entry type", "source name", "published knowledge"]),
+            new("Quick Answers", "FeatureContextQuickAnswers", ["quick answer", "quick answers", "saved answer", "aliases", "question aliases"]),
+            new("Answer Matching", "FeatureContextAnswerMatching", ["answer matching", "exact match", "close wording", "matching tags", "question shape", "question type", "question word", "what question", "where question", "how question", "wrong answer", "saved answer", "safe match"]),
+            new("Backoffice", "FeatureContextBackoffice", ["backoffice", "admin workspace", "validation workspace", "user management", "profile management"]),
+            new("Reported Responses", "FeatureContextReportedResponses", ["reported response", "reported responses", "report answer", "review report", "validated response", "review status"]),
+            new("ML Training", "FeatureContextMLTraining", ["ml training", "machine learning", "training data", "training jobs", "model registry", "build dataset", "train model"]),
+            new("Response Reviewer", "FeatureContextResponseReviewer", ["response reviewer", "reviewer model", "ml.net reviewer", "response quality", "reviewer service", "risky response", "repair", "repair an answer", "retry", "fix answer", "bad answer"]),
+            new("Caching", "FeatureContextCaching", ["cache", "caching", "server cache", "memory cache", "cache invalidation", "stale cache"]),
+            new("Authentication and Roles", "FeatureContextAuthenticationRoles", ["authentication", "auth", "login", "register", "role", "roles", "admin role", "validator", "2fa", "google authenticator", "jwt"]),
+            new("Gateway and Routing", "FeatureContextGatewayRouting", ["gateway", "routing", "ports", "port", "headers", "local gateway", "docker gateway"]),
+            new("Docker and Deployment", "FeatureContextDockerDeployment", ["docker", "deployment", "docker compose", "container", "dockerfile", "environment variables"]),
+            new("Configuration", "FeatureContextConfiguration", ["configuration", "appsettings", "launchsettings", "settings", "assistant profile", "model path", "reviewer path"]),
+            new("LLM Model", "FeatureContextLLMModel", ["llm", "model", "gguf", "qwen", "llama", "local model", "token", "context size", "slow model"]),
+            new("FAQ Content", "FeatureContextFAQContent", ["faq", "faqs", "faq content", "questions", "knowledge modal"]),
+            new("Troubleshooting", "FeatureContextTroubleshooting", ["troubleshooting", "debug", "wrong answer", "slow response", "stale answer", "missing model", "duplicate knowledge"])
+        ];
         private readonly AppDbContext _db;
         private readonly InventoryDbContext _inventorydb;
         private readonly IConfiguration _config;
         private readonly string _keyword;
+        private readonly ILogger<PromptBuilder> _logger;
         private readonly AssistantProfileOptions _assistantProfile;
         private readonly IAssistantContentService _assistantContentService;
 
@@ -27,6 +56,7 @@ namespace AIChatApp.API.Services.Prompting
             AppDbContext db,
             InventoryDbContext inventorydb,
             IConfiguration configuration,
+            ILogger<PromptBuilder> logger,
             IAssistantContentService assistantContentService,
             IOptions<AssistantProfileOptions> assistantProfileOptions)
         {
@@ -34,6 +64,7 @@ namespace AIChatApp.API.Services.Prompting
             _inventorydb = inventorydb;
             _config = configuration;
             _keyword = _config.GetValue<string>("ApiSettings:Prompting.Keyword") ?? string.Empty;
+            _logger = logger;
             _assistantProfile = assistantProfileOptions.Value;
             _assistantContentService = assistantContentService;
         }
@@ -43,7 +74,8 @@ namespace AIChatApp.API.Services.Prompting
             string user,
             string message,
             string incompleteResponse,
-            string? contextMode = null)
+            string? contextMode = null,
+            bool completionOnly = false)
         {
             var sb = new StringBuilder();
 
@@ -53,6 +85,7 @@ namespace AIChatApp.API.Services.Prompting
             if (string.Equals(contextMode, "documentation", StringComparison.OrdinalIgnoreCase))
             {
                 await AppendDocumentationKnowledgeAsync(sb, message);
+                AppendAnswerShapeRule(sb, message);
             }
 
             var history = await _db.ChatMessagesTbl
@@ -67,10 +100,28 @@ namespace AIChatApp.API.Services.Prompting
                 sb.AppendLine($"{msg.Role}: {msg.Content}");
             }
 
-            sb.AppendLine(RenderPromptTemplate("RetryTemplate.json", new Dictionary<string, string>
+            if (completionOnly)
             {
-                ["INCOMPLETE_RESPONSE"] = incompleteResponse
-            }));
+                sb.AppendLine("Complete only the unfinished ending of this answer.");
+                sb.AppendLine("Rules:");
+                sb.AppendLine("- Return only the missing final words or final sentence.");
+                sb.AppendLine("- Do not restart or rewrite the answer.");
+                sb.AppendLine("- Do not add examples, recap phrases, closing offers, or extra explanation.");
+                sb.AppendLine("- If the answer is already complete, return an empty response.");
+                sb.AppendLine();
+                sb.AppendLine("Incomplete answer:");
+                sb.AppendLine(incompleteResponse);
+                sb.AppendLine();
+                sb.AppendLine("Missing ending only:");
+            }
+            else
+            {
+                sb.AppendLine(RenderPromptTemplate("RetryTemplate.json", new Dictionary<string, string>
+                {
+                    ["INCOMPLETE_RESPONSE"] = incompleteResponse
+                }));
+            }
+
             return sb.ToString();
         }
 
@@ -117,6 +168,7 @@ namespace AIChatApp.API.Services.Prompting
             {
                 await AppendDocumentationKnowledgeAsync(sb, message);
                 sb.AppendLine(await _assistantContentService.LoadPromptAsync(_assistantProfile.ProfileId, "AnswerStyle.json"));
+                AppendAnswerShapeRule(sb, message);
                 sb.AppendLine();
             }
 
@@ -168,10 +220,51 @@ namespace AIChatApp.API.Services.Prompting
             }
         }
 
+        private static void AppendAnswerShapeRule(StringBuilder sb, string message)
+        {
+            var normalized = NormalizeForMatch(message);
+            sb.AppendLine("Answer length rule:");
+            if (AllowsListAnswer(normalized))
+            {
+                sb.AppendLine("- Use at most 3 short bullets or 2 short sentences.");
+            }
+            else if (AllowsTwoSentenceAnswer(normalized))
+            {
+                sb.AppendLine("- Use at most 2 short complete sentences.");
+            }
+            else
+            {
+                sb.AppendLine("- Use exactly 1 short complete sentence when possible.");
+            }
+
+            sb.AppendLine("- Do not add recap phrases, closing offers, or transition words like hence, therefore, additionally, or to summarize.");
+            sb.AppendLine();
+        }
+
+        private static bool AllowsTwoSentenceAnswer(string normalizedMessage)
+            => normalizedMessage.StartsWith("how ", StringComparison.OrdinalIgnoreCase)
+               || normalizedMessage.StartsWith("why ", StringComparison.OrdinalIgnoreCase)
+               || normalizedMessage.StartsWith("can ", StringComparison.OrdinalIgnoreCase)
+               || normalizedMessage.StartsWith("does ", StringComparison.OrdinalIgnoreCase)
+               || normalizedMessage.StartsWith("do ", StringComparison.OrdinalIgnoreCase)
+               || normalizedMessage.Contains("explain", StringComparison.OrdinalIgnoreCase);
+
+        private static bool AllowsListAnswer(string normalizedMessage)
+            => normalizedMessage.Contains("list", StringComparison.OrdinalIgnoreCase)
+               || normalizedMessage.Contains("step", StringComparison.OrdinalIgnoreCase)
+               || normalizedMessage.Contains("files", StringComparison.OrdinalIgnoreCase)
+               || normalizedMessage.Contains("file", StringComparison.OrdinalIgnoreCase)
+               || normalizedMessage.Contains("paths", StringComparison.OrdinalIgnoreCase)
+               || normalizedMessage.StartsWith("where ", StringComparison.OrdinalIgnoreCase)
+               || normalizedMessage.StartsWith("which ", StringComparison.OrdinalIgnoreCase);
+
         private async Task<IEnumerable<string>> GetDocumentationSectionsAsync(DocumentationIntent intent, string message)
         {
             var quickAnswers = await GetRelevantQuickAnswersAsync(intent, message);
+            var featureContexts = (await GetRelevantFeatureContextsAsync(message)).ToList();
             var sections = new List<string>();
+            sections.AddRange(featureContexts);
+
             if (!string.IsNullOrWhiteSpace(quickAnswers))
             {
                 sections.Add($"Quick Answers:{Environment.NewLine}{quickAnswers}");
@@ -179,6 +272,76 @@ namespace AIChatApp.API.Services.Prompting
 
             sections.AddRange(await GetRetrievedDocumentationSectionsAsync(intent, message));
             return sections;
+        }
+
+        private async Task<IEnumerable<string>> GetRelevantFeatureContextsAsync(string message)
+        {
+            var normalizedMessage = NormalizeForMatch(message);
+            if (string.IsNullOrWhiteSpace(normalizedMessage))
+            {
+                return [];
+            }
+
+            var selected = FeatureContextProfiles
+                .Select(profile => new
+                {
+                    Profile = profile,
+                    Score = ScoreFeatureContext(profile, normalizedMessage)
+                })
+                .Where(x => x.Score >= FeatureContextMatchThreshold)
+                .OrderByDescending(x => x.Score)
+                .ThenBy(x => x.Profile.Title)
+                .Take(2)
+                .ToList();
+
+            _logger.LogInformation(
+                "{LogLabel} Selected {Count} of {EntryCount} topic profile(s): {Topics}.",
+                LogLabel(selected.Count > 0 ? "[PROMPT:FEATURE-CONTEXT]" : "[PROMPT:NO-FEATURE-CONTEXT]", selected.Count > 0 ? AnsiMagenta : AnsiCyan),
+                selected.Count,
+                FeatureContextProfiles.Count,
+                selected.Count == 0 ? "none" : string.Join(", ", selected.Select(x => x.Profile.Title)));
+
+            var sections = new List<string>();
+            foreach (var match in selected)
+            {
+                var content = await _assistantContentService.LoadPromptAsync(_assistantProfile.ProfileId, $"{match.Profile.TemplateName}.json");
+                if (!string.IsNullOrWhiteSpace(content))
+                {
+                    sections.Add($"Feature Context - {match.Profile.Title}:{Environment.NewLine}{content}");
+                }
+            }
+
+            return sections;
+        }
+
+        private static int ScoreFeatureContext(FeatureContextProfile profile, string normalizedMessage)
+        {
+            var score = 0;
+            foreach (var keyword in profile.Keywords)
+            {
+                var normalizedKeyword = NormalizeForMatch(keyword);
+                if (string.IsNullOrWhiteSpace(normalizedKeyword))
+                {
+                    continue;
+                }
+
+                if (normalizedMessage.Contains(normalizedKeyword, StringComparison.OrdinalIgnoreCase))
+                {
+                    score += normalizedKeyword.Contains(' ') ? 8 : 5;
+                }
+            }
+
+            return score;
+        }
+
+        private static string LogLabel(string label, string color)
+        {
+            if (Console.IsOutputRedirected || !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("NO_COLOR")))
+            {
+                return label;
+            }
+
+            return $"{color}{label}{AnsiReset}";
         }
 
         private async Task<IEnumerable<string>> GetRetrievedDocumentationSectionsAsync(DocumentationIntent intent, string message)
@@ -231,25 +394,19 @@ namespace AIChatApp.API.Services.Prompting
                     Entry = entry,
                     Score = ScoreFaqEntry(entry, message, intent)
                 })
-                .Where(x => x.Score > 0)
+                .Where(x => x.Score >= QuickAnswerPromptContextThreshold)
                 .OrderByDescending(x => x.Score)
                 .ThenBy(x => x.Entry.Question.Length)
                 .Take(4)
                 .Select(x => x.Entry)
                 .ToList();
 
-            if (filtered.Count == 0)
-            {
-                filtered = entries
-                    .Where(entry => MatchesIntent(entry.Question, intent))
-                    .Take(4)
-                    .ToList();
-            }
-
-            if (filtered.Count == 0)
-            {
-                filtered = entries.Take(4).ToList();
-            }
+            _logger.LogInformation(
+                "{LogLabel} Selected {Count} of {EntryCount} quick answer(s) for {Intent} intent.",
+                LogLabel(filtered.Count > 0 ? "[PROMPT:QUICK-CONTEXT]" : "[PROMPT:NO-QUICK-CONTEXT]", filtered.Count > 0 ? AnsiYellow : AnsiCyan),
+                filtered.Count,
+                entries.Count,
+                intent);
 
             var sb = new StringBuilder();
             foreach (var entry in filtered)
@@ -336,11 +493,12 @@ namespace AIChatApp.API.Services.Prompting
             }
 
             var normalizedMessage = NormalizeForMatch(message);
+            var messageShape = GetQuestionShape(normalizedMessage);
             var aliases = entry.Question
                 .Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
             var bestAliasScore = aliases
-                .Select(alias => ScoreAlias(alias, normalizedMessage))
+                .Select(alias => ScoreAlias(alias, normalizedMessage, messageShape))
                 .DefaultIfEmpty(0)
                 .Max();
 
@@ -349,7 +507,7 @@ namespace AIChatApp.API.Services.Prompting
                 return 0;
             }
 
-            if (MatchesIntent(entry.Question, intent))
+            if (bestAliasScore >= QuickAnswerPromptContextThreshold && MatchesIntent(entry.Question, intent))
             {
                 bestAliasScore += 2;
             }
@@ -357,7 +515,7 @@ namespace AIChatApp.API.Services.Prompting
             return bestAliasScore;
         }
 
-        private static int ScoreAlias(string alias, string normalizedMessage)
+        private static int ScoreAlias(string alias, string normalizedMessage, QuestionShape messageShape)
         {
             var normalizedAlias = NormalizeForMatch(alias);
             if (string.IsNullOrWhiteSpace(normalizedAlias))
@@ -368,6 +526,14 @@ namespace AIChatApp.API.Services.Prompting
             if (string.Equals(normalizedAlias, normalizedMessage, StringComparison.OrdinalIgnoreCase))
             {
                 return 100;
+            }
+
+            var aliasShape = GetQuestionShape(normalizedAlias);
+            if (messageShape != QuestionShape.Unknown
+                && aliasShape != QuestionShape.Unknown
+                && messageShape != aliasShape)
+            {
+                return 0;
             }
 
             if (normalizedMessage.Contains(normalizedAlias, StringComparison.OrdinalIgnoreCase)
@@ -384,6 +550,33 @@ namespace AIChatApp.API.Services.Prompting
 
             var overlap = aliasTokens.Count(token => messageTokens.Contains(token));
             return overlap;
+        }
+
+        private static QuestionShape GetQuestionShape(string normalizedText)
+        {
+            if (string.IsNullOrWhiteSpace(normalizedText))
+            {
+                return QuestionShape.Unknown;
+            }
+
+            var first = normalizedText
+                .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .FirstOrDefault() ?? string.Empty;
+
+            return first switch
+            {
+                "what" => QuestionShape.What,
+                "where" => QuestionShape.Where,
+                "when" => QuestionShape.When,
+                "why" => QuestionShape.Why,
+                "how" => QuestionShape.How,
+                "which" => QuestionShape.Which,
+                "who" => QuestionShape.Who,
+                "can" => QuestionShape.Can,
+                "does" or "do" => QuestionShape.Does,
+                "is" or "are" => QuestionShape.Is,
+                _ => QuestionShape.Unknown
+            };
         }
 
         private IEnumerable<RetrievedSnippet> ExtractSnippets(string fileName, string content, string message, DocumentationIntent intent)
@@ -601,7 +794,23 @@ namespace AIChatApp.API.Services.Prompting
         Troubleshooting
     }
 
+    internal enum QuestionShape
+    {
+        Unknown,
+        What,
+        Where,
+        When,
+        Why,
+        How,
+        Which,
+        Who,
+        Can,
+        Does,
+        Is
+    }
+
     internal sealed record FaqEntry(string Question, string Answer);
+    internal sealed record FeatureContextProfile(string Title, string TemplateName, IReadOnlyList<string> Keywords);
     internal sealed record RetrievedSnippet(string Source, string Content, int Score);
     internal sealed record TopicEntry(string Topic, IReadOnlyList<string> Keywords, string Context);
 }

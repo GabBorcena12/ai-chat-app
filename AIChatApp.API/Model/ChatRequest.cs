@@ -2,9 +2,13 @@
 {
     public class ChatRequest
     {
-        public string ChatId { get; set; }
-        public string User { get; set; }
-        public string Prompt { get; set; }
+        public string ChatId { get; set; } = string.Empty;
+        public string User { get; set; } = string.Empty;
+        public string Prompt { get; set; } = string.Empty;
         public string? ContextMode { get; set; }
+        public string? UserId { get; set; }
+        public string? UserMessageId { get; set; }
+        public string? AssistantMessageId { get; set; }
+        public string? ConversationTitle { get; set; }
     }
 }

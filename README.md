@@ -44,6 +44,7 @@ The app is designed for a project knowledge base: users ask documentation questi
 - Knowledge duplicate protection for new entries and report-created knowledge entries.
 - Knowledge Entry edit mode locks identity fields and allows safe updates to reusable content, aliases, tags, summary, and published state.
 - Published SQL knowledge overrides bundled JSON seed data.
+- Feature-context prompt templates ground broad topic answers before normal LLM generation.
 - ML.NET reviewer model can classify generated answer quality after training and publishing.
 - Rule-based reviewer fallback catches obvious issues even without a published ML.NET model.
 
@@ -68,6 +69,64 @@ Main knowledge types:
 - `Reference`
   - Best for longer documentation content.
   - Used as supporting context for the assistant.
+- `FeatureContext...` prompt templates
+  - Best for project-area background truth, such as ML Training, caching, answer matching, or gateway routing.
+  - Stored as prompt templates, not Knowledge Entries.
+  - Loaded when the user question matches that topic so the LLM can answer broad questions without inventing project behavior.
+
+## Feature Context Prompt Templates
+
+Feature context templates are editable prompt templates that explain a whole project area. They are different from Knowledge Entries:
+
+- Knowledge Entry
+  - A specific reusable answer for one question or set of aliases.
+  - Example: `What ports does the Gateway use locally?`
+- Feature Context
+  - Background truth for a feature or workflow.
+  - Example: `FeatureContextMLTraining` explains what ML Training does, what files are involved, and what it does not do.
+
+Bundled fallback files live under:
+
+```text
+AIChatApp.Core/Data/Assistants/Documentation/Prompts/FeatureContext*.json
+```
+
+They are seeded into database-backed Prompt Templates by:
+
+```text
+AIChatApp.API/Services/Content/AssistantContentService.cs
+SeedPromptTemplatesAsync(...)
+```
+
+They are selected and loaded by:
+
+```text
+AIChatApp.API/Services/Prompting/PromptBuilder.cs
+GetRelevantFeatureContextsAsync(...)
+ScoreFeatureContext(...)
+```
+
+Current feature context templates:
+
+- `FeatureContextProjectOverview`
+- `FeatureContextChatApp`
+- `FeatureContextChatOrchestration`
+- `FeatureContextPromptBuilding`
+- `FeatureContextKnowledgeBase`
+- `FeatureContextQuickAnswers`
+- `FeatureContextAnswerMatching`
+- `FeatureContextBackoffice`
+- `FeatureContextReportedResponses`
+- `FeatureContextMLTraining`
+- `FeatureContextResponseReviewer`
+- `FeatureContextCaching`
+- `FeatureContextAuthenticationRoles`
+- `FeatureContextGatewayRouting`
+- `FeatureContextDockerDeployment`
+- `FeatureContextConfiguration`
+- `FeatureContextLLMModel`
+- `FeatureContextFAQContent`
+- `FeatureContextTroubleshooting`
 
 ## Quick Answer Matching
 
@@ -77,30 +136,50 @@ User-friendly flow:
 
 ```text
 User question
-  -> exact saved question match
-  -> close wording match
-  -> matching tags or source
-  -> similar meaning match
+  -> exact saved question/alias match
+  -> safe close quick-answer match
+  -> detect feature/topic
+  -> load matching FeatureContext prompt templates
+  -> load strongly relevant quick-answer context, if any
+  -> load retrieved documentation snippets
   -> normal AI chat answer
+  -> response reviewer check
+  -> retry/repair if needed
 ```
 
 What each step means:
 
-- Exact saved question match
+- Exact saved question/alias match
   - The user question matches a saved question or alias after basic cleanup.
   - Example: saved alias `What ports does the Gateway use locally?`
-- Close wording match
-  - The words are very similar even if not identical.
+- Safe close quick-answer match
+  - The words are very similar even if not identical, and the question shape is compatible.
   - Example: `Which local ports does the Gateway use?`
-- Matching tags or source
-  - The question includes tags or source words added by admins.
+- Question-shape guard
+  - Non-exact matches compare the first question word, such as `what`, `where`, `how`, `why`, `when`, or `which`.
+  - This helps avoid returning a `what is...` definition for a `where do we use...` question.
+- Tags or source support
+  - Tags/source can support close wording matches, but weak tag-only matches should not auto-return saved answers.
   - Example tags: `gateway`, `ports`, `local development`, `docker`.
-- Similar meaning match
-  - The app compares meaningful concepts and related words such as `answer`, `response`, `reply`, `improve`, `better`, `quality`, `training`, and `reviewer`.
-  - This is currently a lightweight in-app meaning-similarity matcher, not an external embedding service.
-  - A real embedding model can replace or extend this step later.
+- Feature/topic context
+  - If no saved quick answer is safe, `PromptBuilder` detects broad topics and loads up to two matching `FeatureContext...` prompt templates.
+  - Example: ML Training terms load `FeatureContextMLTraining`; cache terms load `FeatureContextCaching`.
 - Normal AI chat answer
-  - If no knowledge entry is confident enough, the request goes through the normal prompt-building and LLM generation flow.
+  - The LLM answers using feature context, strongly relevant quick-answer context, retrieved docs/topics/references, answer style rules, chat history, and the current question.
+
+Important logs:
+
+```text
+[MATCH:EXACT]
+[MATCH:SAFE]
+[MATCH:NONE]
+[CHAT:LLM]
+[CHAT:QUICK-ANSWER]
+[REVIEWER:OK]
+[REVIEWER:RISK]
+Feature prompt context selected ...
+Quick-answer prompt context selected ...
+```
 
 Backoffice shows this workflow in plain language so admins understand why aliases, tags, and summaries matter.
 
@@ -122,6 +201,7 @@ Main sections:
   - Lists database-backed prompt templates.
   - Search by `Prompt #ID`, template name, profile, content, or status.
   - Edit modal shows `Prompt #ID`.
+  - Includes `FeatureContext...` templates used to ground topic-level LLM answers.
 - `Knowledge Entries`
   - Lists quick answers, topics, and references.
   - Search by `KB #ID`, title, source, type, summary, content, aliases, or tags.

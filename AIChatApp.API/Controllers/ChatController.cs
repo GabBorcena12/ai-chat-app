@@ -5,6 +5,7 @@ using AIChatApp.Core.Data_Context;
 using AIChatApp.Core.Data_Context.Entity;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 using System.Text.Json;
 
 namespace AIChatApp.API.Controllers
@@ -51,6 +52,7 @@ namespace AIChatApp.API.Controllers
 
             try
             {
+                ApplyCurrentUser(request);
                 await foreach (var chunk in _orchestrator.StreamAsync(request, linkedCts.Token))
                 {
                     await WriteServerSentEventAsync(chunk.Type, chunk.Content, linkedCts.Token);
@@ -93,6 +95,7 @@ namespace AIChatApp.API.Controllers
             using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
+            ApplyCurrentUser(request);
             var response = await _orchestrator.AskAsync(request, cts.Token);
 
             stopwatch.Stop();
@@ -121,6 +124,7 @@ namespace AIChatApp.API.Controllers
             using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(2));
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
+            ApplyCurrentUser(request);
             var response = await _orchestrator.ContinueAsync(request, cts.Token);
 
             stopwatch.Stop();
@@ -162,6 +166,20 @@ namespace AIChatApp.API.Controllers
             await _dbContext.SaveChangesAsync();
 
             return Ok("Response report saved.");
+        }
+
+        private void ApplyCurrentUser(ChatRequest request)
+        {
+            var username = User.Identity?.Name ?? User.FindFirstValue(ClaimTypes.Name) ?? request.User;
+            request.UserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            request.User = string.IsNullOrWhiteSpace(username) ? request.User : username;
+        }
+
+        private void ApplyCurrentUser(ContinueChatRequest request)
+        {
+            var username = User.Identity?.Name ?? User.FindFirstValue(ClaimTypes.Name) ?? request.User;
+            request.UserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            request.User = string.IsNullOrWhiteSpace(username) ? request.User : username;
         }
 
         private async Task WriteServerSentEventAsync(string eventName, string content, CancellationToken cancellationToken)

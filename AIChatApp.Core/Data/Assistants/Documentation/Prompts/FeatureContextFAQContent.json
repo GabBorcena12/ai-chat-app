@@ -1,0 +1,3 @@
+{
+  "content": "FAQ Content context:\n- FAQ content is shown in chat and Backoffice modals.\n- Web-side FAQ loading is in AIChatApp.Web/Services/FaqContentService.cs.\n- API-side topic loading uses AssistantContentService.LoadTopicsAsync and fallback Faq.json.\n- FAQ topics are broader than Quick Answers. They help provide project context but should not override exact quick answers.\n- FAQ UI should remain searchable, paginated, responsive, and readable on desktop, tablet, and mobile."
+}

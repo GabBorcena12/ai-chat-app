@@ -20,8 +20,18 @@ public sealed class ResponseReviewerTrainer
         }
 
         var trainingRows = BuildTrainingRows(examples);
+        var labelCount = trainingRows
+            .Select(row => row.Label)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count();
+
+        if (labelCount < 2)
+        {
+            throw new InvalidOperationException("The reviewer needs at least one issue label and one Good answer example before training.");
+        }
+
         var data = _ml.Data.LoadFromEnumerable(trainingRows);
-        var split = _ml.Data.TrainTestSplit(data, testFraction: trainingRows.Count >= 6 ? 0.25 : 0.01, seed: 7);
+        var useHoldoutMetrics = CanUseHoldoutMetrics(trainingRows);
 
         // Pipeline shape:
         // text -> numeric features -> multiclass classifier -> readable label.
@@ -30,50 +40,86 @@ public sealed class ResponseReviewerTrainer
             .Append(_ml.MulticlassClassification.Trainers.SdcaMaximumEntropy("Label", "Features"))
             .Append(_ml.Transforms.Conversion.MapKeyToValue("PredictedLabel"));
 
-        var model = pipeline.Fit(split.TrainSet);
-        var predictions = model.Transform(trainingRows.Count >= 6 ? split.TestSet : split.TrainSet);
-        var metrics = _ml.MulticlassClassification.Evaluate(predictions);
+        var trainSet = data;
+        IDataView? testSet = null;
+        if (useHoldoutMetrics)
+        {
+            var split = _ml.Data.TrainTestSplit(data, testFraction: 0.25, seed: 7);
+            trainSet = split.TrainSet;
+            testSet = split.TestSet;
+        }
+
+        var model = pipeline.Fit(trainSet);
+
+        double? accuracy = null;
+        double? f1Score = null;
+        var metricNote = "Model trained. Validation metrics were skipped because the dataset is still small; add more approved examples for reliable accuracy and F1.";
+
+        if (useHoldoutMetrics && testSet is not null)
+        {
+            var predictions = model.Transform(testSet);
+            var metrics = _ml.MulticlassClassification.Evaluate(predictions);
+            accuracy = metrics.MicroAccuracy;
+            f1Score = metrics.MacroAccuracy;
+            metricNote = "Model trained and evaluated with a holdout validation split.";
+        }
 
         Directory.CreateDirectory(Path.GetDirectoryName(modelPath)!);
-        _ml.Model.Save(model, split.TrainSet.Schema, modelPath);
+        _ml.Model.Save(model, trainSet.Schema, modelPath);
 
         return new ReviewerTrainingResult
         {
             ModelPath = modelPath,
-            Accuracy = metrics.MicroAccuracy,
-            F1Score = metrics.MacroAccuracy,
+            Accuracy = accuracy,
+            F1Score = f1Score,
             ExampleCount = examples.Count,
-            LabelCount = trainingRows.Select(row => row.Label).Distinct(StringComparer.OrdinalIgnoreCase).Count()
+            LabelCount = labelCount,
+            MetricNote = metricNote
         };
     }
 
     private static List<ResponseReviewerInput> BuildTrainingRows(IReadOnlyList<TrainingExample> examples)
     {
-        // BadResponse rows teach the reviewer what problem category to detect.
-        var rows = examples.Select(example => new ResponseReviewerInput
-        {
-            Text = ResponseReviewerService.BuildFeatureText(example.Question, example.BadResponse, example.Intent),
-            Label = string.IsNullOrWhiteSpace(example.IssueType) ? "Incorrect" : example.IssueType
-        }).ToList();
-
-        // A reviewer needs "Good" examples too, otherwise it can learn that every answer is bad.
-        rows.AddRange(examples
-            .Where(example => !string.IsNullOrWhiteSpace(example.ExpectedAnswer))
-            .Select(example => new ResponseReviewerInput
+        return examples
+            .Select(example =>
             {
-                Text = ResponseReviewerService.BuildFeatureText(example.Question, example.ExpectedAnswer, example.Intent),
-                Label = "Good"
-            }));
+                var label = string.IsNullOrWhiteSpace(example.IssueType) ? "Incorrect" : example.IssueType.Trim();
+                var answer = string.Equals(label, "Good", StringComparison.OrdinalIgnoreCase)
+                    ? FirstNonEmpty(example.ExpectedAnswer, example.BadResponse)
+                    : example.BadResponse;
 
-        return rows;
+                return new ResponseReviewerInput
+                {
+                    Text = ResponseReviewerService.BuildFeatureText(example.Question, answer, example.Intent),
+                    Label = label
+                };
+            })
+            .Where(row => !string.IsNullOrWhiteSpace(row.Text))
+            .ToList();
+    }
+
+    private static string FirstNonEmpty(params string[] values)
+        => values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? string.Empty;
+
+    private static bool CanUseHoldoutMetrics(IReadOnlyList<ResponseReviewerInput> rows)
+    {
+        if (rows.Count < 20)
+        {
+            return false;
+        }
+
+        return rows
+            .GroupBy(row => row.Label, StringComparer.OrdinalIgnoreCase)
+            .All(group => group.Count() >= 4);
     }
 }
 
 public sealed class ReviewerTrainingResult
 {
     public string ModelPath { get; set; } = string.Empty;
-    public double Accuracy { get; set; }
-    public double F1Score { get; set; }
+    public double? Accuracy { get; set; }
+    public double? F1Score { get; set; }
     public int ExampleCount { get; set; }
     public int LabelCount { get; set; }
+    public string MetricNote { get; set; } = string.Empty;
 }

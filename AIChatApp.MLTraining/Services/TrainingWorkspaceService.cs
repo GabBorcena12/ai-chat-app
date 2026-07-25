@@ -1,5 +1,6 @@
 using AIChatApp.MLTraining.Models;
 using Microsoft.Extensions.Options;
+using System.Text.Json;
 
 namespace AIChatApp.MLTraining.Services;
 
@@ -29,9 +30,9 @@ public sealed class TrainingWorkspaceService
     public TrainingWorkspaceService(IOptions<ResponseReviewerOptions> options)
     {
         _options = options.Value;
-        // Seeds examples that represent already-reviewed chat reports.
+        // Seeds reviewer examples so the first local training run has every quality label.
         // Trigger: service startup / dependency injection creates the singleton instance.
-        SeedReviewedReports();
+        SeedReviewerTrainingExamples();
     }
 
     public IReadOnlyList<TrainingExample> Examples => _examples
@@ -237,11 +238,11 @@ public sealed class TrainingWorkspaceService
         var candidateModelPath = BuildCandidateModelPath(dataset, job);
         var result = _trainer.TrainAndSave(approvedExamples, candidateModelPath);
 
-        job.Accuracy = Math.Round(result.Accuracy, 3);
-        job.F1Score = Math.Round(result.F1Score, 3);
+        job.Accuracy = result.Accuracy.HasValue ? Math.Round(result.Accuracy.Value, 3) : null;
+        job.F1Score = result.F1Score.HasValue ? Math.Round(result.F1Score.Value, 3) : null;
         job.Status = "Completed";
         job.CompletedAt = DateTime.UtcNow;
-        job.Notes = $"ML.NET reviewer trained with {result.ExampleCount} approved example(s) and {result.LabelCount} label(s).";
+        job.Notes = $"ML.NET reviewer trained with {result.ExampleCount} approved example(s) and {result.LabelCount} label(s). {result.MetricNote}";
 
         _models.Add(new ModelVersion
         {
@@ -301,22 +302,153 @@ public sealed class TrainingWorkspaceService
         return Path.GetFullPath(Path.Combine(current, "..", path));
     }
 
-    private void SeedReviewedReports()
+    public int ImportPublishedKnowledgeEntries(IEnumerable<TrainingExample> examples)
     {
-        // Sample reviewed reports show what validated training data should look like:
-        // question, bad response, corrected answer, issue type, and intent.
-        AddReviewedReportExample(
-            "What headers are required through the gateway?",
-            "Gateway requests need X-Api-Client and X-Api-Key. Protected endpoints also require Authorization.",
-            "Gateway requests need X-Api-Client and X-Api-Key. Protected endpoints also require Authorization: Bearer <token>.",
-            "Incomplete",
-            "GatewayQuestion");
+        var imported = 0;
+        foreach (var source in examples)
+        {
+            if (string.IsNullOrWhiteSpace(source.SourceReference))
+            {
+                continue;
+            }
 
-        AddReviewedReportExample(
-            "Why might chat responses be slow or cut off?",
-            "The model is slow because of many reasons and Docker.",
-            "Slow responses usually come from model generation time, large prompts, retries, or token limits.",
-            "TooLong",
-            "PerformanceQuestion");
+            var existing = _examples.FirstOrDefault(example =>
+                string.Equals(example.SourceReference, source.SourceReference, StringComparison.OrdinalIgnoreCase));
+
+            if (existing is null)
+            {
+                source.Id = _nextExampleId++;
+                source.SourceType = string.IsNullOrWhiteSpace(source.SourceType) ? "PublishedKnowledgeEntry" : source.SourceType;
+                source.IssueType = "Good";
+                source.ReviewStatus = "Approved";
+                source.ApprovedForTraining = true;
+                source.ReviewedAt ??= DateTime.UtcNow;
+                _examples.Add(source);
+                imported++;
+                continue;
+            }
+
+            existing.Question = source.Question;
+            existing.BadResponse = source.BadResponse;
+            existing.ExpectedAnswer = source.ExpectedAnswer;
+            existing.Intent = source.Intent;
+            existing.IssueType = "Good";
+            existing.ReviewStatus = "Approved";
+            existing.ApprovedForTraining = true;
+            existing.ReviewedBy = source.ReviewedBy;
+            existing.ReviewedAt = source.ReviewedAt ?? DateTime.UtcNow;
+        }
+
+        return imported;
+    }
+
+    private void SeedReviewerTrainingExamples()
+    {
+        var seedPath = ResolvePath("AIChatApp.MLTraining/Data/ReviewerTrainingExamples.json");
+        if (!File.Exists(seedPath))
+        {
+            seedPath = ResolvePath("Data/ReviewerTrainingExamples.json");
+        }
+
+        if (!File.Exists(seedPath))
+        {
+            return;
+        }
+
+        var seedFile = JsonSerializer.Deserialize<ReviewerTrainingSeedFile>(
+            File.ReadAllText(seedPath),
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        if (seedFile?.Examples is null)
+        {
+            return;
+        }
+
+        foreach (var group in seedFile.Examples)
+        {
+            var label = string.IsNullOrWhiteSpace(group.Label) ? "Incorrect" : group.Label.Trim();
+            var seedItems = group.Items
+                .Where(item =>
+                {
+                    var answer = string.Equals(label, "Good", StringComparison.OrdinalIgnoreCase)
+                        ? item.Answer
+                        : item.BadResponse;
+
+                    return !string.IsNullOrWhiteSpace(item.Question) && !string.IsNullOrWhiteSpace(answer);
+                })
+                .ToList();
+
+            if (seedItems.Count == 0)
+            {
+                continue;
+            }
+
+            var targetCount = Math.Max(seedItems.Count, seedFile.TargetCountPerLabel);
+            for (var index = 0; index < targetCount; index++)
+            {
+                var item = seedItems[index % seedItems.Count];
+                var variant = index / seedItems.Count;
+                var answer = string.Equals(label, "Good", StringComparison.OrdinalIgnoreCase)
+                    ? item.Answer
+                    : item.BadResponse;
+
+                _examples.Add(new TrainingExample
+                {
+                    Id = _nextExampleId++,
+                    SourceType = string.Equals(label, "Good", StringComparison.OrdinalIgnoreCase)
+                        ? "SeedPublishedKnowledgeEntry"
+                        : "SeedReviewedReport",
+                    SourceReference = $"Seed-{label}-{index + 1}",
+                    Question = BuildSeedQuestionVariant(item.Question, variant),
+                    BadResponse = answer.Trim(),
+                    ExpectedAnswer = string.Equals(label, "Good", StringComparison.OrdinalIgnoreCase) ? answer.Trim() : string.Empty,
+                    Intent = string.IsNullOrWhiteSpace(item.Intent) ? "DocumentationQuestion" : item.Intent.Trim(),
+                    IssueType = label,
+                    ReviewStatus = "Approved",
+                    ApprovedForTraining = true,
+                    ReviewedBy = "seed",
+                    ReviewedAt = DateTime.UtcNow
+                });
+            }
+        }
+    }
+
+    private sealed class ReviewerTrainingSeedFile
+    {
+        public int TargetCountPerLabel { get; set; } = 50;
+        public List<ReviewerTrainingSeedGroup> Examples { get; set; } = [];
+    }
+
+    private sealed class ReviewerTrainingSeedGroup
+    {
+        public string Label { get; set; } = string.Empty;
+        public List<ReviewerTrainingSeedItem> Items { get; set; } = [];
+    }
+
+    private sealed class ReviewerTrainingSeedItem
+    {
+        public string Question { get; set; } = string.Empty;
+        public string BadResponse { get; set; } = string.Empty;
+        public string Answer { get; set; } = string.Empty;
+        public string Intent { get; set; } = "DocumentationQuestion";
+    }
+
+    private static string BuildSeedQuestionVariant(string question, int variant)
+    {
+        var trimmed = question.Trim();
+        if (variant <= 0)
+        {
+            return trimmed;
+        }
+
+        var lower = char.ToLowerInvariant(trimmed[0]) + trimmed[1..];
+        return (variant % 5) switch
+        {
+            1 => $"Can you explain this in AIChatApp: {lower}",
+            2 => $"For this project, {lower}",
+            3 => $"Please clarify this behavior: {lower}",
+            4 => $"In Backoffice and chat, {lower}",
+            _ => $"From the documentation, {lower}"
+        };
     }
 }

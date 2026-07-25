@@ -14,12 +14,14 @@ public interface IResponseReviewer
 public sealed class ResponseReviewerService : IResponseReviewer
 {
     private readonly ResponseReviewerOptions _options;
-    private readonly Lazy<PredictionEngine<ResponseReviewerInput, ResponseReviewerPrediction>?> _engine;
+    private readonly object _engineLock = new();
+    private PredictionEngine<ResponseReviewerInput, ResponseReviewerPrediction>? _engine;
+    private string? _loadedModelPath;
+    private DateTime _loadedModelWriteTimeUtc;
 
     public ResponseReviewerService(IOptions<ResponseReviewerOptions> options)
     {
         _options = options.Value;
-        _engine = new Lazy<PredictionEngine<ResponseReviewerInput, ResponseReviewerPrediction>?>(CreatePredictionEngine);
     }
 
     public ResponseReviewResult Review(string question, string answer, string? contextMode = null)
@@ -32,36 +34,48 @@ public sealed class ResponseReviewerService : IResponseReviewer
         // Always run deterministic rules first so obvious bad answers are caught even
         // before a trained ML.NET model has been published.
         var heuristic = ReviewWithRules(question, answer, contextMode);
-        var engine = _engine.Value;
-        if (engine is null)
+
+        lock (_engineLock)
         {
-            return heuristic;
+            var engine = GetPredictionEngine();
+            if (engine is null)
+            {
+                return heuristic;
+            }
+
+            var prediction = engine.Predict(new ResponseReviewerInput
+            {
+                Text = BuildFeatureText(question, answer, contextMode)
+            });
+
+            var confidence = prediction.Score is { Length: > 0 } ? prediction.Score.Max() : 0f;
+            if (string.IsNullOrWhiteSpace(prediction.PredictedLabel))
+            {
+                return heuristic;
+            }
+
+            // Rules still guard obvious leaks/incomplete answers even when an ML.NET model exists.
+            if (heuristic.IsRisky && heuristic.Confidence >= confidence)
+            {
+                return heuristic;
+            }
+
+            return new ResponseReviewResult
+            {
+                IssueType = prediction.PredictedLabel,
+                Intent = InferIntent(question, contextMode),
+                Confidence = confidence,
+                Source = "ML.NET"
+            };
         }
+    }
 
-        var prediction = engine.Predict(new ResponseReviewerInput
+    public void ReloadModel()
+    {
+        lock (_engineLock)
         {
-            Text = BuildFeatureText(question, answer, contextMode)
-        });
-
-        var confidence = prediction.Score is { Length: > 0 } ? prediction.Score.Max() : 0f;
-        if (string.IsNullOrWhiteSpace(prediction.PredictedLabel))
-        {
-            return heuristic;
+            _engine = CreatePredictionEngine(out _loadedModelPath, out _loadedModelWriteTimeUtc);
         }
-
-        // Rules still guard obvious leaks/incomplete answers even when an ML.NET model exists.
-        if (heuristic.IsRisky && heuristic.Confidence >= confidence)
-        {
-            return heuristic;
-        }
-
-        return new ResponseReviewResult
-        {
-            IssueType = prediction.PredictedLabel,
-            Intent = InferIntent(question, contextMode),
-            Confidence = confidence,
-            Source = "ML.NET"
-        };
     }
 
     public static string BuildFeatureText(string question, string answer, string? contextMode = null)
@@ -112,18 +126,46 @@ public sealed class ResponseReviewerService : IResponseReviewer
         };
     }
 
-    private PredictionEngine<ResponseReviewerInput, ResponseReviewerPrediction>? CreatePredictionEngine()
+    private PredictionEngine<ResponseReviewerInput, ResponseReviewerPrediction>? GetPredictionEngine()
     {
+        var path = ResolvePath(_options.PublishedModelPath);
+        if (!File.Exists(path))
+        {
+            _engine = null;
+            _loadedModelPath = null;
+            _loadedModelWriteTimeUtc = default;
+            return null;
+        }
+
+        var writeTimeUtc = File.GetLastWriteTimeUtc(path);
+        if (_engine is not null
+            && string.Equals(_loadedModelPath, path, StringComparison.OrdinalIgnoreCase)
+            && _loadedModelWriteTimeUtc == writeTimeUtc)
+        {
+            return _engine;
+        }
+
+        _engine = CreatePredictionEngine(out _loadedModelPath, out _loadedModelWriteTimeUtc);
+        return _engine;
+    }
+
+    private PredictionEngine<ResponseReviewerInput, ResponseReviewerPrediction>? CreatePredictionEngine(out string? loadedPath, out DateTime loadedWriteTimeUtc)
+    {
+        loadedPath = null;
+        loadedWriteTimeUtc = default;
+
         var path = ResolvePath(_options.PublishedModelPath);
         if (!File.Exists(path))
         {
             return null;
         }
 
-        // The prediction engine is lazy-loaded once because ML.NET model loading is
-        // relatively expensive compared with a single chat response review.
+        // The published model stays cached in memory and is reloaded only when
+        // Backoffice publishes a new zip or the zip timestamp changes on disk.
         var ml = new MLContext(seed: 7);
         var model = ml.Model.Load(path, out _);
+        loadedPath = path;
+        loadedWriteTimeUtc = File.GetLastWriteTimeUtc(path);
         return ml.Model.CreatePredictionEngine<ResponseReviewerInput, ResponseReviewerPrediction>(model);
     }
 

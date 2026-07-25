@@ -227,6 +227,35 @@ public class AIChatGatewayClient(
         return await SendTextAsync(request, cancellationToken, "Unable to save the response report.");
     }
 
+    public async Task<List<ChatConversationHistoryViewModel>> GetChatConversationsAsync(
+        string token,
+        CancellationToken cancellationToken)
+    {
+        using var request = CreateRequest(HttpMethod.Get, "ChatHistory/conversations", token);
+        return await SendJsonAsync<List<ChatConversationHistoryViewModel>>(request, cancellationToken, "Unable to load chat history.")
+            ?? [];
+    }
+
+    public async Task<string> UpdateChatConversationTitleAsync(
+        string token,
+        string chatId,
+        string title,
+        CancellationToken cancellationToken)
+    {
+        using var request = CreateRequest(HttpMethod.Put, $"ChatHistory/conversations/{Uri.EscapeDataString(chatId)}/title", token);
+        request.Content = CreateJsonContent(new { title });
+        return await SendTextAsync(request, cancellationToken, "Unable to rename the conversation.");
+    }
+
+    public async Task<string> DeleteChatConversationAsync(
+        string token,
+        string chatId,
+        CancellationToken cancellationToken)
+    {
+        using var request = CreateRequest(HttpMethod.Delete, $"ChatHistory/conversations/{Uri.EscapeDataString(chatId)}", token);
+        return await SendTextAsync(request, cancellationToken, "Unable to delete the conversation.");
+    }
+
     public async Task<List<BackofficeReportViewModel>> GetReportedResponsesAsync(
         string token,
         string? status,

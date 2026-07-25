@@ -1,0 +1,3 @@
+{
+  "content": "Troubleshooting context:\n- For wrong answers, inspect API logs for [MATCH:EXACT], [MATCH:SAFE], [MATCH:NONE], [CHAT:LLM], prompt-context selection, and reviewer logs.\n- For stale answers, check AssistantContentService cache invalidation and whether Backoffice saved/published the update.\n- For bad quick-answer matches, check aliases, tags, source name, question shape, duplicate knowledge entries, and whether quick-answer prompt context was selected.\n- For reviewer issues, check ResponseReviewerService, the published .zip model path, and whether logs say ML.NET or Rules.\n- For slow responses, check model generation time, first token latency, prompt size, model file, hardware, and context/token settings."
+}

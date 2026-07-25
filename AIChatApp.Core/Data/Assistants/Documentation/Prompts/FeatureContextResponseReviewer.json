@@ -1,0 +1,3 @@
+{
+  "content": "Response Reviewer context:\n- Runtime reviewer logic is in AIChatApp.MLTraining/Services/ResponseReviewerService.cs.\n- The API registers the reviewer in AIChatApp.API/Program.cs.\n- ChatOrchestrator.FinalizeResponseAsync calls _responseReviewer.Review after the LLM produces an answer.\n- Published ML.NET reviewer models are loaded from a .zip file. If the model is missing, the service falls back to rule-based review.\n- If the reviewer marks an answer risky, ChatOrchestrator may retry or repair the response before saving.\n- The reviewer improves quality control after generation. It does not replace the main LLM and does not choose the original answer."
+}

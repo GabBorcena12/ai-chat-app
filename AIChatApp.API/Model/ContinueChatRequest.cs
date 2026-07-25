@@ -7,5 +7,6 @@ namespace AIChatApp.API.Model
         public string OriginalPrompt { get; set; } = string.Empty;
         public string PartialResponse { get; set; } = string.Empty;
         public string? ContextMode { get; set; }
+        public string? UserId { get; set; }
     }
 }

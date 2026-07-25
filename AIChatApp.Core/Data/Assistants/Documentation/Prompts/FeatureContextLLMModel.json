@@ -1,0 +1,3 @@
+{
+  "content": "LLM Model context:\n- The main chat LLM is separate from the ML.NET response reviewer.\n- LLM generation is orchestrated by ChatOrchestrator and implemented through services under AIChatApp.API/Services/LLM.\n- Model behavior depends on configured local model file/path, context size, token limits, prompt size, and machine performance.\n- Slow response logs include Model generation started, First token, Model is slow, and StreamAsync completed.\n- The response reviewer can evaluate/repair output after generation, but it does not generate the first answer."
+}

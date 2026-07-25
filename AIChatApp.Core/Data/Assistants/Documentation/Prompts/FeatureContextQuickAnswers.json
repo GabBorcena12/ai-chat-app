@@ -1,0 +1,3 @@
+{
+  "content": "Quick Answers context:\n- Quick Answers are specific reusable answers for exact or very close documentation questions.\n- They are loaded by AssistantContentService.LoadQuickAnswersAsync.\n- Direct return logic is in ChatOrchestrator.TryGetFastDocumentationAnswerAsync and TryGetMatchedFastDocumentationAnswerAsync.\n- Exact saved question or alias returns immediately.\n- Close wording can return only when the match is strong and question shape is compatible, such as what vs where vs how.\n- Tags/source help support close wording but should not make a weak or different-type question return the wrong answer.\n- If a Quick Answer is not safe to return, normal LLM generation should use only strongly relevant context."
+}

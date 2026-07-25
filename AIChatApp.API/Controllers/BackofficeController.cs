@@ -1,4 +1,5 @@
 using AIChatApp.API.Model;
+using AIChatApp.API.Services.Content;
 using AIChatApp.Core.Config;
 using AIChatApp.Core.Data_Context;
 using AIChatApp.Core.Data_Context.Entity;
@@ -16,16 +17,25 @@ namespace AIChatApp.API.Controllers
 {
     [ApiController]
     [Route("api/backoffice")]
-    [Authorize(AuthenticationSchemes = "LocalJwt", Roles = "Admin")]
+    [Authorize(AuthenticationSchemes = "LocalJwt", Roles = AppRoleNames.BackofficeAccess)]
     public class BackofficeController : ControllerBase
     {
         private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+        private const string AnsiReset = "\u001b[0m";
+        private const string AnsiRed = "\u001b[31m";
+        private const string AnsiYellow = "\u001b[33m";
+        private const string AnsiGreen = "\u001b[32m";
+        private const string AnsiBlue = "\u001b[34m";
+        private const string AnsiCyan = "\u001b[36m";
+        private const string AnsiMagenta = "\u001b[35m";
         private readonly AppDbContext _dbContext;
         private readonly ChatPaths _chatPaths;
         private readonly ILogger<BackofficeController> _logger;
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly RoleManager<IdentityRole> _roleManager;
         private readonly TrainingWorkspaceService _trainingWorkspace;
+        private readonly IAssistantContentService _assistantContentService;
+        private readonly ResponseReviewerService _responseReviewer;
 
         public BackofficeController(
             AppDbContext dbContext,
@@ -33,7 +43,9 @@ namespace AIChatApp.API.Controllers
             ILogger<BackofficeController> logger,
             UserManager<ApplicationUser> userManager,
             RoleManager<IdentityRole> roleManager,
-            TrainingWorkspaceService trainingWorkspace)
+            TrainingWorkspaceService trainingWorkspace,
+            IAssistantContentService assistantContentService,
+            ResponseReviewerService responseReviewer)
         {
             _dbContext = dbContext;
             _chatPaths = chatPaths;
@@ -41,6 +53,8 @@ namespace AIChatApp.API.Controllers
             _userManager = userManager;
             _roleManager = roleManager;
             _trainingWorkspace = trainingWorkspace;
+            _assistantContentService = assistantContentService;
+            _responseReviewer = responseReviewer;
         }
 
         [HttpGet("reports")]
@@ -82,6 +96,7 @@ namespace AIChatApp.API.Controllers
         }
 
         [HttpGet("training-candidates")]
+        [Authorize(AuthenticationSchemes = "LocalJwt", Roles = AppRoleNames.AdminOnly)]
         public async Task<IActionResult> GetTrainingCandidates()
         {
             var candidates = await _dbContext.ChatResponseReports
@@ -111,47 +126,113 @@ namespace AIChatApp.API.Controllers
         }
 
         [HttpGet("reviewer/state")]
+        [Authorize(AuthenticationSchemes = "LocalJwt", Roles = AppRoleNames.AdminOnly)]
         public IActionResult GetReviewerState()
             => Ok(_trainingWorkspace.GetState());
 
         [HttpPost("reviewer/build-dataset")]
+        [Authorize(AuthenticationSchemes = "LocalJwt", Roles = AppRoleNames.AdminOnly)]
         public async Task<IActionResult> BuildReviewerDataset()
         {
+            _logger.LogInformation("{LogLabel} Building reviewer dataset from approved reports and published knowledge entries.",
+                LogLabel("[ML:DATASET:START]", AnsiBlue));
+
             var candidates = await LoadTrainingCandidateEntitiesAsync();
-            var imported = _trainingWorkspace.ImportApprovedExamples(candidates.Select(ToTrainingExample));
+            var publishedKnowledgeEntries = await LoadPublishedKnowledgeTrainingEntitiesAsync();
+            var importedReports = _trainingWorkspace.ImportApprovedExamples(candidates.Select(ToTrainingExample));
+            var importedKnowledge = _trainingWorkspace.ImportPublishedKnowledgeEntries(
+                publishedKnowledgeEntries.SelectMany(ToGoodTrainingExamples));
             var dataset = _trainingWorkspace.BuildDataset("DocumentationQualityReviewer");
 
-            return Ok($"Dataset v{dataset.Version} built with {dataset.ExampleCount} approved example(s). Imported {imported} new candidate(s).");
+            _logger.LogInformation(
+                "{LogLabel} Dataset v{Version} built with {ExampleCount} approved example(s). Imported {ReportCount} report candidate(s) and {KnowledgeCount} published knowledge example(s).",
+                LogLabel("[ML:DATASET:DONE]", AnsiGreen),
+                dataset.Version,
+                dataset.ExampleCount,
+                importedReports,
+                importedKnowledge);
+
+            return Ok($"Dataset v{dataset.Version} built with {dataset.ExampleCount} approved example(s). Imported {importedReports} report candidate(s) and {importedKnowledge} published knowledge example(s).");
         }
 
         [HttpPost("reviewer/train")]
+        [Authorize(AuthenticationSchemes = "LocalJwt", Roles = AppRoleNames.AdminOnly)]
         public async Task<IActionResult> TrainReviewer(CancellationToken cancellationToken)
         {
             var dataset = _trainingWorkspace.LatestDataset;
             if (dataset is null)
             {
+                _logger.LogWarning("{LogLabel} Training requested before a reviewer dataset was built.",
+                    LogLabel("[ML:TRAIN:BLOCKED]", AnsiYellow));
+
                 return BadRequest("Build a reviewer dataset before training.");
             }
+
+            _logger.LogInformation(
+                "{LogLabel} Training reviewer model from dataset v{Version} with {ExampleCount} approved example(s).",
+                LogLabel("[ML:TRAIN:START]", AnsiCyan),
+                dataset.Version,
+                dataset.ExampleCount);
 
             var job = await _trainingWorkspace.QueueAndRunTrainingAsync(
                 dataset.Id,
                 User.FindFirstValue(ClaimTypes.Name) ?? "admin",
                 cancellationToken);
 
-            return Ok($"ML.NET reviewer trained. Accuracy: {job.Accuracy:P1}, F1: {job.F1Score:P1}.");
+            if (job.Accuracy.HasValue && job.F1Score.HasValue)
+            {
+                _logger.LogInformation(
+                    "{LogLabel} Training job {JobId} completed. Accuracy: {Accuracy:P1}, F1: {F1:P1}.",
+                    LogLabel("[ML:TRAIN:DONE]", AnsiGreen),
+                    job.Id,
+                    job.Accuracy,
+                    job.F1Score);
+
+                return Ok($"ML.NET reviewer trained. Accuracy: {job.Accuracy:P1}, F1: {job.F1Score:P1}.");
+            }
+
+            _logger.LogInformation(
+                "{LogLabel} Training job {JobId} completed. {Notes}",
+                LogLabel("[ML:TRAIN:DONE]", AnsiGreen),
+                job.Id,
+                job.Notes);
+
+            _logger.LogInformation(
+                "{LogLabel} Validation metrics skipped for job {JobId}; add more balanced approved examples for reliable Accuracy/F1.",
+                LogLabel("[ML:METRICS:SKIPPED]", AnsiYellow),
+                job.Id);
+
+            return Ok(job.Notes);
         }
 
         [HttpPost("reviewer/publish-latest")]
+        [Authorize(AuthenticationSchemes = "LocalJwt", Roles = AppRoleNames.AdminOnly)]
         public IActionResult PublishLatestReviewer()
         {
             var model = _trainingWorkspace.LatestModel;
             if (model is null)
             {
+                _logger.LogWarning("{LogLabel} Publish requested before a reviewer model was trained.",
+                    LogLabel("[ML:PUBLISH:BLOCKED]", AnsiYellow));
+
                 return BadRequest("Train a reviewer model before publishing.");
             }
 
+            _logger.LogInformation(
+                "{LogLabel} Publishing reviewer model {Version} from {ModelPath}.",
+                LogLabel("[ML:PUBLISH:START]", AnsiMagenta),
+                model.Version,
+                model.ModelPath);
+
             _trainingWorkspace.PublishModel(model.Id);
-            return Ok($"Published reviewer model {model.Version}. The API can now use it to review responses.");
+            _responseReviewer.ReloadModel();
+
+            _logger.LogInformation(
+                "{LogLabel} Published reviewer model {Version}; runtime reviewer cache reloaded.",
+                LogLabel("[ML:PUBLISH:DONE]", AnsiGreen),
+                model.Version);
+
+            return Ok($"Published reviewer model {model.Version}. The API reviewer cache was refreshed and can now use it.");
         }
 
         [HttpPut("reports/{id:int}/review")]
@@ -177,6 +258,7 @@ namespace AIChatApp.API.Controllers
                 _dbContext.AssistantKnowledgeEntries.Add(knowledgeEntry);
                 await _dbContext.SaveChangesAsync();
                 report.PromotedKnowledgeEntryId = knowledgeEntry.Id;
+                _assistantContentService.InvalidateProfileCache(knowledgeEntry.ProfileId);
             }
 
             await _dbContext.SaveChangesAsync();
@@ -216,6 +298,7 @@ namespace AIChatApp.API.Controllers
                 return NotFound("Prompt template not found.");
             }
 
+            var originalProfileId = template.ProfileId;
             template.ProfileId = request.ProfileId.Trim();
             template.TemplateName = Path.GetFileNameWithoutExtension(request.TemplateName.Trim());
             template.Content = request.Content ?? string.Empty;
@@ -224,6 +307,8 @@ namespace AIChatApp.API.Controllers
             template.UpdatedBy = User.FindFirstValue(ClaimTypes.Name) ?? "admin";
 
             await _dbContext.SaveChangesAsync();
+            _assistantContentService.InvalidateProfileCache(originalProfileId);
+            _assistantContentService.InvalidateProfileCache(template.ProfileId);
             return Ok("Prompt template updated.");
         }
 
@@ -249,6 +334,7 @@ namespace AIChatApp.API.Controllers
         }
 
         [HttpGet("users")]
+        [Authorize(AuthenticationSchemes = "LocalJwt", Roles = AppRoleNames.AdminOnly)]
         public async Task<IActionResult> GetUsers()
         {
             var users = await _userManager.Users
@@ -266,6 +352,7 @@ namespace AIChatApp.API.Controllers
         }
 
         [HttpPost("users")]
+        [Authorize(AuthenticationSchemes = "LocalJwt", Roles = AppRoleNames.AdminOnly)]
         public async Task<IActionResult> CreateUser([FromBody] CreateBackofficeUserRequest request)
         {
             if (string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
@@ -301,7 +388,7 @@ namespace AIChatApp.API.Controllers
             var requestedRoles = NormalizeRoles(request.Roles);
             if (requestedRoles.Count == 0)
             {
-                requestedRoles = ["AppUser"];
+                requestedRoles = [AppRoleNames.User];
             }
 
             foreach (var role in requestedRoles)
@@ -319,6 +406,7 @@ namespace AIChatApp.API.Controllers
         }
 
         [HttpPut("users/{id}")]
+        [Authorize(AuthenticationSchemes = "LocalJwt", Roles = AppRoleNames.AdminOnly)]
         public async Task<IActionResult> UpdateUser(string id, [FromBody] UpdateBackofficeUserRequest request)
         {
             var user = await _userManager.FindByIdAsync(id);
@@ -354,7 +442,7 @@ namespace AIChatApp.API.Controllers
             var targetRoles = NormalizeRoles(request.Roles);
             if (targetRoles.Count == 0)
             {
-                targetRoles = ["AppUser"];
+                targetRoles = [AppRoleNames.User];
             }
 
             foreach (var role in targetRoles)
@@ -402,6 +490,7 @@ namespace AIChatApp.API.Controllers
 
             _dbContext.AssistantKnowledgeEntries.Add(entry);
             await _dbContext.SaveChangesAsync();
+            _assistantContentService.InvalidateProfileCache(entry.ProfileId);
             return Ok(new SaveKnowledgeEntryResponse
             {
                 Id = entry.Id,
@@ -418,6 +507,7 @@ namespace AIChatApp.API.Controllers
                 return NotFound("Knowledge entry not found.");
             }
 
+            var originalProfileId = entry.ProfileId;
             entry.ProfileId = request.ProfileId.Trim();
             entry.EntryType = request.EntryType.Trim();
             entry.SourceName = request.SourceName.Trim();
@@ -432,6 +522,8 @@ namespace AIChatApp.API.Controllers
             entry.UpdatedBy = User.FindFirstValue(ClaimTypes.Name) ?? "admin";
 
             await _dbContext.SaveChangesAsync();
+            _assistantContentService.InvalidateProfileCache(originalProfileId);
+            _assistantContentService.InvalidateProfileCache(entry.ProfileId);
             return Ok("Knowledge entry updated.");
         }
 
@@ -638,18 +730,24 @@ namespace AIChatApp.API.Controllers
 
         private static bool IsTrainingCandidate(ChatResponseReportEntity report)
             => string.Equals(report.ReviewStatus, "Approved", StringComparison.OrdinalIgnoreCase)
-               && !string.IsNullOrWhiteSpace(report.ValidatedResponse)
                && !string.IsNullOrWhiteSpace(report.ReviewCategory);
 
         private async Task<List<ChatResponseReportEntity>> LoadTrainingCandidateEntitiesAsync()
             => await _dbContext.ChatResponseReports
                 .AsNoTracking()
                 .Where(x => x.ReviewStatus == "Approved"
-                    && x.ValidatedResponse != null
-                    && x.ValidatedResponse != string.Empty
                     && x.ReviewCategory != null
                     && x.ReviewCategory != string.Empty)
                 .OrderByDescending(x => x.ReviewedAt ?? x.CreatedAt)
+                .ToListAsync();
+
+        private async Task<List<AssistantKnowledgeEntryEntity>> LoadPublishedKnowledgeTrainingEntitiesAsync()
+            => await _dbContext.AssistantKnowledgeEntries
+                .AsNoTracking()
+                .Where(x => x.IsPublished
+                    && x.Content != null
+                    && x.Content != string.Empty)
+                .OrderByDescending(x => x.UpdatedAt)
                 .ToListAsync();
 
         private static TrainingExample ToTrainingExample(ChatResponseReportEntity report)
@@ -659,7 +757,7 @@ namespace AIChatApp.API.Controllers
                 SourceReference = $"Report-{report.Id}",
                 Question = report.ValidatedQuestion ?? report.UserPrompt,
                 BadResponse = report.AssistantResponse,
-                ExpectedAnswer = report.ValidatedResponse ?? string.Empty,
+                ExpectedAnswer = string.Empty,
                 IssueType = report.ReviewCategory ?? "Other",
                 Intent = report.ContextMode ?? "DocumentationQuestion",
                 ReviewStatus = "Approved",
@@ -667,6 +765,48 @@ namespace AIChatApp.API.Controllers
                 ReviewedBy = report.ReviewedBy ?? string.Empty,
                 ReviewedAt = report.ReviewedAt
             };
+
+        private static IEnumerable<TrainingExample> ToGoodTrainingExamples(AssistantKnowledgeEntryEntity entry)
+        {
+            var content = entry.Content?.Trim();
+            if (string.IsNullOrWhiteSpace(content))
+            {
+                yield break;
+            }
+
+            var questions = new List<string> { entry.Title };
+            questions.AddRange(DeserializeOptionalList(entry.AliasesJson));
+
+            foreach (var question in questions
+                         .Where(question => !string.IsNullOrWhiteSpace(question))
+                         .Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                yield return new TrainingExample
+                {
+                    SourceType = "PublishedKnowledgeEntry",
+                    SourceReference = $"Knowledge-{entry.Id}-{NormalizeTrainingSourceKey(question)}",
+                    Question = question.Trim(),
+                    BadResponse = content,
+                    ExpectedAnswer = content,
+                    IssueType = "Good",
+                    Intent = string.IsNullOrWhiteSpace(entry.SourceName) ? entry.EntryType : entry.SourceName,
+                    ReviewStatus = "Approved",
+                    ApprovedForTraining = true,
+                    ReviewedBy = entry.UpdatedBy ?? entry.CreatedBy ?? "knowledge",
+                    ReviewedAt = entry.UpdatedAt
+                };
+            }
+        }
+
+        private static string NormalizeTrainingSourceKey(string value)
+        {
+            var chars = value
+                .Where(char.IsLetterOrDigit)
+                .Take(32)
+                .ToArray();
+
+            return chars.Length == 0 ? "entry" : new string(chars);
+        }
 
         private List<AssistantPromptTemplateEntity> BuildFallbackPromptTemplates(string profileId)
         {
@@ -698,7 +838,11 @@ namespace AIChatApp.API.Controllers
                 IsConfirmed = user.IsConfirmed || user.EmailConfirmed,
                 IsDisabled = user.IsDisabled,
                 TwoFactorEnabled = user.TwoFactorEnabled,
-                Roles = roles.OrderBy(role => role).ToList()
+                Roles = roles
+                    .Select(NormalizeRoleName)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(role => role)
+                    .ToList()
             };
         }
 
@@ -713,8 +857,18 @@ namespace AIChatApp.API.Controllers
         private static List<string> NormalizeRoles(IEnumerable<string>? roles)
             => (roles ?? [])
                 .Where(role => !string.IsNullOrWhiteSpace(role))
-                .Select(role => role.Trim())
+                .Select(role => NormalizeRoleName(role.Trim()))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
+
+        private static string NormalizeRoleName(string role)
+            => role.Equals(AppRoleNames.LegacyAppUser, StringComparison.OrdinalIgnoreCase)
+                ? AppRoleNames.User
+                : role.Equals(AppRoleNames.LegacyDataValidator, StringComparison.OrdinalIgnoreCase)
+                    ? AppRoleNames.Validator
+                    : role;
+
+        private static string LogLabel(string label, string color)
+            => $"{color}{label}{AnsiReset}";
     }
 }

@@ -1,0 +1,3 @@
+{
+  "content": "Reported Responses context:\n- Reported responses are bad, incomplete, or questionable assistant answers submitted for review.\n- Backoffice review UI is in Backoffice.razor. API endpoints are in BackofficeController.cs.\n- A report can be corrected, assigned a review status, categorized, saved, and optionally used as training data.\n- Approved reviewed responses can become candidates for ML.NET response-reviewer training.\n- Creating or updating a Knowledge Entry from a report is separate from reviewer training. Knowledge entries make corrected answers reusable by chat.\n- Review status and category affect training eligibility. Published Knowledge Entries affect chat retrieval and quick-answer matching."
+}

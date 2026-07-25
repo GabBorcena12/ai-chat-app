@@ -1,0 +1,3 @@
+{
+  "content": "Docker and Deployment context:\n- Docker deployment uses docker-compose.yml plus project Dockerfiles/configuration.\n- Deployment must account for AIChatApp.Web, AIChatApp.API, Gateway, database, connection strings, JWT/auth settings, environment variables, LLM model paths, and reviewer model paths.\n- Secrets should not be hardcoded into source files.\n- Docker answers should clarify whether the user runs through Docker Compose, Gateway, IIS Express, or Visual Studio because ports and URLs can differ.\n- For local Docker, prefer environment-specific configuration and mounted/published model paths where needed."
+}
