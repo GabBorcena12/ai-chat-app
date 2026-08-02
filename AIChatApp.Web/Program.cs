@@ -7,12 +7,22 @@ using AIChatApp.MLTraining.Services;
 using System;
 
 var builder = WebApplication.CreateBuilder(args);
+var allowLocalCredentials = builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Docker");
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 builder.Services.AddMemoryCache();
-builder.Services.Configure<FrontendOptions>(builder.Configuration.GetSection(FrontendOptions.SectionName));
+builder.Services.AddOptions<FrontendOptions>()
+    .Bind(builder.Configuration.GetSection(FrontendOptions.SectionName))
+    .Validate(options => Uri.TryCreate(options.GatewayBaseUrl, UriKind.Absolute, out _), "Frontend:GatewayBaseUrl must be an absolute URL.")
+    .Validate(options => !string.IsNullOrWhiteSpace(options.ApiClientName), "Frontend:ApiClientName is required.")
+    .Validate(
+        options => !string.IsNullOrWhiteSpace(options.ApiKey)
+                   && (allowLocalCredentials
+                       || !options.ApiKey.Contains("dummy", StringComparison.OrdinalIgnoreCase)),
+        "Frontend:ApiKey must be supplied through environment variables or user secrets.")
+    .ValidateOnStart();
 builder.Services.Configure<ResponseReviewerOptions>(
     builder.Configuration.GetSection(ResponseReviewerOptions.SectionName));
 builder.Services.Configure<AssistantProfileOptions>(options =>

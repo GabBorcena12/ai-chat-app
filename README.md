@@ -282,18 +282,31 @@ Backoffice roles:
 - `AppUser`
   - Normal chat user role.
 
-Default admin seeding is controlled by configuration, but real usernames, emails, and passwords should not be committed to source control.
+Development includes three clearly labeled local-only accounts so a fresh clone is usable immediately:
 
-Use placeholders in committed config and set real values through user secrets or environment variables:
+- Admin: `localadmin` / `Dummy_Local_Admin123!`
+- User: `localuser` / `Dummy_Local_User123!`
+- Validator: `localvalidator` / `Dummy_Local_Validator123!`
+
+These accounts are seeded only by the committed Development settings and local Docker configuration. Do not reuse their usernames, emails, or passwords in a deployed environment.
+
+The committed Development settings use obvious dummy credentials. Override them through user secrets when testing real integrations locally:
 
 ```powershell
 dotnet user-secrets init --project AIChatApp.API
 dotnet user-secrets set "JwtSettings:SecretKey" "<long-random-secret>" --project AIChatApp.API
 dotnet user-secrets set "ApiKey.Settings:Keys:0" "<gateway-api-key>" --project AIChatApp.API
-dotnet user-secrets set "Backoffice:DefaultAdminPassword" "<strong-local-password>" --project AIChatApp.API
+dotnet user-secrets set "ConnectionStrings:DefaultConnection" "<sql-server-connection-string>" --project AIChatApp.API
+dotnet user-secrets set "EmailSettings:From" "<sender-address>" --project AIChatApp.API
+dotnet user-secrets set "EmailSettings:SmtpServer" "<smtp-host>" --project AIChatApp.API
+dotnet user-secrets set "EmailSettings:Username" "<smtp-username>" --project AIChatApp.API
+dotnet user-secrets set "EmailSettings:AppPassword" "<smtp-app-password>" --project AIChatApp.API
 
 dotnet user-secrets init --project AIChatApp.Gateway
 dotnet user-secrets set "ApiKey.Settings:Keys:0" "<gateway-api-key>" --project AIChatApp.Gateway
+
+dotnet user-secrets init --project AIChatApp.Web
+dotnet user-secrets set "Frontend:ApiKey" "<gateway-api-key>" --project AIChatApp.Web
 ```
 
 Do not store personal usernames, real emails, real passwords, app passwords, or production keys in this README.
@@ -381,6 +394,35 @@ Common local routes:
 - Backoffice Machine Learning: `/backoffice` > Machine Learning
 
 Common development ports may vary by launch profile. Check each project's `launchSettings.json` or the terminal output after startup.
+
+## Docker Compose
+
+The Compose stack runs SQL Server, API, Gateway, and Web containers. It contains obvious local-only dummy credentials and seeded test accounts so it can start without creating an `.env` file.
+
+Start the local stack:
+
+```powershell
+docker compose config --quiet
+docker compose up --build
+```
+
+To override any local default, create a gitignored environment file from the committed template and edit the desired values:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+The API, Gateway, and Web containers must use the same `API_KEY`. Keep the selected GGUF file in `AIChatApp.Core/Models`; Compose mounts that folder read-only instead of copying model files into an image. The dummy SMTP settings allow startup but do not send email until replaced with a working local test server or real settings supplied outside source control.
+
+Open the Web app at `http://localhost:44318`. The Gateway is available at `http://localhost:5001`, the API at `http://localhost:5157`, and SQL Server at `localhost,14333`. Published ports are bound to `127.0.0.1`, so this local stack is not exposed to other network hosts.
+
+Stop the containers without deleting the SQL data volume:
+
+```powershell
+docker compose down
+```
+
+Default local Backoffice account seeding is enabled in Docker. For production, disable seeding, replace every dummy value through the deployment platform's secret manager, and terminate TLS at a trusted reverse proxy. Production startup rejects missing or placeholder API, JWT, database, and email settings.
 
 ## Gateway
 
@@ -473,8 +515,10 @@ dotnet build AIChatApp.Web/AIChatApp.Web.csproj -p:UseAppHost=false -o artifacts
 ## Security Notes
 
 - Keep real credentials out of source control and documentation.
-- Use placeholders in committed settings.
+- Keep committed credentials unmistakably dummy and restricted to Development or local Docker environments.
 - Use user secrets for local sensitive values.
-- Use environment variables for Docker or deployed environments.
+- Use a gitignored `.env` file for local Docker Compose and a secret manager for deployed environments.
+- Docker build context excludes `.env`, local development settings, logs, build output, and model files.
+- Never pass secrets as Docker build arguments because image metadata can retain them.
 - Rotate any secret that was ever committed accidentally.
 - Do not expose personal usernames, real emails, passwords, API keys, app passwords, or JWT secrets in README examples.

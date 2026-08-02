@@ -11,7 +11,11 @@
 **/*.*proj.user
 **/*.dbmdl
 **/*.jfm
+**/*.log
 **/azds.yaml
+**/artifacts
+**/appsettings.Development.json
+**/appsettings.*.local.json
 **/bin
 **/charts
 **/docker-compose*

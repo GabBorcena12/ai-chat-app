@@ -14,7 +14,7 @@ public class AgentResponseProcessorTests
 
         var raw = "The gateway protects the API by checking API keys. Use this context when the app should behave like a documentation copilot for the AIChatApp repository. The gateway protects the API by checking API keys.";
 
-        var cleaned = processor.Clean(raw, "adminGab");
+        var cleaned = processor.Clean(raw, "testUser");
 
         Assert.Equal("The gateway protects the API by checking API keys.", cleaned);
     }
@@ -24,7 +24,7 @@ public class AgentResponseProcessorTests
     {
         var processor = CreateProcessor();
 
-        var cleaned = processor.Clean("The browser conversation workspace is stored in localStorage so it can be restored after refresh or reopen.", "adminGab");
+        var cleaned = processor.Clean("The browser conversation workspace is stored in localStorage so it can be restored after refresh or reopen.", "testUser");
 
         Assert.Equal("The browser conversation workspace is stored in localStorage so it can be restored after refresh or reopen.", cleaned);
     }

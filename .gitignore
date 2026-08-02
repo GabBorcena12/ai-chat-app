@@ -1,6 +1,7 @@
 # Build outputs
 bin/
 obj/
+artifacts/
 
 # Visual Studio
 .vs/
@@ -24,8 +25,7 @@ packages/
 .DS_Store
 Thumbs.db
 
-# Secrets
-appsettings.Development.json
+# Local secret overrides
 *.env
 .env
 .env.docker

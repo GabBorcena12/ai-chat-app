@@ -2,6 +2,7 @@
 @page "/chat"
 @rendermode InteractiveServer
 @using AIChatApp.Core.Config
+@using QRCoder
 @using System.Net
 @using System.Text
 @inject AIChatApp.Web.Services.AIChatGatewayClient GatewayClient
@@ -546,7 +547,7 @@
                     {
                         <div class="two-factor-card">
                             <div class="mini-label">Step 1</div>
-                            <img class="qr-code" src="@GetQrCodeUrl(twoFactorSetup.AuthenticatorUri)" alt="Google Authenticator QR code" />
+                            <img class="qr-code" src="@GetQrCodeDataUri(twoFactorSetup.AuthenticatorUri)" alt="Google Authenticator QR code" />
                             <p class="qr-help">Scan this QR code in Google Authenticator, then type the current 6-digit code below to finish setup.</p>
                         </div>
 
@@ -2310,8 +2311,11 @@
         return BrowserStorage.SetJsonAsync(GetConversationStorageKey(CurrentUsername), state);
     }
 
-    private static string GetQrCodeUrl(string authenticatorUri)
-        => $"https://api.qrserver.com/v1/create-qr-code/?size=220x220&data={Uri.EscapeDataString(authenticatorUri)}";
+    private static string GetQrCodeDataUri(string authenticatorUri)
+    {
+        var image = PngByteQRCodeHelper.GetQRCode(authenticatorUri, QRCodeGenerator.ECCLevel.Q, 8);
+        return $"data:image/png;base64,{Convert.ToBase64String(image)}";
+    }
 
     private static string FormatMessageTimestamp(string role, DateTimeOffset createdAt, DateTimeOffset? lastUpdatedAt)
     {

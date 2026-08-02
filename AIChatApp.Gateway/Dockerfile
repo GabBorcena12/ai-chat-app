@@ -29,13 +29,6 @@ EXPOSE 8080
 # Run Gateway
 ENTRYPOINT ["dotnet", "AIChatApp.Gateway.dll"]
 
-# --- Usage ---
-# Build:
-# docker build -t aichatapp-gateway -f AIChatApp.Gateway/Dockerfile .
-#
-# Run:
-#docker run -d --name aichatapp-web --network aichatapp-network -p 4000:8080 `
-#  -e Frontend__GatewayBaseUrl=http://aichatapp-gateway:8080/ `
-#  -e Frontend__ApiClientName=GajiTechClient `
-#  -e Frontend__ApiKey=gaji-tech-secret-key-endpoint-0001 `
-#  aichatapp-web
+# Runtime configuration is supplied by docker-compose.yml.
+# From the repository root, configure .env and run: docker compose up --build
+# Never bake credentials into this image or pass them as Docker build arguments.

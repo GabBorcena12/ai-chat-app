@@ -39,7 +39,19 @@ builder.Services.AddSingleton(sp =>
 
 // Load JWT settings
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
-var secretKey = jwtSettings["SecretKey"];
+var allowLocalCredentials = builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Docker");
+var secretKey = RequireSecret(builder.Configuration, "JwtSettings:SecretKey", allowLocalCredentials, 32);
+var configuredApiKeys = builder.Configuration.GetSection("ApiKey.Settings:Keys").Get<string[]>() ?? [];
+if (configuredApiKeys.Length == 0 || (!allowLocalCredentials && configuredApiKeys.Any(IsPlaceholderSecret)))
+{
+    throw new InvalidOperationException("Configure at least one non-placeholder API key in ApiKey.Settings:Keys.");
+}
+
+var defaultConnection = RequireSecret(builder.Configuration, "ConnectionStrings:DefaultConnection", allowLocalCredentials);
+_ = RequireSecret(builder.Configuration, "EmailSettings:From", allowLocalCredentials);
+_ = RequireSecret(builder.Configuration, "EmailSettings:SmtpServer", allowLocalCredentials);
+_ = RequireSecret(builder.Configuration, "EmailSettings:Username", allowLocalCredentials);
+_ = RequireSecret(builder.Configuration, "EmailSettings:AppPassword", allowLocalCredentials, 8);
 
 // Auth0 Authentication (default scheme)
 builder.Services.AddAuthentication(options =>
@@ -90,7 +102,7 @@ builder.Services.AddAuthentication(options =>
 // Main App DbContext (for chat history and other core data)
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(
-        builder.Configuration.GetConnectionString("DefaultConnection"),
+        defaultConnection,
         sql => sql.MigrationsAssembly("AIChatApp.API")
     )
 );
@@ -264,6 +276,29 @@ using (var scope = app.Services.CreateScope())
     }
 }
 app.Run();
+
+static string RequireSecret(
+    IConfiguration configuration,
+    string key,
+    bool allowPlaceholderSecret,
+    int minimumLength = 1)
+{
+    var value = configuration[key];
+    if (string.IsNullOrWhiteSpace(value)
+        || value.Length < minimumLength
+        || (!allowPlaceholderSecret && IsPlaceholderSecret(value)))
+    {
+        throw new InvalidOperationException($"Configuration value '{key}' must be supplied through environment variables or user secrets.");
+    }
+
+    return value;
+}
+
+static bool IsPlaceholderSecret(string value)
+    => value.Contains("dummy", StringComparison.OrdinalIgnoreCase)
+       || value.Contains("change-before", StringComparison.OrdinalIgnoreCase)
+       || value.Contains("change-for-real", StringComparison.OrdinalIgnoreCase)
+       || value.Contains("YourStrong", StringComparison.OrdinalIgnoreCase);
 
 static async Task EnsureRolesAndBackofficeSeedAsync(IServiceProvider services)
 {

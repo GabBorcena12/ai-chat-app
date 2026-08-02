@@ -8,6 +8,13 @@ namespace AIChatApp.Gateway
         public static void Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
+            var allowLocalCredentials = builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Docker");
+            var configuredApiKeys = builder.Configuration.GetSection("ApiKey.Settings:Keys").Get<string[]>() ?? [];
+            if (configuredApiKeys.Length == 0 || (!allowLocalCredentials && configuredApiKeys.Any(IsPlaceholderSecret)))
+            {
+                throw new InvalidOperationException("Configure at least one non-placeholder API key in ApiKey.Settings:Keys.");
+            }
+
             // Add YARP
             builder.Services.AddReverseProxy()
                 .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"));
@@ -34,5 +41,11 @@ namespace AIChatApp.Gateway
 
             app.Run();
         }
+
+        private static bool IsPlaceholderSecret(string value)
+            => string.IsNullOrWhiteSpace(value)
+               || value.Contains("dummy", StringComparison.OrdinalIgnoreCase)
+               || value.Contains("change-before", StringComparison.OrdinalIgnoreCase)
+               || value.Contains("change-for-real", StringComparison.OrdinalIgnoreCase);
     }
 }

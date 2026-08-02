@@ -5,9 +5,9 @@ services:
     environment:
       ACCEPT_EULA: "Y"
       MSSQL_PID: Developer
-      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:-Local_Docker_Pass123!}
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:-Dummy_Local_Sql123!}
     ports:
-      - "14333:1433"
+      - "127.0.0.1:14333:1433"
     volumes:
       - aichatapp-sql-data:/var/opt/mssql
     healthcheck:
@@ -29,25 +29,31 @@ services:
       ASPNETCORE_ENVIRONMENT: Docker
       ASPNETCORE_URLS: http://+:8080
       AppSettings__BaseUrl: http://aichatapp-api:8080
-      ConnectionStrings__DefaultConnection: Server=sqlserver,1433;Database=AIChatAppDb;User Id=sa;Password=${MSSQL_SA_PASSWORD:-Local_Docker_Pass123!};TrustServerCertificate=True;
-      JwtSettings__SecretKey: ${JWT_SECRET_KEY:-local-docker-jwt-secret-key-change-before-production-12345}
+      ConnectionStrings__DefaultConnection: Server=sqlserver,1433;Database=AIChatAppDb;User Id=sa;Password=${MSSQL_SA_PASSWORD:-Dummy_Local_Sql123!};TrustServerCertificate=True;
+      JwtSettings__SecretKey: ${JWT_SECRET_KEY:-dummy-local-jwt-secret-key-32-characters-minimum}
       ApiKey.Settings__ClientName: ${API_CLIENT_NAME:-GajiTechClient}
-      ApiKey.Settings__Keys__0: ${API_KEY:-dummy-api-key}
-      Backoffice__SeedDefaultRoleAccounts: "true"
-      Backoffice__DefaultAdminUsername: ${BACKOFFICE_ADMIN_USERNAME:-admin}
-      Backoffice__DefaultAdminEmail: ${BACKOFFICE_ADMIN_EMAIL:-admin@localhost}
-      Backoffice__DefaultAdminPassword: ${BACKOFFICE_ADMIN_PASSWORD:-Admin123!}
-      Backoffice__DefaultUserUsername: ${BACKOFFICE_USER_USERNAME:-user}
-      Backoffice__DefaultUserEmail: ${BACKOFFICE_USER_EMAIL:-user@localhost}
-      Backoffice__DefaultUserPassword: ${BACKOFFICE_USER_PASSWORD:-User123!}
-      Backoffice__DefaultValidatorUsername: ${BACKOFFICE_VALIDATOR_USERNAME:-validator}
-      Backoffice__DefaultValidatorEmail: ${BACKOFFICE_VALIDATOR_EMAIL:-validator@localhost}
-      Backoffice__DefaultValidatorPassword: ${BACKOFFICE_VALIDATOR_PASSWORD:-Validator123!}
+      ApiKey.Settings__Keys__0: ${API_KEY:-dummy-local-api-key}
+      EmailSettings__From: ${SMTP_FROM:-dummy@example.invalid}
+      EmailSettings__SmtpServer: ${SMTP_SERVER:-localhost}
+      EmailSettings__Port: ${SMTP_PORT:-587}
+      EmailSettings__Username: ${SMTP_USERNAME:-dummy-local-user}
+      EmailSettings__AppPassword: ${SMTP_APP_PASSWORD:-dummy-local-app-password}
+      Backoffice__SeedDefaultAdmin: "false"
+      Backoffice__SeedDefaultRoleAccounts: ${SEED_DEFAULT_ROLE_ACCOUNTS:-true}
+      Backoffice__DefaultAdminUsername: ${BACKOFFICE_ADMIN_USERNAME:-localadmin}
+      Backoffice__DefaultAdminEmail: ${BACKOFFICE_ADMIN_EMAIL:-localadmin@example.invalid}
+      Backoffice__DefaultAdminPassword: ${BACKOFFICE_ADMIN_PASSWORD:-Dummy_Local_Admin123!}
+      Backoffice__DefaultUserUsername: ${BACKOFFICE_USER_USERNAME:-localuser}
+      Backoffice__DefaultUserEmail: ${BACKOFFICE_USER_EMAIL:-localuser@example.invalid}
+      Backoffice__DefaultUserPassword: ${BACKOFFICE_USER_PASSWORD:-Dummy_Local_User123!}
+      Backoffice__DefaultValidatorUsername: ${BACKOFFICE_VALIDATOR_USERNAME:-localvalidator}
+      Backoffice__DefaultValidatorEmail: ${BACKOFFICE_VALIDATOR_EMAIL:-localvalidator@example.invalid}
+      Backoffice__DefaultValidatorPassword: ${BACKOFFICE_VALIDATOR_PASSWORD:-Dummy_Local_Validator123!}
       ResponseReviewer__PublishedModelPath: AIChatApp.MLTraining/ReviewerModels/published-response-reviewer.zip
       ResponseReviewer__CandidateModelFolder: AIChatApp.MLTraining/ReviewerModels/Candidates
       LocalModel__FileName: ${LOCAL_MODEL_FILE:-qwen2.5-3b-instruct-q4_k_m.gguf}
     ports:
-      - "5157:8080"
+      - "127.0.0.1:5157:8080"
     volumes:
       - ./AIChatApp.Core/Models:/app/AIChatApp.Core/Models:ro
       - ./AIChatApp.MLTraining/ReviewerModels:/app/AIChatApp.MLTraining/ReviewerModels
@@ -63,13 +69,13 @@ services:
       ASPNETCORE_ENVIRONMENT: Docker
       ASPNETCORE_URLS: http://+:8080
       ApiKey.Settings__ClientName: ${API_CLIENT_NAME:-GajiTechClient}
-      ApiKey.Settings__Keys__0: ${API_KEY:-dummy-api-key}
+      ApiKey.Settings__Keys__0: ${API_KEY:-dummy-local-api-key}
       ReverseProxy__Clusters__ChatCluster__Destinations__chatApi__Address: http://aichatapp-api:8080/
       ReverseProxy__Clusters__AuthCluster__Destinations__authApi__Address: http://aichatapp-api:8080/
       ReverseProxy__Clusters__ChatHistoryCluster__Destinations__chatHistoryApi__Address: http://aichatapp-api:8080/
       ReverseProxy__Clusters__BackofficeCluster__Destinations__backofficeApi__Address: http://aichatapp-api:8080/
     ports:
-      - "5001:8080"
+      - "127.0.0.1:5001:8080"
 
   web:
     build:
@@ -83,11 +89,11 @@ services:
       ASPNETCORE_URLS: http://+:8080
       Frontend__GatewayBaseUrl: http://aichatapp-gateway:8080/
       Frontend__ApiClientName: ${API_CLIENT_NAME:-GajiTechClient}
-      Frontend__ApiKey: ${API_KEY:-dummy-api-key}
+      Frontend__ApiKey: ${API_KEY:-dummy-local-api-key}
       ResponseReviewer__PublishedModelPath: AIChatApp.MLTraining/ReviewerModels/published-response-reviewer.zip
       ResponseReviewer__CandidateModelFolder: AIChatApp.MLTraining/ReviewerModels/Candidates
     ports:
-      - "44318:8080"
+      - "127.0.0.1:44318:8080"
     volumes:
       - ./AIChatApp.MLTraining/ReviewerModels:/app/AIChatApp.MLTraining/ReviewerModels
 

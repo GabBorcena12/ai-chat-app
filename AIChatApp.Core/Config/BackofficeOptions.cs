@@ -5,15 +5,15 @@ public sealed class BackofficeOptions
     public const string SectionName = "Backoffice";
 
     public List<string> AdminUsernames { get; set; } = [];
-    public bool SeedDefaultAdmin { get; set; } = true;
-    public bool SeedDefaultRoleAccounts { get; set; } = true;
-    public string DefaultAdminUsername { get; set; } = "admin";
-    public string DefaultAdminEmail { get; set; } = "admin@localhost";
-    public string DefaultAdminPassword { get; set; } = "Admin123!";
-    public string DefaultUserUsername { get; set; } = "user";
-    public string DefaultUserEmail { get; set; } = "user@localhost";
-    public string DefaultUserPassword { get; set; } = "User123!";
-    public string DefaultValidatorUsername { get; set; } = "validator";
-    public string DefaultValidatorEmail { get; set; } = "validator@localhost";
-    public string DefaultValidatorPassword { get; set; } = "Validator123!";
+    public bool SeedDefaultAdmin { get; set; }
+    public bool SeedDefaultRoleAccounts { get; set; }
+    public string DefaultAdminUsername { get; set; } = string.Empty;
+    public string DefaultAdminEmail { get; set; } = string.Empty;
+    public string DefaultAdminPassword { get; set; } = string.Empty;
+    public string DefaultUserUsername { get; set; } = string.Empty;
+    public string DefaultUserEmail { get; set; } = string.Empty;
+    public string DefaultUserPassword { get; set; } = string.Empty;
+    public string DefaultValidatorUsername { get; set; } = string.Empty;
+    public string DefaultValidatorEmail { get; set; } = string.Empty;
+    public string DefaultValidatorPassword { get; set; } = string.Empty;
 }

@@ -45,18 +45,6 @@ EXPOSE 8080
 # Set entrypoint
 ENTRYPOINT ["dotnet", "AIChatApp.API.dll"]
 
-# --- Usage ---
-# Build:
-# docker build -t aichatapp-api -f AIChatApp.API/Dockerfile .
-#
-# Run:
-# docker run -d --name aichatapp-api --network aichatapp-network -p 7001:8080 `
-#   -e JwtSettings__SecretKey="replace-with-a-long-random-secret-key" `
-#   -e ApiKey.Settings__Keys__0="replace-with-your-api-key" `
-#   -e ConnectionStrings__DefaultConnection="Server=dummy_server;Database=AIChatAppDb;User Id=sa;Password=Dummy_Passw0rd;TrustServerCertificate=True;" `
-#   -e EmailSettings__From="your-email@example.com" `
-#   -e EmailSettings__SmtpServer="smtp.gmail.com" `
-#   -e EmailSettings__Username="your-email@example.com" `
-#   -e EmailSettings__AppPassword="replace-with-your-smtp-password" `
-#   -v "C:/Users/gabri/source/repos/AIChatApp/AIChatApp.Core/Models:/app/Models"`
-#   aichatapp-api
+# Runtime configuration is supplied by docker-compose.yml.
+# From the repository root, configure .env and run: docker compose up --build
+# Never bake credentials into this image or pass them as Docker build arguments.

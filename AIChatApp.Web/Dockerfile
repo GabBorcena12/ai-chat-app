@@ -32,11 +32,6 @@ EXPOSE 8080
 # Run Web app
 ENTRYPOINT ["dotnet", "AIChatApp.Web.dll"]
 
-# --- Usage ---
-# Build:
-# docker build -t aichatapp-web -f AIChatApp.Web/Dockerfile .
-#
-# Run:
-# docker run -d --name aichatapp-web --network aichatapp-network -p 4001:8080 ^
-#   -e ASPNETCORE_ENVIRONMENT=Development ^
-#   aichatapp-web
+# Runtime configuration is supplied by docker-compose.yml.
+# From the repository root, configure .env and run: docker compose up --build
+# Never bake credentials into this image or pass them as Docker build arguments.
