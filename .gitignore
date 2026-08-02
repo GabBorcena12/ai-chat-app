@@ -39,3 +39,6 @@ appsettings.Development.json
 *.pt
 *.onnx
 *.gguf
+
+#Batch files
+*.bat
