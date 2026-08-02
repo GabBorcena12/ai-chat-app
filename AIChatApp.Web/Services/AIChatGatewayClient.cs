@@ -166,31 +166,6 @@ public class AIChatGatewayClient(
         }
     }
 
-    public async Task<ChatResponsePayload> AskAiAsync(
-        string token,
-        ChatRequestPayload payload,
-        CancellationToken cancellationToken)
-    {
-        using var request = CreateRequest(HttpMethod.Post, "chat/ask-ai", token);
-        request.Content = CreateJsonContent(payload);
-
-        using var response = await httpClient.SendAsync(request, cancellationToken);
-        var content = await response.Content.ReadAsStringAsync(cancellationToken);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            if (response.StatusCode == HttpStatusCode.Unauthorized)
-            {
-                logger.LogWarning("Chat JSON request unauthorized. Body: {Body}", string.IsNullOrWhiteSpace(content) ? "<empty>" : content);
-                throw new InvalidOperationException("Your session is no longer valid for chat requests. Please sign in again.");
-            }
-            throw new InvalidOperationException(ReadError(content, "Unable to continue the response."));
-        }
-
-        return JsonSerializer.Deserialize<ChatResponsePayload>(content, JsonOptions)
-            ?? throw new InvalidOperationException("The continuation response was empty.");
-    }
-
     public async Task<ChatResponsePayload> ContinueAsync(
         string token,
         ContinueChatRequestPayload payload,
@@ -398,15 +373,6 @@ public class AIChatGatewayClient(
             payload.IsDisabled
         });
         return await SendTextAsync(request, cancellationToken, "Unable to update the user.");
-    }
-
-    public async Task<string> CreateKnowledgeEntryAsync(
-        string token,
-        SaveKnowledgeEntryPayload payload,
-        CancellationToken cancellationToken)
-    {
-        var result = await CreateKnowledgeEntryWithResultAsync(token, payload, cancellationToken);
-        return string.IsNullOrWhiteSpace(result.Message) ? "Knowledge entry created." : result.Message;
     }
 
     public async Task<SaveKnowledgeEntryResult> CreateKnowledgeEntryWithResultAsync(

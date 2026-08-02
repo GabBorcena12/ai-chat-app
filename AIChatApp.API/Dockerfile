@@ -50,11 +50,10 @@ ENTRYPOINT ["dotnet", "AIChatApp.API.dll"]
 # docker build -t aichatapp-api -f AIChatApp.API/Dockerfile .
 #
 # Run:
-# docker run -d --name aichatapp-api --network inventory-network -p 7001:8080 `
+# docker run -d --name aichatapp-api --network aichatapp-network -p 7001:8080 `
 #   -e JwtSettings__SecretKey="replace-with-a-long-random-secret-key" `
 #   -e ApiKey.Settings__Keys__0="replace-with-your-api-key" `
 #   -e ConnectionStrings__DefaultConnection="Server=dummy_server;Database=AIChatAppDb;User Id=sa;Password=Dummy_Passw0rd;TrustServerCertificate=True;" `
-#   -e ConnectionStrings__InventoryAppDb="Server=dummy_server;Database=InventoryDb;User Id=sa;Password=Dummy_Passw0rd;TrustServerCertificate=True;" `
 #   -e EmailSettings__From="your-email@example.com" `
 #   -e EmailSettings__SmtpServer="smtp.gmail.com" `
 #   -e EmailSettings__Username="your-email@example.com" `

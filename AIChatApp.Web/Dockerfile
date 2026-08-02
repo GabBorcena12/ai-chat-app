@@ -37,6 +37,6 @@ ENTRYPOINT ["dotnet", "AIChatApp.Web.dll"]
 # docker build -t aichatapp-web -f AIChatApp.Web/Dockerfile .
 #
 # Run:
-# docker run -d --name aichatapp-web --network inventory-network -p 4001:8080 ^
+# docker run -d --name aichatapp-web --network aichatapp-network -p 4001:8080 ^
 #   -e ASPNETCORE_ENVIRONMENT=Development ^
 #   aichatapp-web

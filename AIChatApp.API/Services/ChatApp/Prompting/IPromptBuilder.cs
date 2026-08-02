@@ -1,0 +1,23 @@
+﻿namespace AIChatApp.API.Services.ChatApp.Prompting
+{
+    /// <summary>
+    /// Defines prompt assembly for initial answers, repairs, and continuations.
+    /// </summary>
+    public interface IPromptBuilder
+    {
+        Task<string> BuildPromptAsync(string chatId, string user, string message, string? contextMode = null);
+        Task<string> BuildContinuationPromptAsync(
+            string chatId,
+            string user,
+            string originalPrompt,
+            string partialResponse,
+            string? contextMode = null);
+        Task<string> RebuildPromptWithIncompleteResponseAsync(
+            string chatId,
+            string user,
+            string message,
+            string incompleteResponse,
+            string? contextMode = null,
+            bool completionOnly = false);
+    }
+}

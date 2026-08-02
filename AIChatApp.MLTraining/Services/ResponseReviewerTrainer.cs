@@ -8,8 +8,19 @@ public sealed class ResponseReviewerTrainer
 {
     private readonly MLContext _ml = new(seed: 7);
 
-    // Trains a small text classifier that predicts answer quality labels such as Good,
-    // Incomplete, TooLong, or PromptLeak from reviewed Backoffice examples.
+    // Trains the ML.NET response-quality reviewer and writes the candidate model ZIP.
+    // Step 1: Convert approved TrainingExample records into labeled text rows.
+    //         - Published knowledge examples become Good rows.
+    //         - Approved reported responses keep their issue label, such as Incorrect,
+    //           Incomplete, TooLong, PromptLeak, Repetitive, OffTopic, or Other.
+    // Step 2: Confirm the dataset has at least two labels so the classifier can learn
+    //         the difference between acceptable and risky answers.
+    // Step 3: Build the ML.NET pipeline: label -> key, text -> numeric features,
+    //         SDCA multiclass classifier, predicted key -> readable label.
+    // Step 4: Use a holdout validation split only when there is enough balanced data;
+    //         otherwise train on all rows and skip misleading Accuracy/F1 metrics.
+    // Step 5: Save the trained candidate model to modelPath. Publishing later copies
+    //         this ZIP to the configured runtime reviewer path.
     public ReviewerTrainingResult TrainAndSave(
         IReadOnlyList<TrainingExample> examples,
         string modelPath)

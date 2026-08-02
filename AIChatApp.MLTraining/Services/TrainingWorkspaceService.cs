@@ -35,6 +35,9 @@ public sealed class TrainingWorkspaceService
         SeedReviewerTrainingExamples();
     }
 
+    // Read-only views used by Backoffice to display the current ML workflow state:
+    // examples are training rows, datasets are frozen snapshots, jobs are train runs,
+    // models are generated ZIP versions, and latest values drive Train/Publish actions.
     public IReadOnlyList<TrainingExample> Examples => _examples
         .OrderByDescending(example => example.CreatedAt)
         .ToList();
@@ -71,29 +74,6 @@ public sealed class TrainingWorkspaceService
             PublishedModelVersion = published?.Version ?? string.Empty,
             PublishedModelPath = published is null ? string.Empty : ResolvePath(_options.PublishedModelPath)
         };
-    }
-
-    public TrainingExample AddReviewedReportExample(string question, string badResponse, string expectedAnswer, string issueType, string intent)
-    {
-        // Adds a manually validated report as training material.
-        // Trigger: Training Data UI -> "Add reviewed example".
-        var example = new TrainingExample
-        {
-            Id = _nextExampleId++,
-            SourceType = "ReviewedReport",
-            SourceReference = $"Report-{DateTime.UtcNow:yyyyMMddHHmmss}",
-            Question = question.Trim(),
-            BadResponse = badResponse.Trim(),
-            ExpectedAnswer = expectedAnswer.Trim(),
-            IssueType = string.IsNullOrWhiteSpace(issueType) ? "Incorrect" : issueType.Trim(),
-            Intent = string.IsNullOrWhiteSpace(intent) ? "DocumentationQuestion" : intent.Trim(),
-            ReviewStatus = "Reviewed",
-            ReviewedBy = "backoffice",
-            ReviewedAt = DateTime.UtcNow
-        };
-
-        _examples.Add(example);
-        return example;
     }
 
     public int ImportApprovedExamples(IEnumerable<TrainingExample> examples)

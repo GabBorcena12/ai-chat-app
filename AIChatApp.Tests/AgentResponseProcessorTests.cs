@@ -1,8 +1,5 @@
-using AIChatApp.Core.Agents;
+using AIChatApp.API.Services.ChatApp.Processing;
 using AIChatApp.Core.Config;
-using AIChatApp.Core.Data_Context;
-using AIChatApp.Core.Services;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Xunit;
 
@@ -34,14 +31,11 @@ public class AgentResponseProcessorTests
 
     private static AgentResponseProcessor CreateProcessor()
     {
-        var inventoryOptions = new DbContextOptionsBuilder<InventoryDbContext>().Options;
-        var inventoryDb = new InventoryDbContext(inventoryOptions);
-        var tools = new AgentTools(inventoryDb);
         var options = Options.Create(new AssistantProfileOptions
         {
             AssistantName = "AI Assistant"
         });
 
-        return new AgentResponseProcessor(tools, options);
+        return new AgentResponseProcessor(options);
     }
 }

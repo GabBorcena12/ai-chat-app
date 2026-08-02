@@ -24,6 +24,21 @@ public sealed class ResponseReviewerService : IResponseReviewer
         _options = options.Value;
     }
 
+    // Reviews one generated chat answer before it is accepted as the final response.
+    // Step 1: If the reviewer is disabled, approve the answer immediately and mark the
+    //         source as Disabled.
+    // Step 2: Run deterministic rule checks first. These catch obvious problems such as
+    //         empty answers, prompt leaks, repeated text, or incomplete endings even when
+    //         no ML.NET model has been published yet.
+    // Step 3: Load or reuse the published ML.NET prediction engine. If no published model
+    //         is available, return the rule-based result.
+    // Step 4: Convert the question, answer, and context into the same feature text shape
+    //         used during training, then ask the prediction engine for one quality label.
+    // Step 5: If ML.NET does not return a readable label, fall back to the rule result.
+    // Step 6: Keep the rule result when it caught a risky answer with equal or stronger
+    //         confidence than the model. This prevents obvious leaks/incomplete answers
+    //         from being accidentally accepted by the model.
+    // Step 7: Otherwise return the ML.NET label, confidence, inferred intent, and source.
     public ResponseReviewResult Review(string question, string answer, string? contextMode = null)
     {
         if (!_options.Enabled)

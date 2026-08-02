@@ -8,12 +8,9 @@ namespace AIChatApp.Core.Config
         private static readonly object CacheLock = new();
 
         public string ProjectRoot { get; }
-        public string SystemContextFile { get; }
-        public string ApiSystemContextFile { get; }
         public string ConsoleRoot { get; }
         public string SharedRoot { get; }
         public string ReadmeFile { get; }
-        public string ProductKnowledgeFile { get; }
         public string DisAllowedTopicsFile { get; }
         public string ModelFile { get; }
         public string AssistantsRoot { get; }
@@ -31,10 +28,7 @@ namespace AIChatApp.Core.Config
 
             ConsoleRoot = ResolvePath("~/AIChatApp.Core/Data/Console");
             SharedRoot = ResolvePath("~/AIChatApp.Core/Data/Shared");
-            SystemContextFile = ResolvePath("~/AIChatApp.Core/Data/Console/system_context.json");
-            ApiSystemContextFile = ResolvePath("~/AIChatApp.Core/Data/Shared/system_api_context.json");
             ReadmeFile = ResolvePath("~/README.md");
-            ProductKnowledgeFile = ResolvePath("~/AIChatApp.Core/Data/Console/product_knowledge.json");
             DisAllowedTopicsFile = ResolvePath("~/AIChatApp.Core/Data/Console/disallowed_topics.json");
 
             var normalizedModelFileName = modelFileName.EndsWith(".gguf", StringComparison.OrdinalIgnoreCase)
@@ -55,24 +49,9 @@ namespace AIChatApp.Core.Config
             return Path.GetFullPath(path);
         }
 
-        public string LoadSystemContext()
-        {
-            return LoadJsonContentFile(SystemContextFile, "System context");
-        }
-
-        public string LoadApiSystemContext()
-        {
-            return LoadJsonContentFile(ApiSystemContextFile, "API system context");
-        }
-
         public string LoadReadme()
         {
             return LoadCachedFile(ReadmeFile, "README");
-        }
-
-        public string LoadProductKnowledge()
-        {
-            return LoadJsonContentFile(ProductKnowledgeFile, "Product knowledge");
         }
 
         public IReadOnlyList<string> LoadDisallowedTopics()
